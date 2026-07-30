@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-view" ref="containerRef">
+  <div class="chat-view" ref="containerRef" @mouseup="handleMouseUp">
     <!-- 空状态 -->
     <div v-if="!messages.length && !isStreaming" class="chat-view__empty">
       <div class="chat-view__empty-icon">
@@ -35,15 +35,27 @@
       <span class="text-sm">{{ error }}</span>
       <button class="btn btn-secondary text-xs" @click="$emit('retry')">重试</button>
     </div>
+
+    <!-- 划线浮动菜单 -->
+    <HighlightMenu
+      :visible="highlightMenu.visible"
+      :x="highlightMenu.x"
+      :y="highlightMenu.y"
+      @close="highlightMenu.visible = false"
+      @extract-note="handleExtractNote"
+      @create-branch="handleCreateBranch"
+      @copy="handleCopy"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, reactive } from 'vue'
 import { MessageSquare, AlertCircle } from '@lucide/vue'
 import type { Message } from '../../types'
 import ChatMessage from './ChatMessage.vue'
 import StreamText from './StreamText.vue'
+import HighlightMenu from './HighlightMenu.vue'
 
 const props = defineProps<{
   messages: Message[]
@@ -52,11 +64,53 @@ const props = defineProps<{
   error: string | null
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   retry: []
+  'extract-note': [text: string]
+  'create-branch': [text: string]
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
+
+const highlightMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+})
+
+function handleMouseUp() {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed) {
+    return
+  }
+
+  const text = selection.toString().trim()
+  if (!text) return
+
+  // 检查选中的文本是否在 AI 消息（.selectable）内
+  const range = selection.getRangeAt(0)
+  const container = range.commonAncestorContainer
+  const selectableEl = (container as Element).closest?.('.selectable')
+  if (!selectableEl) return
+
+  // 获取选区位置
+  const rect = range.getBoundingClientRect()
+  highlightMenu.x = rect.left + rect.width / 2
+  highlightMenu.y = rect.top
+  highlightMenu.visible = true
+}
+
+function handleExtractNote(text: string) {
+  emit('extract-note', text)
+}
+
+function handleCreateBranch(text: string) {
+  emit('create-branch', text)
+}
+
+function handleCopy(_text: string) {
+  // 复制逻辑已在 HighlightMenu 中处理
+}
 
 // 自动滚动到底部
 watch(

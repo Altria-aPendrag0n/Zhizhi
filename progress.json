@@ -99,7 +99,7 @@
     "name": "划线交互 - 选中文本与浮动菜单",
     "description": "实现选中 AI 回答文本 → 弹出浮动菜单的交互",
     "step": "1. 创建 src/components/chat/HighlightMenu.vue:\n   a. 定位: 基于 window.getSelection() 获取选中区域位置\n   b. 浮动菜单内容: [摘录为笔记] [创建分支] [复制]\n   c. 用 Lucide 图标 + 文字标签\n   d. 样式: Card 背景、圆角、阴影、小三角指示器\n   e. 点击外部或按 Esc 关闭\n   f. 动画: 淡入 + 轻微上移\n   g. 位置自适应: 优先出现在选区上方，空间不够则下方\n2. 在 ChatView.vue 中:\n   a. 监听 mouseup 事件\n   b. 检测是否有选中文本（window.getSelection().toString().trim() !== ''）\n   c. 如果选中的文本在 .selectable 元素内或 AI 消息内，显示 HighlightMenu\n   d. 传递选中文本和所在消息的上下文给 HighlightMenu\n3. 事件处理:\n   - @extract-note: 触发划线提炼笔记流程（Phase 2）\n   - @create-branch: 触发创建分支流程（Phase 3）\n   - @copy: 复制选中文本到剪贴板\n4. 参考 highlight-menu.html 和 selection-menu.html 的样式设计",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Skill 系统 - 加载器",
