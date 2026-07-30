@@ -68,8 +68,8 @@
   {
     "name": "设置页面 - API Key 与模型配置",
     "description": "实现设置页面，用户可配置 API Key、服务商、模型参数",
-    "step": "1. 创建 src/views/SettingsPage.vue:\n   a. 服务商选择: 下拉菜单（Anthropic / OpenAI / DeepSeek / 通义千问 / 智谱 / Ollama / 自定义）\n   b. 选择服务商后自动填充默认 Base URL，也可手动修改\n   c. API Key 输入框（type=password，带显示/隐藏切换）\n   d. 模型名称输入框（默认值根据服务商变化，如 claude-sonnet-4-6 / gpt-4o / deepseek-chat）\n   e. 保存按钮: 调用 settings store 的 saveSettings()\n   f. 连接测试按钮: 发送一个最小请求验证 Key 有效（如发送 \"hi\" → 检查是否返回文本）\n   g. 显示测试结果: 成功/失败 + 延迟\n2. 在 settings store 中:\n   - saveSettings() 写入 localStorage\n   - loadSettings() 从 localStorage 读取\n   - getProviderConfig() 返回 { type, apiKey, baseUrl, model }\n3. 路由: /settings → SettingsPage\n4. 在 TopBar 或 ProjectRail 添加设置入口按钮\n5. 安全: API Key 以明文存 localStorage（桌面应用，V1 不加密）",
-    "pass": false
+    "pass": true,
+    "step": "1. 创建 src/views/SettingsPage.vue:\n   a. 服务商选择: 下拉菜单（Anthropic / OpenAI / DeepSeek / 通义千问 / 智谱 / Ollama / 自定义）\n   b. 选择服务商后自动填充默认 Base URL，也可手动修改\n   c. API Key 输入框（type=password，带显示/隐藏切换）\n   d. 模型名称输入框（默认值根据服务商变化，如 claude-sonnet-4-6 / gpt-4o / deepseek-chat）\n   e. 保存按钮: 调用 settings store 的 saveSettings()\n   f. 连接测试按钮: 发送一个最小请求验证 Key 有效（如发送 \"hi\" → 检查是否返回文本）\n   g. 显示测试结果: 成功/失败 + 延迟\n2. 在 settings store 中:\n   - saveSettings() 写入 localStorage\n   - loadSettings() 从 localStorage 读取\n   - getProviderConfig() 返回 { type, apiKey, baseUrl, model }\n3. 路由: /settings → SettingsPage\n4. 在 TopBar 或 ProjectRail 添加设置入口按钮\n5. 安全: API Key 以明文存 localStorage（桌面应用，V1 不加密）"
   },
   {
     "name": "学习对话主视图 - ChatView",
