@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 export interface DirEntry {
   name: string
@@ -35,4 +36,36 @@ export async function fileExists(path: string): Promise<boolean> {
 
 export async function deleteFile(path: string): Promise<void> {
   return invoke('delete_file', { path })
+}
+
+export interface FileChangeEvent {
+  kind: string
+  paths: string[]
+}
+
+let unlisten: UnlistenFn | null = null
+
+export async function startWatching(path: string, callback: (event: FileChangeEvent) => void): Promise<void> {
+  // 先停止之前的监听
+  await stopWatching()
+  
+  // 启动 Rust 端监听
+  await invoke('start_watch', { path })
+  
+  // 注册前端事件监听
+  unlisten = await listen<FileChangeEvent>('file-changed', (event) => {
+    callback(event.payload)
+  })
+}
+
+export async function stopWatching(): Promise<void> {
+  if (unlisten) {
+    unlisten()
+    unlisten = null
+  }
+  try {
+    await invoke('stop_watch')
+  } catch {
+    // 如果没有在监听，忽略错误
+  }
 }

@@ -1,5 +1,9 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+use notify::{Event, RecursiveMode, Watcher};
+use tauri::Emitter;
+use tauri::Window;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, Clone)]
@@ -96,4 +100,40 @@ pub fn delete_file(path: String) -> Result<(), String> {
     } else {
         fs::remove_file(path).map_err(|e| format!("删除文件失败: {}", e))
     }
+}
+
+// 使用 Mutex<Option<Watcher>> 作为 Tauri State 管理 watcher 生命周期
+pub struct WatcherState(pub Mutex<Option<Box<dyn Watcher + Send>>>);
+
+#[tauri::command]
+pub fn start_watch(window: Window, path: String, state: tauri::State<'_, WatcherState>) -> Result<(), String> {
+    let watch_path = path.clone();
+    
+    let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+        if let Ok(event) = res {
+            // 发送文件变更事件到前端
+            let payload = serde_json::json!({
+                "kind": format!("{:?}", event.kind),
+                "paths": event.paths.iter().map(|p| p.to_string_lossy().to_string()).collect::<Vec<_>>(),
+            });
+            let _ = window.emit("file-changed", payload);
+        }
+    }).map_err(|e| format!("创建 watcher 失败: {}", e))?;
+    
+    watcher
+        .watch(Path::new(&watch_path), RecursiveMode::Recursive)
+        .map_err(|e| format!("开始监听失败: {}", e))?;
+    
+    // 存储 watcher 到 State
+    let mut state = state.0.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
+    *state = Some(Box::new(watcher));
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_watch(state: tauri::State<'_, WatcherState>) -> Result<(), String> {
+    let mut state = state.0.lock().map_err(|e| format!("锁定状态失败: {}", e))?;
+    *state = None; // drop the watcher
+    Ok(())
 }

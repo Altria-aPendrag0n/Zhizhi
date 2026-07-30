@@ -33,7 +33,7 @@
     "name": "Tauri Rust 后端 - 文件变更监听",
     "description": "使用 notify crate 监听 vault 目录的文件变更，通过 Tauri event 通知前端",
     "step": "1. 在 Cargo.toml 确认 notify 依赖（启用 macos_kqueue 或默认 feature）\n2. 在 vault.rs 中添加 #[tauri::command] fn start_watch(window: Window, path: String) -> Result<(), String>:\n   a. 使用 notify::recommended_watcher 创建 watcher\n   b. 监听 path 目录下的 Create/Modify/Remove 事件\n   c. 将事件通过 window.emit(\"file-changed\", payload) 发送到前端\n   d. 将 watcher 存储在 Tauri State 中以便后续关闭\n3. 添加 #[tauri::command] fn stop_watch(state: State<WatcherState>) -> Result<(), String>\n4. 在 src-tauri/src/lib.rs 中注册 start_watch 和 stop_watch 命令，管理 WatcherState\n5. 在前端 vault-fs.ts 中封装:\n   a. startWatching(path): 调用 invoke + 通过 listen('file-changed', callback) 接收事件\n   b. stopWatching()\n6. 在 vault store 中: openVault 后自动调用 startWatching\n7. 测试: 在外部编辑器中修改 vault 中的 .md 文件，确认前端收到事件",
-    "pass": false
+    "pass": true
   },
   {
     "name": "App Shell 组件",
