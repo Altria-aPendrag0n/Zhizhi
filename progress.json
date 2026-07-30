@@ -195,7 +195,7 @@
     "name": "局部关系图 - D3.js 力导向图",
     "description": "实现单笔记的局部关系图，展示 1-2 度邻居",
     "step": "1. 创建 src/components/graph/LocalGraph.vue:\n   a. 使用 D3.js forceSimulation 渲染力导向图\n   b. Props: noteId (string), depth (number, default 1)\n   c. 数据构建:\n      - 中心节点: 当前笔记\n      - 1 度邻居: 直接通过 [[link]] 关联的笔记\n      - 2 度邻居（depth=2 时）: 邻居的邻居\n      - 节点大小: 中心最大，邻居按连接数递减\n      - 边: 连接线上标注（可选）\n   d. 交互:\n      - 拖拽节点\n      - 点击节点 → 跳转到该笔记详情\n      - 悬停显示笔记标题和摘要 tooltip\n      - 缩放/平移\n   e. 颜色编码:\n      - 中心节点: 品牌色\n      - 同类型笔记: 同色系\n      - 未访问过的笔记: 灰色虚线边框\n   f. 响应式: 容器大小自适应\n2. npm install d3 @types/d3\n3. 在 NoteDetailPage.vue 底部或侧边嵌入 LocalGraph\n4. 性能: 笔记数 > 500 时仅展示 1 度邻居或限流\n5. 参考 local-graph.html 的样式设计",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Tauri 打包配置 + 生成安装包",

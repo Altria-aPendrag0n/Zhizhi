@@ -20,6 +20,11 @@
         />
       </aside>
     </div>
+
+    <!-- 关系图 -->
+    <div class="detail-graph" v-if="currentNote">
+      <LocalGraph :note-id="currentNote.path" :depth="1" />
+    </div>
   </div>
 </template>
 
@@ -30,6 +35,7 @@ import { useNoteStore } from '../stores/notes'
 import type { Note } from '../types'
 import NoteDetail from '../components/notes/NoteDetail.vue'
 import Backlinks, { type BacklinkEntry } from '../components/editor/Backlinks.vue'
+import LocalGraph from '../components/graph/LocalGraph.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -113,5 +119,11 @@ watch(
   background: #f0eee7;
   border-left: 1px solid var(--line);
   overflow-y: auto;
+}
+
+.detail-graph {
+  padding: 24px 48px 48px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
 </style>
