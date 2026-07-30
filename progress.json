@@ -141,7 +141,7 @@
     "name": "笔记来源会话反链",
     "description": "从笔记跳转回生成它的学习会话",
     "step": "1. 从笔记 frontmatter 的 source.session 字段读取会话路径\n2. 在 NoteDetail 中显示来源区域:\n   a. \"来源会话: {session_title}\"\n   b. \"来源划线: {highlight_text}\"\n   c. 点击跳转按钮 → 打开对应的会话文件\n3. 跳转行为:\n   a. 如果会话已在 session store 中打开 → 切换到该会话标签\n   b. 如果会话未打开 → 读取 sessions/*.md → 加载为只读会话视图\n   c. 滚动到划线所在的消息位置\n4. 在 ChatView 中反向显示:\n   a. 如果当前会话的某条消息生成了笔记，在消息下方显示 \"已生成笔记: [[笔记标题]]\"\n   b. 点击跳转到笔记详情",
-    "pass": false
+    "pass": true
   },
   {
     "name": "树形分支 - 创建分支与 session-tree.json",

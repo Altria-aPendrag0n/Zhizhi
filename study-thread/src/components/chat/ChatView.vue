@@ -13,12 +13,24 @@
 
     <!-- 消息列表 -->
     <div v-else class="chat-view__messages">
-      <ChatMessage
-        v-for="(msg, index) in messages"
-        :key="index"
-        :message="msg"
-        :note-count="0"
-      />
+      <div v-for="(msg, index) in messages" :key="index">
+        <ChatMessage
+          :message="msg"
+          :note-count="getNoteCountForMessage(index)"
+        />
+        <!-- 笔记反链 -->
+        <div v-if="getNotesForMessage(index).length > 0" class="chat-view__note-refs">
+          <span class="note-refs-label">已生成笔记：</span>
+          <button
+            v-for="ref in getNotesForMessage(index)"
+            :key="ref.path"
+            class="note-ref-link"
+            @click="emit('navigate-note', ref.path)"
+          >
+            [[{{ ref.title }}]]
+          </button>
+        </div>
+      </div>
 
       <!-- 流式文本 -->
       <div v-if="streamingText || isStreaming" class="chat-message chat-message--assistant">
@@ -53,6 +65,7 @@
 import { ref, watch, nextTick, reactive } from 'vue'
 import { MessageSquare, AlertCircle } from '@lucide/vue'
 import type { Message } from '../../types'
+import type { NoteReference } from '../../utils/session-linker'
 import ChatMessage from './ChatMessage.vue'
 import StreamText from './StreamText.vue'
 import HighlightMenu from './HighlightMenu.vue'
@@ -62,12 +75,14 @@ const props = defineProps<{
   isStreaming: boolean
   streamingText: string
   error: string | null
+  noteRefs?: NoteReference[]
 }>()
 
 const emit = defineEmits<{
   retry: []
   'extract-note': [text: string]
   'create-branch': [text: string]
+  'navigate-note': [path: string]
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -110,6 +125,14 @@ function handleCreateBranch(text: string) {
 
 function handleCopy(_text: string) {
   // 复制逻辑已在 HighlightMenu 中处理
+}
+
+function getNotesForMessage(messageIndex: number): NoteReference[] {
+  return (props.noteRefs || []).filter((ref) => ref.messageIndex === messageIndex)
+}
+
+function getNoteCountForMessage(messageIndex: number): number {
+  return getNotesForMessage(messageIndex).length
 }
 
 // 自动滚动到底部
@@ -208,5 +231,34 @@ watch(
 
 .btn-secondary:hover {
   background: var(--line);
+}
+
+.chat-view__note-refs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 0 6px 44px;
+  font-size: 12px;
+}
+
+.note-refs-label {
+  color: var(--ink-2);
+}
+
+.note-ref-link {
+  border: none;
+  background: var(--brand-soft);
+  color: var(--brand);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.15s;
+}
+
+.note-ref-link:hover {
+  background: var(--brand);
+  color: white;
 }
 </style>
