@@ -27,7 +27,7 @@
     "name": "Tauri Rust 后端 - Vault 文件系统命令 (vault.rs)",
     "description": "实现 Rust 后端的文件系统读写、目录遍历、文件监听命令",
     "step": "1. 在 src-tauri/Cargo.toml 添加依赖: serde, serde_json, notify\n2. 创建 src-tauri/src/commands/mod.rs，声明 pub mod vault\n3. 创建 src-tauri/src/commands/vault.rs:\n   a. 定义数据结构: DirEntry { name, path, is_dir, children }, VaultInfo { path, note_count, session_count }\n   b. #[tauri::command] fn read_file(path: String) -> Result<String, String>: 调用 std::fs::read_to_string\n   c. #[tauri::command] fn write_file(path: String, content: String) -> Result<(), String>: 调用 std::fs::write，确保父目录存在\n   d. #[tauri::command] fn list_dir(path: String) -> Result<Vec<DirEntry>, String>: 递归读取目录，忽略 . 开头和 node_modules\n   e. #[tauri::command] fn create_dir(path: String) -> Result<(), String>: 调用 std::fs::create_dir_all\n   f. #[tauri::command] fn file_exists(path: String) -> Result<bool, String>\n   g. #[tauri::command] fn delete_file(path: String) -> Result<(), String>\n4. 在 src-tauri/src/lib.rs 中注册所有命令:\n   .invoke_handler(tauri::generate_handler![commands::vault::read_file, commands::vault::write_file, ...])\n5. 前端封装: 创建 src/utils/vault-fs.ts，每个函数封装为 invoke 调用\n6. 测试: 在 Tauri dev 中通过前端按钮调用各命令验证",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Tauri Rust 后端 - 文件变更监听",
