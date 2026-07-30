@@ -183,7 +183,7 @@
     "name": "学习总览页面",
     "description": "实现学习总览仪表盘，展示会话树、统计、最近活动",
     "step": "1. 创建 src/views/LearningHubPage.vue:\n   a. 会话树视图:\n      - 使用 src/components/chat/BranchTree.vue\n      - D3.js 或纯 CSS 缩进树形渲染\n      - 每个节点: 标题、创建时间、消息数、生成笔记数\n      - 点击节点跳转到对应会话\n   b. 统计卡片:\n      - 总会话数、总笔记数、本月学习天数、平均追问深度\n      - 使用 grid 布局排列\n   c. 最近活动时间线:\n      - 最近的学习会话、新建的笔记、打开的复习\n      - 按时间倒序\n   d. 快速入口:\n      - 继续上次学习 → 跳转到最近活跃的会话\n      - 查看所有笔记 → /notes\n      - 开始新会话 → /chat（新建）\n2. 创建 src/components/chat/BranchTree.vue:\n   a. Props: tree (SessionTreeNode)\n   b. 递归渲染树节点\n   c. 连接线: 使用 CSS border 或 SVG 线条\n   d. 展开/折叠分支\n3. 数据来源:\n   - 从 vault/.study-thread/session-tree.json 读取会话树\n   - 从 vault/.study-thread/learner.md 读取统计\n   - 从 notes store 读取笔记统计\n4. 参考 learning-hub.html 的样式设计",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Skill - 学习者画像更新 (update-learner)",
