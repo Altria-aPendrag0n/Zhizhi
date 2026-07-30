@@ -189,7 +189,7 @@
     "name": "Skill - 学习者画像更新 (update-learner)",
     "description": "创建学习者画像更新的 SKILL.md 和执行器，带用户确认 UI",
     "step": "1. 创建 src/skills/update-learner/SKILL.md:\n   a. frontmatter: name, description, version\n   b. body:\n      - 角色: 学习者画像分析师\n      - 输入: {session_transcript}（完整会话）, {existing_profile}（现有 learner.md）, {new_notes}（本次生成的笔记）\n      - 要求:\n        - 只标注\"用户能解释的\"概念，不是\"用户听过的\"\n        - 置信度: high（能独立解释）/ medium（能识别但不完整）/ low（刚接触）\n        - 标注概念之间的关系（前置依赖、互补等）\n        - 不要虚构用户没接触过的概念\n      - 输出格式: JSON diff 格式\n        { added_concepts: [], updated_concepts: [], removed_concepts: [], suggested_topics: [], summary: \"\" }\n2. 创建 src/api/skills/update-learner.ts:\n   a. 导出 async function generateProfileUpdate(session: Session, existingProfile: string, newNotes: Note[], provider: LLMProvider): Promise<ProfileDiff>\n   b. 加载 SKILL.md\n   c. 替换变量 → 调用 LLM → 解析 JSON\n3. 创建 src/components/common/DiffView.vue:\n   a. 显示画像变更 diff: 新增、更新、移除的概念\n   b. 绿色 = 新增，黄色 = 更新（显示旧值→新值），红色 = 移除\n   c. 用户可逐条: 接受 / 拒绝 / 编辑\n   d. 确认 → 写入 .study-thread/learner.md\n   e. 取消 → 丢弃本次更新\n4. 触发时机:\n   - 用户关闭会话标签时\n   - 用户点击\"更新学习画像\"按钮\n   - 弹出 DiffView 供确认\n5. 测试: 完成一个会话 → 触发画像更新 → 检查 learner.md 增量正确",
-    "pass": false
+    "pass": true
   },
   {
     "name": "局部关系图 - D3.js 力导向图",
