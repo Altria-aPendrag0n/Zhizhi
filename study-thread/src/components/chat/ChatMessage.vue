@@ -36,6 +36,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { User } from '@lucide/vue'
+import { marked } from 'marked'
 import type { Message } from '../../types'
 
 const props = defineProps<{
@@ -46,23 +47,10 @@ const props = defineProps<{
 const noteCount = computed(() => props.noteCount ?? 0)
 
 const renderedContent = computed(() => {
-  const text = props.message.content
-  // 简单 Markdown 渲染
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-4 mb-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold mt-4 mb-2">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-4 mb-2">$1</h1>')
-    .replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-brand pl-3 my-2 text-muted-foreground">$1</blockquote>')
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal">$2</li>')
-    .replace(/`([^`]+)`/g, '<code class="bg-surface-2 px-1 rounded text-sm">$1</code>')
-    .replace(/\n\n/g, '</p><p class="my-2">')
-    .replace(/^(.+)$/gm, (match) => {
-      if (match.startsWith('<')) return match
-      return `<p>${match}</p>`
-    })
+  return marked(props.message.content, {
+    breaks: true,
+    gfm: true,
+  }) as string
 })
 </script>
 
