@@ -104,8 +104,8 @@
   {
     "name": "Skill 系统 - 加载器",
     "description": "实现 Skill 加载器: 解析 SKILL.md 文件、变量替换、拼接 prompt",
-    "step": "1. 创建 src/skills/loader.ts:\n   a. 安装 js-yaml: npm install js-yaml && npm install -D @types/js-yaml\n   b. 定义 Skill 接口: { name: string, description: string, body: string }\n   c. 实现 parseSkill(raw: string): Skill\n      - 正则 /^---\\s*\\n(.*?)\\n---\\s*\\n/s 匹配 frontmatter\n      - 用 yaml.load 解析 frontmatter\n      - body = raw.slice(match[0].length).trim()\n   d. 实现 buildPrompt(skill: Skill, vars: Record<string, string>): string\n      - 遍历 vars，将 body 中的 {key} 替换为 value\n      - 使用 replaceAll 全局替换\n   e. 实现 loadSkillFromFile(filePath: string): Promise<Skill>\n      - 从文件系统读取 SKILL.md（通过 Tauri invoke read_file 或 fetch）\n      - 调用 parseSkill\n2. 验证: 写单元测试，确认变量替换正确，frontmatter 解析正确\n3. 文档: 在 loader.ts 文件顶部添加 JSDoc 注释说明用法",
-    "pass": false
+    "pass": true,
+    "step": "1. 创建 src/skills/loader.ts:\n   a. 安装 js-yaml: npm install js-yaml && npm install -D @types/js-yaml\n   b. 定义 Skill 接口: { name: string, description: string, body: string }\n   c. 实现 parseSkill(raw: string): Skill\n      - 正则 /^---\\s*\\n(.*?)\\n---\\s*\\n/s 匹配 frontmatter\n      - 用 yaml.load 解析 frontmatter\n      - body = raw.slice(match[0].length).trim()\n   d. 实现 buildPrompt(skill: Skill, vars: Record<string, string>): string\n      - 遍历 vars，将 body 中的 {key} 替换为 value\n      - 使用 replaceAll 全局替换\n   e. 实现 loadSkillFromFile(filePath: string): Promise<Skill>\n      - 从文件系统读取 SKILL.md（通过 Tauri invoke read_file 或 fetch）\n      - 调用 parseSkill\n2. 验证: 写单元测试，确认变量替换正确，frontmatter 解析正确\n3. 文档: 在 loader.ts 文件顶部添加 JSDoc 注释说明用法"
   },
   {
     "name": "Skill - 划线提炼笔记 (extract-note)",

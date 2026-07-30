@@ -82,3 +82,10 @@ export interface ChatOptions {
   systemPrompt?: string
   signal?: AbortSignal
 }
+
+// Skill 系统类型
+export interface Skill {
+  name: string
+  description: string
+  body: string
+}
