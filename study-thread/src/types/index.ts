@@ -89,3 +89,13 @@ export interface Skill {
   description: string
   body: string
 }
+
+// 原子笔记提取结果
+export interface ExtractedNote {
+  title: string
+  proposition: string
+  explanation: string
+  type: 'concept' | 'method' | 'fact' | 'question'
+  tags: string[]
+  confidence: number
+}
