@@ -171,7 +171,7 @@
     "name": "Vault 全量与增量索引",
     "description": "构建笔记向量的全量索引和增量更新机制",
     "step": "1. 创建 src/embedding/indexer.ts:\n   a. 导出 class NoteIndexer:\n      - constructor(engine: EmbeddingEngine)\n      - async buildIndex(notes: Note[]): Promise<void>\n        - 遍历所有笔记\n        - 提取每篇笔记的 title + proposition + explanation 作为索引文本\n        - 调用 engine.embedBatch 批量向量化\n        - 存储到 Map<notePath, { vector: number[], updatedAt: number }>\n        - 显示索引进度条（后台 Web Worker 中运行）\n      - async updateNote(notePath: string, content: string): Promise<void>\n        - 单篇笔记的增量更新\n      - async removeNote(notePath: string): Promise<void>\n      - getVector(notePath: string): number[] | undefined\n   b. 索引持久化:\n      - 序列化为 JSON（向量数组）存入 localStorage 或 .study-thread/embeddings.json\n      - 或使用简单的 key-value store（idb-keyval）\n      - 每次启动时从持久化存储加载，避免重复索引\n      - 对比文件的 updated frontmatter 判断是否需要重新索引\n   c. Web Worker 执行:\n      - 将 EmbeddingEngine 和 NoteIndexer 放在 Web Worker 中\n      - 通过 postMessage 与主线程通信\n      - 避免阻塞 UI\n2. 在 vault store openVault 后自动触发:\n   a. 加载或创建索引\n   b. 对比 vault 笔记列表与索引列表\n   c. 新增的笔记自动索引\n   d. 修改过的笔记（updated > index.updatedAt）重新索引\n3. 性能目标:\n   - 1000 篇笔记全量索引 < 30s\n   - 单篇增量 < 50ms\n   - 索引加载（从缓存）< 1s",
-    "pass": false
+    "pass": true
   },
   {
     "name": "笔记链接建议 - 编辑时自动提示",
