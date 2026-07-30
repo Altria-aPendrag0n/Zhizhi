@@ -80,8 +80,8 @@
   {
     "name": "聊天输入框 - Composer 组件",
     "description": "实现底部消息输入框，支持发送和停止生成",
-    "step": "1. 创建 src/components/chat/Composer.vue:\n   a. textarea 自动增高（监听 input 事件，重置高度 → scrollHeight）\n   b. placeholder: \"继续追问，或粘贴一段想要拆解的概念…\"\n   c. 发送按钮: ↑ 图标（Lucide ArrowUp）\n   d. 停止按钮: 正在流式生成时显示 ■ 图标，点击调用 abort()\n   e. Enter 发送（Shift+Enter 换行）\n   f. 空内容时发送按钮禁用\n   g. 固定在页面底部（参考 main-chat.html .composer 样式，position: sticky 或 absolute）\n2. Events:\n   - @send(content: string): 父组件处理发送逻辑\n   - @stop(): 父组件处理停止逻辑\n3. 样式: 圆角 15px、背景半透明、阴影、边框 line color\n4. 键盘快捷键绑定: 用 @keydown 处理",
-    "pass": false
+    "pass": true,
+    "step": "1. 创建 src/components/chat/Composer.vue:\n   a. textarea 自动增高（监听 input 事件，重置高度 → scrollHeight）\n   b. placeholder: \"继续追问，或粘贴一段想要拆解的概念…\"\n   c. 发送按钮: ↑ 图标（Lucide ArrowUp）\n   d. 停止按钮: 正在流式生成时显示 ■ 图标，点击调用 abort()\n   e. Enter 发送（Shift+Enter 换行）\n   f. 空内容时发送按钮禁用\n   g. 固定在页面底部（参考 main-chat.html .composer 样式，position: sticky 或 absolute）\n2. Events:\n   - @send(content: string): 父组件处理发送逻辑\n   - @stop(): 父组件处理停止逻辑\n3. 样式: 圆角 15px、背景半透明、阴影、边框 line color\n4. 键盘快捷键绑定: 用 @keydown 处理"
   },
   {
     "name": "学习对话核心流程 - 发送消息与流式响应",
