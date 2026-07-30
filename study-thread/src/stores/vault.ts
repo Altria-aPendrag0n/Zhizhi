@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DirEntry } from '../types'
-import { startWatching, stopWatching } from '../utils/vault-fs'
+import { listDir, startWatching, stopWatching } from '../utils/vault-fs'
 
 export const useVaultStore = defineStore('vault', () => {
   const vaultPath = ref<string | null>(null)
@@ -17,7 +17,7 @@ export const useVaultStore = defineStore('vault', () => {
     return 0
   })
 
-  function openVault(path: string) {
+  async function openVault(path: string) {
     vaultPath.value = path
     isOpen.value = true
     // 启动文件监听
@@ -25,6 +25,12 @@ export const useVaultStore = defineStore('vault', () => {
       console.log('文件变更:', event)
       // 后续可触发自动刷新
     }).catch(console.error)
+    // 读取文件树
+    try {
+      fileTree.value = await listDir(path)
+    } catch (e) {
+      console.error('读取文件树失败:', e)
+    }
   }
 
   function closeVault() {

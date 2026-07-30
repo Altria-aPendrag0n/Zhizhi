@@ -3,12 +3,14 @@ import { ref } from 'vue'
 import type { ProviderType, ProviderConfig } from '../types'
 
 const STORAGE_KEY = 'study-thread-settings'
+const RECENT_VAULTS_KEY = 'study-thread-recent-vaults'
 
 export const useSettingsStore = defineStore('settings', () => {
   const activeProvider = ref<ProviderType>('openai-compat')
   const apiKey = ref('')
   const baseUrl = ref('https://api.openai.com')
   const model = ref('gpt-4o')
+  const recentVaults = ref<string[]>([])
 
   function saveSettings() {
     const data = {
@@ -33,6 +35,17 @@ export const useSettingsStore = defineStore('settings', () => {
         // 解析失败则使用默认值
       }
     }
+    // 加载最近 vault 列表
+    try {
+      const rawVaults = localStorage.getItem(RECENT_VAULTS_KEY)
+      if (rawVaults) recentVaults.value = JSON.parse(rawVaults)
+    } catch {}
+  }
+
+  function addRecentVault(path: string) {
+    const updated = [path, ...recentVaults.value.filter(v => v !== path)].slice(0, 5)
+    recentVaults.value = updated
+    localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(updated))
   }
 
   function getProviderConfig(): ProviderConfig {
@@ -52,8 +65,10 @@ export const useSettingsStore = defineStore('settings', () => {
     apiKey,
     baseUrl,
     model,
+    recentVaults,
     saveSettings,
     loadSettings,
+    addRecentVault,
     getProviderConfig,
   }
 })
