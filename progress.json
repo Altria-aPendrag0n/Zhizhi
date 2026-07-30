@@ -74,8 +74,8 @@
   {
     "name": "学习对话主视图 - ChatView",
     "description": "将 pages/main-chat.html 的对话界面迁移为 Vue 组件",
-    "step": "1. 创建 src/components/chat/ChatView.vue:\n   a. Props: messages (Message[]), isStreaming (boolean)\n   b. 使用 v-for 渲染消息列表\n   c. 自动滚动到底部（新消息到来时）\n   d. 加载态: 空对话时显示引导提示\n   e. 错误态: 消息发送失败时显示重试按钮\n2. 创建 src/components/chat/ChatMessage.vue:\n   a. Props: message (Message), index (number)\n   b. 用户消息样式: 左侧头像 + 气泡（参考 main-chat.html .prompt 样式）\n   c. AI 消息样式: 品牌标签 \"知枝 · 学习伴读\" + 正文（.answer 样式）\n   d. AI 消息渲染 Markdown: 标题 h2/h3、列表 ol/li、加粗 strong、引用 blockquote\n   e. 划线文本: class=\"selectable\"，可被用户选中\n   f. 来源行: \"本次回答已生成 N 张原子笔记\"\n3. 创建 src/components/chat/StreamText.vue:\n   a. Props: chunks (StreamChunk[])\n   b. 实时追加文本，打字机效果\n   c. 渲染行进中的 Markdown（部分文本可能不完整，需要容错）\n4. 迁移 main-chat.html 中的内联 CSS 到各组件的 scoped style\n5. MainChatPage.vue 使用 ChatView + Composer + ThreadList 组合",
-    "pass": false
+    "pass": true,
+    "step": "1. 创建 src/components/chat/ChatView.vue:\n   a. Props: messages (Message[]), isStreaming (boolean)\n   b. 使用 v-for 渲染消息列表\n   c. 自动滚动到底部（新消息到来时）\n   d. 加载态: 空对话时显示引导提示\n   e. 错误态: 消息发送失败时显示重试按钮\n2. 创建 src/components/chat/ChatMessage.vue:\n   a. Props: message (Message), index (number)\n   b. 用户消息样式: 左侧头像 + 气泡（参考 main-chat.html .prompt 样式）\n   c. AI 消息样式: 品牌标签 \"知枝 · 学习伴读\" + 正文（.answer 样式）\n   d. AI 消息渲染 Markdown: 标题 h2/h3、列表 ol/li、加粗 strong、引用 blockquote\n   e. 划线文本: class=\"selectable\"，可被用户选中\n   f. 来源行: \"本次回答已生成 N 张原子笔记\"\n3. 创建 src/components/chat/StreamText.vue:\n   a. Props: chunks (StreamChunk[])\n   b. 实时追加文本，打字机效果\n   c. 渲染行进中的 Markdown（部分文本可能不完整，需要容错）\n4. 迁移 main-chat.html 中的内联 CSS 到各组件的 scoped style\n5. MainChatPage.vue 使用 ChatView + Composer + ThreadList 组合"
   },
   {
     "name": "聊天输入框 - Composer 组件",
