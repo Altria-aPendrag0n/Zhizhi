@@ -165,7 +165,7 @@
     "name": "本地 Embedding 引擎初始化",
     "description": "集成 transformers.js，加载 all-MiniLM-L6-v2 或 text2vec-base-chinese 模型",
     "step": "1. npm install @xenova/transformers\n2. 创建 src/embedding/engine.ts:\n   a. 导出 class EmbeddingEngine:\n      - constructor(modelName: string = 'Xenova/all-MiniLM-L6-v2')\n      - async initialize(): Promise<void> → 调用 pipeline('feature-extraction', modelName)\n      - async embed(text: string): Promise<number[]> → 单文本向量化\n      - async embedBatch(texts: string[]): Promise<number[][]> → 批量向量化\n      - isReady(): boolean\n   b. 模型缓存: transformers.js 自动缓存到浏览器 IndexedDB，首次下载 80MB\n   c. 初始化时显示进度提示\n3. 中文优化选项:\n   - 提供 text2vec-base-chinese 作为备选（中文语义匹配更优）\n   - 通过 settings 切换模型\n4. 在 App.vue onMounted 中启动初始化（后台，不阻塞 UI）\n5. 将初始化状态存到 Pinia store 或 provide/inject\n6. 测试: 初始化后 embed 一段中文文本，验证返回 384 维向量",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Vault 全量与增量索引",

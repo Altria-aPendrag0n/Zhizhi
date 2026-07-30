@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from './components/shell/AppShell.vue'
 import ProjectRail from './components/shell/ProjectRail.vue'
@@ -40,6 +40,7 @@ import ThreadList from './components/shell/ThreadList.vue'
 import TopBar from './components/shell/TopBar.vue'
 import type { Project } from './components/shell/ProjectRail.vue'
 import type { Thread } from './components/shell/ThreadList.vue'
+import { getEmbeddingEngine } from './embedding/engine'
 
 const router = useRouter()
 
@@ -81,4 +82,12 @@ function handleNewThread() {
 function handleSettings() {
   router.push('/settings')
 }
+
+// 后台初始化 Embedding 引擎（不阻塞 UI）
+onMounted(() => {
+  const engine = getEmbeddingEngine()
+  engine.initialize().catch((e) => {
+    console.warn('Embedding 引擎初始化失败（非关键功能）:', e)
+  })
+})
 </script>
