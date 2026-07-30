@@ -45,7 +45,7 @@
     "name": "Vault 管理 - 文件树组件",
     "description": "实现 vault 文件树浏览组件，支持打开/创建 vault",
     "step": "1. 创建 src/components/vault/FileTree.vue:\n   - Props: tree (DirEntry[]), basePath (string)\n   - 递归渲染目录和文件节点\n   - 点击文件触发 @select 事件\n   - 展开/折叠目录\n   - 右键菜单: 新建文件、新建文件夹、删除、重命名（V1 可简化）\n   - 在 ThreadList 侧栏或独立面板中显示\n2. 创建 src/components/vault/VaultSettings.vue:\n   - 打开 vault 按钮: 调用 Tauri dialog 选择文件夹 → 调用 openVault\n   - 新建 vault 按钮: 选择空目录或输入名称 → 创建目录结构（notes/, sessions/）\n   - 显示当前 vault 路径\n   - 最近打开的 vault 列表（存 localStorage）\n3. 在 vault store 中:\n   - openVault 调用 vault-fs.ts 的 listDir，初始化 fileTree\n   - 更新 settings store 中的 recentVaults\n4. 样式: 缩进线、文件图标（使用 Lucide 图标区分文件和文件夹）\n5. 空状态: 未打开 vault 时显示引导提示",
-    "pass": false
+    "pass": true
   },
   {
     "name": "LLM 适配器接口与流式响应工具",
