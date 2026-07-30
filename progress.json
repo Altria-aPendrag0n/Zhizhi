@@ -57,7 +57,7 @@
     "name": "Anthropic API 适配器",
     "description": "实现 Anthropic Messages API 适配器，支持流式响应",
     "step": "1. 创建 src/api/anthropic.ts:\n   a. 导入 LLMProvider, Message, StreamChunk, ChatOptions\n   b. 实现 class AnthropicProvider implements LLMProvider\n   c. 构造函数: constructor(apiKey: string, baseUrl?: string)\n   d. chat 方法:\n      1) 构建请求 body: { model, max_tokens: 4096, system (从 options.systemPrompt), messages (过滤 role=system 的), stream: true }\n      2) fetch POST {baseUrl}/v1/messages，headers: x-api-key, anthropic-version: 2023-06-01, content-type: application/json\n      3) 读取 response.body.getReader()\n      4) 逐行解析 SSE: data: {...}\n      5) 处理事件类型:\n         - message_start → 无操作\n         - content_block_start → 无操作\n         - content_block_delta → delta.type === 'text_delta' → yield { type: 'text', content: delta.text }\n         - content_block_delta → delta.type === 'thinking_delta' → yield { type: 'thinking', content: delta.thinking }\n         - message_delta → 提取 stop_reason 和 usage\n         - message_stop → yield { type: 'stop', content: '' }\n      6) 错误处理: 非 2xx 状态码 → 读 body.text() → yield { type: 'error', content }\n   e. 支持 AbortController 取消请求\n2. 验证: 写一个测试脚本（或直接在控制台），用假 Key 确认请求格式正确",
-    "pass": false
+    "pass": true
   },
   {
     "name": "OpenAI-Compatible API 适配器",
