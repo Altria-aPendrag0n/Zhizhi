@@ -57,6 +57,11 @@ export interface NoteMeta {
   tags: string[]
   created: string
   updated: string
+  proposition?: string
+  source?: {
+    session: string
+    highlight: string
+  }
 }
 
 // 设置相关类型
