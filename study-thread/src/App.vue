@@ -29,20 +29,25 @@
       <router-view />
     </template>
   </AppShell>
+  <!-- 全局 Toast -->
+  <Toast />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from './components/shell/AppShell.vue'
 import ProjectRail from './components/shell/ProjectRail.vue'
 import ThreadList from './components/shell/ThreadList.vue'
 import TopBar from './components/shell/TopBar.vue'
+import Toast from './components/common/Toast.vue'
+import { useToast } from './composables/useToast'
 import type { Project } from './components/shell/ProjectRail.vue'
 import type { Thread } from './components/shell/ThreadList.vue'
 import { getEmbeddingEngine } from './embedding/engine'
 
 const router = useRouter()
+const toast = useToast()
 
 const projects = ref<Project[]>([
   { id: '1', name: '知枝学习' },
@@ -67,7 +72,7 @@ function handleProjectSelect(id: string) {
 }
 
 function handleProjectAdd() {
-  console.log('新建项目')
+  toast.info('新建项目功能即将上线')
 }
 
 function handleThreadSelect(id: string) {
@@ -76,11 +81,38 @@ function handleThreadSelect(id: string) {
 }
 
 function handleNewThread() {
-  console.log('新建会话')
+  router.push('/chat')
+  toast.success('已创建新会话')
 }
 
 function handleSettings() {
   router.push('/settings')
+}
+
+/** 键盘快捷键处理 */
+function handleKeydown(e: KeyboardEvent) {
+  const isCtrl = e.ctrlKey || e.metaKey
+
+  // Ctrl+N: 新建会话
+  if (isCtrl && e.key === 'n') {
+    e.preventDefault()
+    handleNewThread()
+  }
+  // Ctrl+, 或 Ctrl+Shift+S: 打开设置
+  if (isCtrl && e.key === ',') {
+    e.preventDefault()
+    handleSettings()
+  }
+  // Ctrl+H: 学习总览
+  if (isCtrl && e.key === 'h') {
+    e.preventDefault()
+    router.push('/hub')
+  }
+  // Ctrl+B: 查看笔记
+  if (isCtrl && e.key === 'b') {
+    e.preventDefault()
+    router.push('/notes')
+  }
 }
 
 // 后台初始化 Embedding 引擎（不阻塞 UI）
@@ -89,5 +121,12 @@ onMounted(() => {
   engine.initialize().catch((e) => {
     console.warn('Embedding 引擎初始化失败（非关键功能）:', e)
   })
+
+  // 注册全局键盘快捷键
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
