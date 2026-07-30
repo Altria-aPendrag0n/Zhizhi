@@ -128,8 +128,8 @@
   {
     "name": "CodeMirror 6 Live Preview Markdown 编辑器",
     "description": "集成 CodeMirror 6，实现 Live Preview 模式的 Markdown 编辑器",
-    "step": "1. 创建 src/components/editor/MarkdownEditor.vue:\n   a. 使用 CodeMirror 6 的 EditorView\n   b. 配置 extensions:\n      - markdown() 语言支持\n      - EditorView.lineWrapping（自动换行）\n      - EditorView.updateListener.of(...) 监听内容变化\n      - 自定义主题: 匹配设计 Token 的颜色变量\n   c. Props: modelValue (string), readonly (boolean)\n   d. Emits: update:modelValue\n   e. Live Preview 模式:\n      - 使用 @codemirror/language-data 提供 Markdown 语法高亮\n      - 渲染模式: 非编辑行渲染为 HTML（用 marked 或自定义 renderer）\n      - 光标所在行展开为原始 Markdown 源码（# ## ** [[ ]] 等可见）\n      - 实现此效果可用 CodeMirror 的 Decoration API 或使用插件\n      - V1 简化方案: 使用 CodeMirror 6 的标准 Markdown 高亮模式（非 WYSIWYG），确保 [[wikilink]] 语法有特殊高亮\n      - 完全的 Live Preview（光标行展开）标记为 V1.5 优化项\n   f. 当内容变化时，实时解析 [[wikilink]] 并高亮\n2. 工具按钮:\n   - 加粗、斜体、标题、列表、引用、代码块\n   - 插入 [[wikilink]] 快捷键（选中文本后按 [[ 自动补全]]）\n3. 样式:\n   - 适配设计系统字体、颜色、间距\n   - 滚动条美化\n4. 在 NoteDetailPage.vue 中使用 MarkdownEditor\n5. 测试: 输入 Markdown 内容，确认高亮和解析正确",
-    "pass": false
+    "pass": true,
+    "step": "1. 创建 src/components/editor/MarkdownEditor.vue:\n   a. 使用 CodeMirror 6 的 EditorView\n   b. 配置 extensions:\n      - markdown() 语言支持\n      - EditorView.lineWrapping（自动换行）\n      - EditorView.updateListener.of(...) 监听内容变化\n      - 自定义主题: 匹配设计 Token 的颜色变量\n   c. Props: modelValue (string), readonly (boolean)\n   d. Emits: update:modelValue\n   e. Live Preview 模式:\n      - 使用 @codemirror/language-data 提供 Markdown 语法高亮\n      - 渲染模式: 非编辑行渲染为 HTML（用 marked 或自定义 renderer）\n      - 光标所在行展开为原始 Markdown 源码（# ## ** [[ ]] 等可见）\n      - 实现此效果可用 CodeMirror 的 Decoration API 或使用插件\n      - V1 简化方案: 使用 CodeMirror 6 的标准 Markdown 高亮模式（非 WYSIWYG），确保 [[wikilink]] 语法有特殊高亮\n      - 完全的 Live Preview（光标行展开）标记为 V1.5 优化项\n   f. 当内容变化时，实时解析 [[wikilink]] 并高亮\n2. 工具按钮:\n   - 加粗、斜体、标题、列表、引用、代码块\n   - 插入 [[wikilink]] 快捷键（选中文本后按 [[ 自动补全]]）\n3. 样式:\n   - 适配设计系统字体、颜色、间距\n   - 滚动条美化\n4. 在 NoteDetailPage.vue 中使用 MarkdownEditor\n5. 测试: 输入 Markdown 内容，确认高亮和解析正确"
   },
   {
     "name": "笔记详情页 + 反链面板",
