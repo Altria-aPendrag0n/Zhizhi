@@ -51,7 +51,7 @@
     "name": "LLM 适配器接口与流式响应工具",
     "description": "定义 LLMProvider 接口和流式响应处理基础设施",
     "step": "1. 创建 src/api/llm-provider.ts:\n   a. 定义 Message 接口: { role: 'system' | 'user' | 'assistant', content: string }\n   b. 定义 StreamChunk 类型: { type: 'text' | 'stop' | 'error' | 'thinking', content: string }\n   c. 定义 ChatOptions 接口: { model?, maxTokens?, temperature?, systemPrompt?, signal? }\n   d. 定义 LLMProvider 接口: { chat(messages: Message[], options?: ChatOptions): AsyncIterable<StreamChunk> }\n2. 创建 src/api/stream.ts:\n   a. 导出 async function* streamChat(provider: LLMProvider, messages: Message[], options?: ChatOptions): AsyncIterable<StreamChunk>\n   b. 封装错误处理: catch 后 yield { type: 'error', content: error.message }\n   c. 导出 createAbortController(): AbortController（用于停止生成）\n3. 创建 src/api/provider-factory.ts:\n   a. 导出 createProvider(config: ProviderConfig): LLMProvider\n   b. 根据 config.type 返回 AnthropicProvider 或 OpenAICompatProvider\n4. 添加 TypeScript 类型导出到 src/types/api.ts",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Anthropic API 适配器",
