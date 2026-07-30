@@ -45,6 +45,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '../stores/settings'
 import { createProvider } from '../api/provider-factory'
+import { branchFollowupStream } from '../api/skills/branch-followup'
 import type { Message } from '../types'
 import { loadBranchContext } from '../utils/branch-context'
 import ChatView from '../components/chat/ChatView.vue'
@@ -56,6 +57,7 @@ const router = useRouter()
 const settingsStore = useSettingsStore()
 
 const messages = ref<Message[]>([])
+const forkMessages = ref<Message[]>([])
 const isStreaming = ref(false)
 const streamingText = ref('')
 const error = ref<string | null>(null)
@@ -78,6 +80,7 @@ onMounted(async () => {
   // 实际项目中，sessionFile 应从 vault 读取
   const sessionFile = `sessions/${sessionId}.md`
   const context = await loadBranchContext(sessionFile, forkIndex)
+  forkMessages.value = context
   messages.value = context
 
   // 提取最后一条消息作为分叉引用
@@ -105,11 +108,14 @@ async function handleSend(content: string) {
 
   try {
     const provider = createProvider(providerConfig)
-    const allMessages = [...messages.value]
 
-    for await (const chunk of provider.chat(allMessages, {
-      systemPrompt: '你是一个深度追问学习伴读，请基于分叉上下文提供更深入的回答。',
-    })) {
+    // 使用分支追问 Skill，注入分叉上下文和相关笔记
+    for await (const chunk of branchFollowupStream(
+      content,
+      forkMessages.value,
+      [], // 相关笔记暂时为空，后续可集成笔记搜索
+      provider,
+    )) {
       if (chunk.type === 'text') {
         streamingText.value += chunk.content
         aiMessage.content += chunk.content

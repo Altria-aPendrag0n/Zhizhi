@@ -38,7 +38,7 @@
   {
     "name": "App Shell 组件",
     "description": "将 partials/project-shell.html 迁移为 Vue 3 App Shell 组件",
-    "step": "1. 创建 src/components/shell/AppShell.vue:\n   - 四列 CSS Grid 布局: grid-template-columns: 76px 248px 1fr 310px\n   - 使用 CSS 变量 --shell-rail, --shell-threads, --shell-context 控制列宽\n   - 三行: toolbar 62px + content 1fr\n   - 插槽: #rail, #threads, #toolbar, #main, #context\n2. 创建 src/components/shell/ProjectRail.vue:\n   - 品牌 Logo 按钮（"枝"字）、项目切换按钮组、底部新建按钮\n   - 当前激活项使用 is-active class\n   - 参考 project-shell.html 中的 .project-shell__projects 样式\n3. 创建 src/components/shell/ThreadList.vue:\n   - Props: threads (Thread[]), activeId (string)\n   - 渲染会话列表，激活项高亮\n   - Header 显示项目名称 + 新建按钮\n   - Footer 显示统计（会话数、笔记数）\n   - 使用 vault store 和 session store 数据\n4. 创建 src/components/shell/TopBar.vue:\n   - 面包屑导航（从 router 获取）\n   - 搜索按钮、更多操作按钮\n   - Props: title, breadcrumbs\n5. 将所有 shell 组件样式从 project-shell.html 提取并迁移为 scoped CSS\n6. 在 App.vue 中使用 AppShell 包裹 router-view\n7. 适配响应式: @media (max-width: 1100px) 调整列宽",
+    "step": "1. 创建 src/components/shell/AppShell.vue:\n   - 四列 CSS Grid 布局: grid-template-columns: 76px 248px 1fr 310px\n   - 使用 CSS 变量 --shell-rail, --shell-threads, --shell-context 控制列宽\n   - 三行: toolbar 62px + content 1fr\n   - 插槽: #rail, #threads, #toolbar, #main, #context\n2. 创建 src/components/shell/ProjectRail.vue:\n   - 品牌 Logo 按钮（「枝」字）、项目切换按钮组、底部新建按钮\n   - 当前激活项使用 is-active class\n   - 参考 project-shell.html 中的 .project-shell__projects 样式\n3. 创建 src/components/shell/ThreadList.vue:\n   - Props: threads (Thread[]), activeId (string)\n   - 渲染会话列表，激活项高亮\n   - Header 显示项目名称 + 新建按钮\n   - Footer 显示统计（会话数、笔记数）\n   - 使用 vault store 和 session store 数据\n4. 创建 src/components/shell/TopBar.vue:\n   - 面包屑导航（从 router 获取）\n   - 搜索按钮、更多操作按钮\n   - Props: title, breadcrumbs\n5. 将所有 shell 组件样式从 project-shell.html 提取并迁移为 scoped CSS\n6. 在 App.vue 中使用 AppShell 包裹 router-view\n7. 适配响应式: @media (max-width: 1100px) 调整列宽",
     "pass": true
   },
   {
@@ -159,7 +159,7 @@
     "name": "Skill - 分支追问 (branch-followup)",
     "description": "创建分支追问的 SKILL.md 和执行器",
     "step": "1. 创建 src/skills/branch-followup/SKILL.md:\n   - frontmatter: name, description, version\n   - body:\n     a. 角色: 深度追问学习伴读\n     b. 输入: {fork_context}（分叉点前的对话）, {user_question}（用户追问）, {related_notes}（相关笔记）\n     c. 要求:\n        - 必须比主对话更深入、更聚焦\n        - 不要重复主对话中已经解释过的基础概念\n        - 优先从已有笔记中引用相关知识\n        - 回答结构: 简短回顾上下文 → 深入解答 → 提出延伸思考\n     d. 输出: 标准 AI 回答格式（Markdown，结构清晰）\n2. 创建 src/api/skills/branch-followup.ts:\n   a. 导出 async function* branchFollowupStream(question: string, forkContext: Message[], relatedNotes: Note[], provider: LLMProvider): AsyncIterable<StreamChunk>\n   b. 加载 SKILL.md\n   c. 替换变量 {fork_context}（序列化 forkContext 为文本）, {user_question}, {related_notes}\n   d. 构建消息并流式返回\n3. 在 BranchChatPage 中:\n   a. 用户发送消息时调用 branchFollowupStream 而非普通的 chat\n   b. 自动收集相关笔记: 从 vault 中搜索标题与分叉上下文相关的笔记\n4. 测试: 创建分支并发送追问，确认 AI 回答引用了分叉前的上下文",
-    "pass": false
+    "pass": true
   },
   {
     "name": "本地 Embedding 引擎初始化",
