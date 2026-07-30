@@ -16,4 +16,8 @@ export default defineConfig(async () => ({
       : undefined,
     watch: { ignored: ["**/src-tauri/**"] },
   },
+  test: {
+    environment: "happy-dom",
+    include: ["src/**/*.{test,spec}.{ts,js}"],
+  },
 }));
