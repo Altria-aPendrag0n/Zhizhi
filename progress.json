@@ -86,8 +86,8 @@
   {
     "name": "学习对话核心流程 - 发送消息与流式响应",
     "description": "实现完整的 AI 对话流程: 发送消息 → 流式接收 → 渲染",
-    "step": "1. 在 MainChatPage.vue 中实现对话流程:\n   a. setup 中从 session store 获取当前会话的 messages\n   b. sendMessage(content):\n      1) 将用户消息添加到 messages（role: 'user'）\n      2) 创建 AI 消息占位（role: 'assistant', content: ''）\n      3) 设置 isStreaming = true\n      4) 调用 createProvider() 获取 LLMProvider\n      5) 收集所有消息（包括 system prompt + 历史消息）\n      6) for await chunk of provider.chat(messages, options):\n         - type 'text': 追加到 AI 消息的 content\n         - type 'stop': isStreaming = false, 保存会话\n         - type 'error': 显示错误消息\n   c. stopGeneration(): 调用 abortController.abort()\n   d. 错误处理: API Key 未配置时提示跳转到设置页\n2. System Prompt 构建:\n   a. 注入学习者画像（如果 learner.md 存在）\n   b. 注入当前会话上下文\n   c. 使用中文 prompt，角色定位为学习伴读\n3. 每条 AI 消息的 Markdown 内容使用 markdown-it 或 marked 库渲染:\n   - npm install marked\n   - 在 ChatMessage.vue 中 v-html 渲染（需做 XSS 防护: marked 默认转义 HTML）\n4. 测试: 配置 API Key 后发送一条消息，验证流式显示",
-    "pass": false
+    "pass": true,
+    "step": "1. 在 MainChatPage.vue 中实现对话流程:\n   a. setup 中从 session store 获取当前会话的 messages\n   b. sendMessage(content):\n      1) 将用户消息添加到 messages（role: 'user'）\n      2) 创建 AI 消息占位（role: 'assistant', content: ''）\n      3) 设置 isStreaming = true\n      4) 调用 createProvider() 获取 LLMProvider\n      5) 收集所有消息（包括 system prompt + 历史消息）\n      6) for await chunk of provider.chat(messages, options):\n         - type 'text': 追加到 AI 消息的 content\n         - type 'stop': isStreaming = false, 保存会话\n         - type 'error': 显示错误消息\n   c. stopGeneration(): 调用 abortController.abort()\n   d. 错误处理: API Key 未配置时提示跳转到设置页\n2. System Prompt 构建:\n   a. 注入学习者画像（如果 learner.md 存在）\n   b. 注入当前会话上下文\n   c. 使用中文 prompt，角色定位为学习伴读\n3. 每条 AI 消息的 Markdown 内容使用 markdown-it 或 marked 库渲染:\n   - npm install marked\n   - 在 ChatMessage.vue 中 v-html 渲染（需做 XSS 防护: marked 默认转义 HTML）\n4. 测试: 配置 API Key 后发送一条消息，验证流式显示"
   },
   {
     "name": "会话存档写入 Vault",
