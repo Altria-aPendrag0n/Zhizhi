@@ -20,20 +20,24 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Message } from '../types'
+import type { Message, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
+import { useVaultStore } from '../stores/vault'
 import { createProvider } from '../api/provider-factory'
+import { generateSessionTitle } from '../utils/session-serializer'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 
 const router = useRouter()
 const settingsStore = useSettingsStore()
+const vaultStore = useVaultStore()
 
 const messages = ref<Message[]>([])
 const isStreaming = ref(false)
 const streamingText = ref('')
 const error = ref<string | null>(null)
 let abortController: AbortController | null = null
+let sessionId = crypto.randomUUID()
 
 const SYSTEM_PROMPT = `你是知枝，一位学习伴读助手。你的职责是帮助用户深入理解概念、拆解知识点、建立知识关联。
 
@@ -88,6 +92,8 @@ async function handleSend(content: string) {
         case 'stop':
           isStreaming.value = false
           streamingText.value = ''
+          // 保存会话到 vault
+          saveCurrentSession()
           break
         case 'error':
           error.value = chunk.content
@@ -109,6 +115,20 @@ async function handleSend(content: string) {
     isStreaming.value = false
     streamingText.value = ''
   }
+}
+
+async function saveCurrentSession() {
+  if (!vaultStore.vaultPath || messages.value.length === 0) return
+  const session: Session = {
+    id: sessionId,
+    title: generateSessionTitle(messages.value),
+    created: new Date().toISOString(),
+    parent_session: null,
+    fork_point: null,
+    tags: [],
+    messages: messages.value,
+  }
+  await vaultStore.saveCurrentSession(session)
 }
 
 function handleStop() {

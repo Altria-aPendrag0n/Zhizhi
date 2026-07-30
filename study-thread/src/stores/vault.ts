@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DirEntry } from '../types'
 import { listDir, startWatching, stopWatching } from '../utils/vault-fs'
+import { saveSessionToVault } from '../utils/session-serializer'
+import type { Session } from '../types'
 
 export const useVaultStore = defineStore('vault', () => {
   const vaultPath = ref<string | null>(null)
@@ -42,7 +44,25 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   async function refreshFileTree() {
-    // 后续任务会实现
+    if (vaultPath.value) {
+      try {
+        fileTree.value = await listDir(vaultPath.value)
+      } catch (e) {
+        console.error('刷新文件树失败:', e)
+      }
+    }
+  }
+
+  async function saveCurrentSession(session: Session, isBranch = false): Promise<string | null> {
+    if (!vaultPath.value) return null
+    try {
+      const filePath = await saveSessionToVault(vaultPath.value, session, isBranch)
+      await refreshFileTree()
+      return filePath
+    } catch (e) {
+      console.error('保存会话失败:', e)
+      return null
+    }
   }
 
   return {
@@ -54,5 +74,6 @@ export const useVaultStore = defineStore('vault', () => {
     openVault,
     closeVault,
     refreshFileTree,
+    saveCurrentSession,
   }
 })
