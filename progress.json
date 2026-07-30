@@ -1,0 +1,212 @@
+[
+  {
+    "name": "项目初始化 - Tauri v2 + Vue 3 + Vite",
+    "description": "创建 Tauri v2 桌面应用项目，集成 Vue 3 + TypeScript + Vite",
+    "step": "1. 执行 npm create tauri-app@latest study-thread -- --template vue-ts\n2. cd study-thread && npm install\n3. 安装依赖: npm install vue-router@4 pinia js-yaml @anthropic-ai/sdk\n4. 安装 CodeMirror 6: npm install codemirror @codemirror/view @codemirror/state @codemirror/lang-markdown @codemirror/language-data\n5. 安装 D3: npm install d3 @types/d3\n6. 安装 Tailwind: npm install -D tailwindcss @tailwindcss/vite\n7. 配置 vite.config.ts 引入 tailwindcss 插件\n8. 创建 src/main.ts 入口，挂载 Vue app + router + pinia\n9. 创建 src/App.vue 根组件（最小占位）\n10. npm run tauri dev 验证项目能启动",
+    "pass": true
+  },
+  {
+    "name": "Tailwind CSS 与设计 Token 配置",
+    "description": "配置 Tailwind CSS 主题，将设计 Token 映射为 utility classes",
+    "step": "1. 创建 src/styles/tokens.css，复制 colors_and_type.css 中的 :root 变量\n2. 在 @theme inline 块中将 CSS 变量映射为 Tailwind 颜色: --color-background, --color-foreground, --color-card, --color-primary 等\n3. 映射圆角: --radius-sm, --radius-md, --radius-lg\n4. 创建 src/styles/global.css，引入 @tailwind base/components/utilities\n5. 在 global.css 添加 body 基础样式: font-family, background, color\n6. 添加 .no-scrollbar 工具类\n7. 在 main.ts 中 import './styles/global.css'\n8. 在 vite.config.ts 确认 CSS 加载顺序正确（tokens → tailwind → global）\n9. 验证: 在 App.vue 中使用 bg-background text-foreground 等类确认生效",
+    "pass": false
+  },
+  {
+    "name": "Vue Router 路由设置",
+    "description": "设置 Vue Router 4，定义所有页面路由",
+    "step": "1. 创建 src/router/index.ts\n2. 定义路由表:\n   - / → 重定向到 /chat\n   - /chat → MainChatPage（主对话）\n   - /chat/branch/:sessionId/:branchId → BranchChatPage（分支对话）\n   - /notes → NotesPage（笔记列表）\n   - /notes/:id → NoteDetailPage（笔记详情）\n   - /hub → LearningHubPage（学习总览）\n   - /settings → SettingsPage（设置）\n3. 使用 createWebHistory 模式\n4. 在 main.ts 中 app.use(router)\n5. 创建各 Page 组件的占位文件（仅包含 <template><div>PageName</div></template>）\n6. 在 App.vue 中添加 <router-view />\n7. 验证: npm run dev，访问各路由确认渲染",
+    "pass": false
+  },
+  {
+    "name": "Pinia Stores 初始化",
+    "description": "创建 Pinia 状态管理 stores: vault, session, notes, settings",
+    "step": "1. 创建 src/stores/vault.ts:\n   - state: vaultPath (string | null), fileTree (DirEntry[]), isOpen (boolean)\n   - actions: openVault(path), closeVault(), refreshFileTree()\n2. 创建 src/stores/settings.ts:\n   - state: activeProvider ('anthropic' | 'openai-compat'), apiKey (string), baseUrl (string), model (string)\n   - actions: saveSettings(), loadSettings(), getProviderConfig()\n   - 持久化: 从 localStorage 读取，保存时写入 localStorage\n3. 创建 src/stores/session.ts:\n   - state: sessions (Session[]), currentSessionId, messages (Message[]), isStreaming (boolean)\n   - actions: createSession(), switchSession(), addMessage(), createBranch(), loadBranchContext()\n4. 创建 src/stores/notes.ts:\n   - state: notes (Note[]), noteIndex (Map<string, Note>), isLoading (boolean)\n   - actions: loadAllNotes(), loadNote(path), saveNote(path, content), refreshIndex()\n5. 在 main.ts 中 app.use(createPinia())\n6. 在每个 store 文件中添加 TypeScript 类型定义",
+    "pass": false
+  },
+  {
+    "name": "Tauri Rust 后端 - Vault 文件系统命令 (vault.rs)",
+    "description": "实现 Rust 后端的文件系统读写、目录遍历、文件监听命令",
+    "step": "1. 在 src-tauri/Cargo.toml 添加依赖: serde, serde_json, notify\n2. 创建 src-tauri/src/commands/mod.rs，声明 pub mod vault\n3. 创建 src-tauri/src/commands/vault.rs:\n   a. 定义数据结构: DirEntry { name, path, is_dir, children }, VaultInfo { path, note_count, session_count }\n   b. #[tauri::command] fn read_file(path: String) -> Result<String, String>: 调用 std::fs::read_to_string\n   c. #[tauri::command] fn write_file(path: String, content: String) -> Result<(), String>: 调用 std::fs::write，确保父目录存在\n   d. #[tauri::command] fn list_dir(path: String) -> Result<Vec<DirEntry>, String>: 递归读取目录，忽略 . 开头和 node_modules\n   e. #[tauri::command] fn create_dir(path: String) -> Result<(), String>: 调用 std::fs::create_dir_all\n   f. #[tauri::command] fn file_exists(path: String) -> Result<bool, String>\n   g. #[tauri::command] fn delete_file(path: String) -> Result<(), String>\n4. 在 src-tauri/src/lib.rs 中注册所有命令:\n   .invoke_handler(tauri::generate_handler![commands::vault::read_file, commands::vault::write_file, ...])\n5. 前端封装: 创建 src/utils/vault-fs.ts，每个函数封装为 invoke 调用\n6. 测试: 在 Tauri dev 中通过前端按钮调用各命令验证",
+    "pass": false
+  },
+  {
+    "name": "Tauri Rust 后端 - 文件变更监听",
+    "description": "使用 notify crate 监听 vault 目录的文件变更，通过 Tauri event 通知前端",
+    "step": "1. 在 Cargo.toml 确认 notify 依赖（启用 macos_kqueue 或默认 feature）\n2. 在 vault.rs 中添加 #[tauri::command] fn start_watch(window: Window, path: String) -> Result<(), String>:\n   a. 使用 notify::recommended_watcher 创建 watcher\n   b. 监听 path 目录下的 Create/Modify/Remove 事件\n   c. 将事件通过 window.emit(\"file-changed\", payload) 发送到前端\n   d. 将 watcher 存储在 Tauri State 中以便后续关闭\n3. 添加 #[tauri::command] fn stop_watch(state: State<WatcherState>) -> Result<(), String>\n4. 在 src-tauri/src/lib.rs 中注册 start_watch 和 stop_watch 命令，管理 WatcherState\n5. 在前端 vault-fs.ts 中封装:\n   a. startWatching(path): 调用 invoke + 通过 listen('file-changed', callback) 接收事件\n   b. stopWatching()\n6. 在 vault store 中: openVault 后自动调用 startWatching\n7. 测试: 在外部编辑器中修改 vault 中的 .md 文件，确认前端收到事件",
+    "pass": false
+  },
+  {
+    "name": "App Shell 组件",
+    "description": "将 partials/project-shell.html 迁移为 Vue 3 App Shell 组件",
+    "step": "1. 创建 src/components/shell/AppShell.vue:\n   - 四列 CSS Grid 布局: grid-template-columns: 76px 248px 1fr 310px\n   - 使用 CSS 变量 --shell-rail, --shell-threads, --shell-context 控制列宽\n   - 三行: toolbar 62px + content 1fr\n   - 插槽: #rail, #threads, #toolbar, #main, #context\n2. 创建 src/components/shell/ProjectRail.vue:\n   - 品牌 Logo 按钮（"枝"字）、项目切换按钮组、底部新建按钮\n   - 当前激活项使用 is-active class\n   - 参考 project-shell.html 中的 .project-shell__projects 样式\n3. 创建 src/components/shell/ThreadList.vue:\n   - Props: threads (Thread[]), activeId (string)\n   - 渲染会话列表，激活项高亮\n   - Header 显示项目名称 + 新建按钮\n   - Footer 显示统计（会话数、笔记数）\n   - 使用 vault store 和 session store 数据\n4. 创建 src/components/shell/TopBar.vue:\n   - 面包屑导航（从 router 获取）\n   - 搜索按钮、更多操作按钮\n   - Props: title, breadcrumbs\n5. 将所有 shell 组件样式从 project-shell.html 提取并迁移为 scoped CSS\n6. 在 App.vue 中使用 AppShell 包裹 router-view\n7. 适配响应式: @media (max-width: 1100px) 调整列宽",
+    "pass": false
+  },
+  {
+    "name": "Vault 管理 - 文件树组件",
+    "description": "实现 vault 文件树浏览组件，支持打开/创建 vault",
+    "step": "1. 创建 src/components/vault/FileTree.vue:\n   - Props: tree (DirEntry[]), basePath (string)\n   - 递归渲染目录和文件节点\n   - 点击文件触发 @select 事件\n   - 展开/折叠目录\n   - 右键菜单: 新建文件、新建文件夹、删除、重命名（V1 可简化）\n   - 在 ThreadList 侧栏或独立面板中显示\n2. 创建 src/components/vault/VaultSettings.vue:\n   - 打开 vault 按钮: 调用 Tauri dialog 选择文件夹 → 调用 openVault\n   - 新建 vault 按钮: 选择空目录或输入名称 → 创建目录结构（notes/, sessions/）\n   - 显示当前 vault 路径\n   - 最近打开的 vault 列表（存 localStorage）\n3. 在 vault store 中:\n   - openVault 调用 vault-fs.ts 的 listDir，初始化 fileTree\n   - 更新 settings store 中的 recentVaults\n4. 样式: 缩进线、文件图标（使用 Lucide 图标区分文件和文件夹）\n5. 空状态: 未打开 vault 时显示引导提示",
+    "pass": false
+  },
+  {
+    "name": "LLM 适配器接口与流式响应工具",
+    "description": "定义 LLMProvider 接口和流式响应处理基础设施",
+    "step": "1. 创建 src/api/llm-provider.ts:\n   a. 定义 Message 接口: { role: 'system' | 'user' | 'assistant', content: string }\n   b. 定义 StreamChunk 类型: { type: 'text' | 'stop' | 'error' | 'thinking', content: string }\n   c. 定义 ChatOptions 接口: { model?, maxTokens?, temperature?, systemPrompt?, signal? }\n   d. 定义 LLMProvider 接口: { chat(messages: Message[], options?: ChatOptions): AsyncIterable<StreamChunk> }\n2. 创建 src/api/stream.ts:\n   a. 导出 async function* streamChat(provider: LLMProvider, messages: Message[], options?: ChatOptions): AsyncIterable<StreamChunk>\n   b. 封装错误处理: catch 后 yield { type: 'error', content: error.message }\n   c. 导出 createAbortController(): AbortController（用于停止生成）\n3. 创建 src/api/provider-factory.ts:\n   a. 导出 createProvider(config: ProviderConfig): LLMProvider\n   b. 根据 config.type 返回 AnthropicProvider 或 OpenAICompatProvider\n4. 添加 TypeScript 类型导出到 src/types/api.ts",
+    "pass": false
+  },
+  {
+    "name": "Anthropic API 适配器",
+    "description": "实现 Anthropic Messages API 适配器，支持流式响应",
+    "step": "1. 创建 src/api/anthropic.ts:\n   a. 导入 LLMProvider, Message, StreamChunk, ChatOptions\n   b. 实现 class AnthropicProvider implements LLMProvider\n   c. 构造函数: constructor(apiKey: string, baseUrl?: string)\n   d. chat 方法:\n      1) 构建请求 body: { model, max_tokens: 4096, system (从 options.systemPrompt), messages (过滤 role=system 的), stream: true }\n      2) fetch POST {baseUrl}/v1/messages，headers: x-api-key, anthropic-version: 2023-06-01, content-type: application/json\n      3) 读取 response.body.getReader()\n      4) 逐行解析 SSE: data: {...}\n      5) 处理事件类型:\n         - message_start → 无操作\n         - content_block_start → 无操作\n         - content_block_delta → delta.type === 'text_delta' → yield { type: 'text', content: delta.text }\n         - content_block_delta → delta.type === 'thinking_delta' → yield { type: 'thinking', content: delta.thinking }\n         - message_delta → 提取 stop_reason 和 usage\n         - message_stop → yield { type: 'stop', content: '' }\n      6) 错误处理: 非 2xx 状态码 → 读 body.text() → yield { type: 'error', content }\n   e. 支持 AbortController 取消请求\n2. 验证: 写一个测试脚本（或直接在控制台），用假 Key 确认请求格式正确",
+    "pass": false
+  },
+  {
+    "name": "OpenAI-Compatible API 适配器",
+    "description": "实现 OpenAI Chat Completions 兼容适配器，支持流式响应和多提供商",
+    "step": "1. 创建 src/api/openai-compat.ts:\n   a. 实现 class OpenAICompatProvider implements LLMProvider\n   b. 构造函数: constructor(apiKey: string, baseUrl: string, defaultModel: string)\n   c. chat 方法:\n      1) 将 system prompt 消息作为 messages[0] (role: 'system')\n      2) 构建请求 body: { model, messages, stream: true, max_tokens: 4096 }\n      3) fetch POST {baseUrl}/v1/chat/completions，headers: Authorization: Bearer {apiKey}, content-type: application/json\n      4) 读取 response.body.getReader()\n      5) 逐行解析 SSE: data: {...}\n      6) 解析 choices[0].delta.content → yield { type: 'text', content }\n      7) 解析 choices[0].finish_reason === 'stop' → yield { type: 'stop', content: '' }\n      8) 兼容 reasoning_content（DeepSeek 等国产模型的思考字段）\n   d. 支持 AbortController 取消请求\n   e. 错误处理: 非 2xx → 读 body → yield error\n2. 默认支持的服务商预设:\n   - OpenAI: baseUrl=https://api.openai.com\n   - DeepSeek: baseUrl=https://api.deepseek.com\n   - 通义千问: baseUrl=https://dashscope.aliyuncs.com/compatible-mode\n   - 智谱: baseUrl=https://open.bigmodel.cn/api/paas\n   - Ollama: baseUrl=http://localhost:11434\n3. 在 settings store 中支持常见服务商快捷选择",
+    "pass": false
+  },
+  {
+    "name": "设置页面 - API Key 与模型配置",
+    "description": "实现设置页面，用户可配置 API Key、服务商、模型参数",
+    "step": "1. 创建 src/views/SettingsPage.vue:\n   a. 服务商选择: 下拉菜单（Anthropic / OpenAI / DeepSeek / 通义千问 / 智谱 / Ollama / 自定义）\n   b. 选择服务商后自动填充默认 Base URL，也可手动修改\n   c. API Key 输入框（type=password，带显示/隐藏切换）\n   d. 模型名称输入框（默认值根据服务商变化，如 claude-sonnet-4-6 / gpt-4o / deepseek-chat）\n   e. 保存按钮: 调用 settings store 的 saveSettings()\n   f. 连接测试按钮: 发送一个最小请求验证 Key 有效（如发送 \"hi\" → 检查是否返回文本）\n   g. 显示测试结果: 成功/失败 + 延迟\n2. 在 settings store 中:\n   - saveSettings() 写入 localStorage\n   - loadSettings() 从 localStorage 读取\n   - getProviderConfig() 返回 { type, apiKey, baseUrl, model }\n3. 路由: /settings → SettingsPage\n4. 在 TopBar 或 ProjectRail 添加设置入口按钮\n5. 安全: API Key 以明文存 localStorage（桌面应用，V1 不加密）",
+    "pass": false
+  },
+  {
+    "name": "学习对话主视图 - ChatView",
+    "description": "将 pages/main-chat.html 的对话界面迁移为 Vue 组件",
+    "step": "1. 创建 src/components/chat/ChatView.vue:\n   a. Props: messages (Message[]), isStreaming (boolean)\n   b. 使用 v-for 渲染消息列表\n   c. 自动滚动到底部（新消息到来时）\n   d. 加载态: 空对话时显示引导提示\n   e. 错误态: 消息发送失败时显示重试按钮\n2. 创建 src/components/chat/ChatMessage.vue:\n   a. Props: message (Message), index (number)\n   b. 用户消息样式: 左侧头像 + 气泡（参考 main-chat.html .prompt 样式）\n   c. AI 消息样式: 品牌标签 \"知枝 · 学习伴读\" + 正文（.answer 样式）\n   d. AI 消息渲染 Markdown: 标题 h2/h3、列表 ol/li、加粗 strong、引用 blockquote\n   e. 划线文本: class=\"selectable\"，可被用户选中\n   f. 来源行: \"本次回答已生成 N 张原子笔记\"\n3. 创建 src/components/chat/StreamText.vue:\n   a. Props: chunks (StreamChunk[])\n   b. 实时追加文本，打字机效果\n   c. 渲染行进中的 Markdown（部分文本可能不完整，需要容错）\n4. 迁移 main-chat.html 中的内联 CSS 到各组件的 scoped style\n5. MainChatPage.vue 使用 ChatView + Composer + ThreadList 组合",
+    "pass": false
+  },
+  {
+    "name": "聊天输入框 - Composer 组件",
+    "description": "实现底部消息输入框，支持发送和停止生成",
+    "step": "1. 创建 src/components/chat/Composer.vue:\n   a. textarea 自动增高（监听 input 事件，重置高度 → scrollHeight）\n   b. placeholder: \"继续追问，或粘贴一段想要拆解的概念…\"\n   c. 发送按钮: ↑ 图标（Lucide ArrowUp）\n   d. 停止按钮: 正在流式生成时显示 ■ 图标，点击调用 abort()\n   e. Enter 发送（Shift+Enter 换行）\n   f. 空内容时发送按钮禁用\n   g. 固定在页面底部（参考 main-chat.html .composer 样式，position: sticky 或 absolute）\n2. Events:\n   - @send(content: string): 父组件处理发送逻辑\n   - @stop(): 父组件处理停止逻辑\n3. 样式: 圆角 15px、背景半透明、阴影、边框 line color\n4. 键盘快捷键绑定: 用 @keydown 处理",
+    "pass": false
+  },
+  {
+    "name": "学习对话核心流程 - 发送消息与流式响应",
+    "description": "实现完整的 AI 对话流程: 发送消息 → 流式接收 → 渲染",
+    "step": "1. 在 MainChatPage.vue 中实现对话流程:\n   a. setup 中从 session store 获取当前会话的 messages\n   b. sendMessage(content):\n      1) 将用户消息添加到 messages（role: 'user'）\n      2) 创建 AI 消息占位（role: 'assistant', content: ''）\n      3) 设置 isStreaming = true\n      4) 调用 createProvider() 获取 LLMProvider\n      5) 收集所有消息（包括 system prompt + 历史消息）\n      6) for await chunk of provider.chat(messages, options):\n         - type 'text': 追加到 AI 消息的 content\n         - type 'stop': isStreaming = false, 保存会话\n         - type 'error': 显示错误消息\n   c. stopGeneration(): 调用 abortController.abort()\n   d. 错误处理: API Key 未配置时提示跳转到设置页\n2. System Prompt 构建:\n   a. 注入学习者画像（如果 learner.md 存在）\n   b. 注入当前会话上下文\n   c. 使用中文 prompt，角色定位为学习伴读\n3. 每条 AI 消息的 Markdown 内容使用 markdown-it 或 marked 库渲染:\n   - npm install marked\n   - 在 ChatMessage.vue 中 v-html 渲染（需做 XSS 防护: marked 默认转义 HTML）\n4. 测试: 配置 API Key 后发送一条消息，验证流式显示",
+    "pass": false
+  },
+  {
+    "name": "会话存档写入 Vault",
+    "description": "AI 对话结束后，将会话保存为 Markdown 文件到 vault sessions/ 目录",
+    "step": "1. 创建 src/utils/session-serializer.ts:\n   a. serializeSession(session: Session): string\n   b. 生成 YAML frontmatter: session_id, title, created, tags\n   c. 每条消息: ## 角色 · 时间\\n内容\\n\\n（用户消息用 ## 用户，AI 消息用 ## 知枝）\n   d. 划线引用: 在 AI 消息中保留 > 划线: [[notes/xxx]] 标记\n2. 在会话结束时调用:\n   a. 构建文件路径: {vaultPath}/sessions/{topic}/{main.md 或 branch-xxx.md}\n   b. 调用 Tauri write_file 命令\n   c. 首次创建目录（通过 create_dir 命令）\n3. 会话标题生成:\n   a. 用户首条消息截取前 30 字作为标题\n   b. 或用户手动编辑标题\n   c. 目录名使用 sanitized title（移除特殊字符但保留中文）\n4. 增量保存 vs 全量保存:\n   - V1: 每次 AI 回复完成即全量写入，简单可靠\n5. 在 vault store 或 session store 中添加 saveCurrentSession() 方法",
+    "pass": false
+  },
+  {
+    "name": "划线交互 - 选中文本与浮动菜单",
+    "description": "实现选中 AI 回答文本 → 弹出浮动菜单的交互",
+    "step": "1. 创建 src/components/chat/HighlightMenu.vue:\n   a. 定位: 基于 window.getSelection() 获取选中区域位置\n   b. 浮动菜单内容: [摘录为笔记] [创建分支] [复制]\n   c. 用 Lucide 图标 + 文字标签\n   d. 样式: Card 背景、圆角、阴影、小三角指示器\n   e. 点击外部或按 Esc 关闭\n   f. 动画: 淡入 + 轻微上移\n   g. 位置自适应: 优先出现在选区上方，空间不够则下方\n2. 在 ChatView.vue 中:\n   a. 监听 mouseup 事件\n   b. 检测是否有选中文本（window.getSelection().toString().trim() !== ''）\n   c. 如果选中的文本在 .selectable 元素内或 AI 消息内，显示 HighlightMenu\n   d. 传递选中文本和所在消息的上下文给 HighlightMenu\n3. 事件处理:\n   - @extract-note: 触发划线提炼笔记流程（Phase 2）\n   - @create-branch: 触发创建分支流程（Phase 3）\n   - @copy: 复制选中文本到剪贴板\n4. 参考 highlight-menu.html 和 selection-menu.html 的样式设计",
+    "pass": false
+  },
+  {
+    "name": "Skill 系统 - 加载器",
+    "description": "实现 Skill 加载器: 解析 SKILL.md 文件、变量替换、拼接 prompt",
+    "step": "1. 创建 src/skills/loader.ts:\n   a. 安装 js-yaml: npm install js-yaml && npm install -D @types/js-yaml\n   b. 定义 Skill 接口: { name: string, description: string, body: string }\n   c. 实现 parseSkill(raw: string): Skill\n      - 正则 /^---\\s*\\n(.*?)\\n---\\s*\\n/s 匹配 frontmatter\n      - 用 yaml.load 解析 frontmatter\n      - body = raw.slice(match[0].length).trim()\n   d. 实现 buildPrompt(skill: Skill, vars: Record<string, string>): string\n      - 遍历 vars，将 body 中的 {key} 替换为 value\n      - 使用 replaceAll 全局替换\n   e. 实现 loadSkillFromFile(filePath: string): Promise<Skill>\n      - 从文件系统读取 SKILL.md（通过 Tauri invoke read_file 或 fetch）\n      - 调用 parseSkill\n2. 验证: 写单元测试，确认变量替换正确，frontmatter 解析正确\n3. 文档: 在 loader.ts 文件顶部添加 JSDoc 注释说明用法",
+    "pass": false
+  },
+  {
+    "name": "Skill - 划线提炼笔记 (extract-note)",
+    "description": "创建划线提炼原子笔记的 SKILL.md 和执行器",
+    "step": "1. 创建 src/skills/extract-note/SKILL.md:\n   - frontmatter: name, description, version\n   - body: 角色定义 → 输入格式 → 提炼要求 → 输出 JSON schema\n   - 要求中包含: 一句话核心命题（<30字）、白话解释（100-200字）、类型判断、标签建议、置信度评估\n   - 强调: 必须用自己的话，不能复述原文措辞\n2. 创建 src/api/skills/extract-note.ts:\n   a. 导出 async function extractNote(highlightedText: string, sessionContext: string, provider: LLMProvider): Promise<ExtractedNote>\n   b. 加载 SKILL.md（通过 import 或 fs read）\n   c. 调用 buildPrompt 替换 {highlighted_text} 和 {session_context}\n   d. 将构建的 prompt 作为 system message\n   e. 调用 provider.chat([{ role: 'user', content: '请根据上述要求提炼原子笔记。' }])\n   f. 收集完整响应（非流式），解析 JSON 输出\n   g. 验证 JSON schema: title, proposition, explanation, type, tags, confidence 字段齐全\n   h. 如果解析失败，重试一次（最多 1 次重试）\n3. 定义 ExtractedNote 类型:\n   { title: string, proposition: string, explanation: string, type: 'concept' | 'method' | 'fact' | 'question', tags: string[], confidence: number }\n4. 在 HighlightMenu @extract-note 事件中调用 extractNote\n5. 生成结果在弹窗中预览，用户可编辑标题和内容后确认保存\n6. 确认后调用 vault store 写入 notes/{title}.md",
+    "pass": false
+  },
+  {
+    "name": "笔记写入 + 基础笔记列表",
+    "description": "实现笔记写入 vault 和基础笔记列表浏览界面",
+    "step": "1. 创建 src/utils/note-serializer.ts:\n   a. serializeNote(note: ExtractedNote, sourceSession: string, highlightSource: string): string\n   b. 生成 YAML frontmatter: title, type, tags, created, updated, source.session, source.highlight, confidence\n   c. body: # {title}\\n\\n## 核心命题\\n{proposition}\\n\\n## 解释\\n{explanation}\\n\\n## 关联笔记\\n（初始为空）\n   d. 文件名 sanitization: 移除 Windows 不允许的字符（\\ / : * ? \" < > |），限制长度\n2. 在 notes store 的 saveNote 中:\n   a. 调用 serializeNote 生成内容\n   b. 调用 Tauri write_file 写入 {vaultPath}/notes/{filename}.md\n   c. 更新 store 中的 notes 列表和 noteIndex\n3. 创建 src/components/notes/NoteList.vue:\n   a. 从 notes store 获取所有笔记\n   b. 网格或列表布局展示笔记卡片\n   c. 排序: 按更新时间倒序 / 按类型筛选 / 按标签筛选\n   d. 搜索: 前端文本过滤标题和标签\n   e. 空状态: 没有笔记时引导用户开始学习\n4. 创建 src/components/notes/NoteCard.vue:\n   a. 显示: 类型标签（概念卡/方法卡）、标题、核心命题摘要、来源链接\n   b. 点击卡片 → router 跳转到 /notes/{id}\n   c. Hover 效果: 边框变色 + 轻微上移（参考 knowledge-notes.html .note 样式）\n5. 创建 src/views/NotesPage.vue: 组合 NoteList + 搜索/筛选栏\n6. 参考 knowledge-notes.html 的样式设计",
+    "pass": false
+  },
+  {
+    "name": "[[wikilink]] 语法解析器",
+    "description": "实现 Obsidian 风格的 [[wikilink]] 解析器，支持链接和别名",
+    "step": "1. 创建 src/parser/wikilink.ts:\n   a. 定义 WikiLink 接口: { raw: string, target: string, alias: string | null, start: number, end: number }\n   b. 实现 parseWikiLinks(text: string): WikiLink[]\n      - 正则: /\\[\\[([^\\]|#]+)(?:\\|([^\\]]+))?\\]\\]/g\n      - 解析 target（笔记文件名或路径）和 alias（显示文本）\n      - 记录在原文中的位置\n   c. 实现 resolveWikiLink(link: WikiLink, vaultPath: string): Promise<string | null>\n      - 查找 {vaultPath}/notes/{target}.md 是否存在\n      - 支持子路径: [[folder/note]] → notes/folder/note.md\n      - 返回完整文件路径或 null\n   d. 实现 extractAllLinks(noteContent: string): string[]\n      - 返回所有链接目标的纯文本列表（去重）\n   e. 实现 renderWikiLink(wikiLink: WikiLink, resolved: boolean): string\n      - 返回渲染后的 HTML a 标签\n2. 创建 src/parser/frontmatter.ts:\n   a. 实现 parseFrontmatter(content: string): { meta: Record<string, any>, body: string }\n      - 正则匹配 frontmatter 块: /^---\\s*\\n([\\s\\S]*?)\\n---\\s*\\n/\n      - 用 js-yaml 解析\n      - 返回 meta 和 body（移除 frontmatter 后的内容）\n3. 测试: 写单元测试覆盖各种 wikilink 格式:\n   - [[simple]]\n   - [[note|显示文本]]\n   - [[folder/subnote]]\n   - 一行多个 [[link1]] [[link2]]\n   - 不完整的 [[only 不应匹配",
+    "pass": false
+  },
+  {
+    "name": "CodeMirror 6 Live Preview Markdown 编辑器",
+    "description": "集成 CodeMirror 6，实现 Live Preview 模式的 Markdown 编辑器",
+    "step": "1. 创建 src/components/editor/MarkdownEditor.vue:\n   a. 使用 CodeMirror 6 的 EditorView\n   b. 配置 extensions:\n      - markdown() 语言支持\n      - EditorView.lineWrapping（自动换行）\n      - EditorView.updateListener.of(...) 监听内容变化\n      - 自定义主题: 匹配设计 Token 的颜色变量\n   c. Props: modelValue (string), readonly (boolean)\n   d. Emits: update:modelValue\n   e. Live Preview 模式:\n      - 使用 @codemirror/language-data 提供 Markdown 语法高亮\n      - 渲染模式: 非编辑行渲染为 HTML（用 marked 或自定义 renderer）\n      - 光标所在行展开为原始 Markdown 源码（# ## ** [[ ]] 等可见）\n      - 实现此效果可用 CodeMirror 的 Decoration API 或使用插件\n      - V1 简化方案: 使用 CodeMirror 6 的标准 Markdown 高亮模式（非 WYSIWYG），确保 [[wikilink]] 语法有特殊高亮\n      - 完全的 Live Preview（光标行展开）标记为 V1.5 优化项\n   f. 当内容变化时，实时解析 [[wikilink]] 并高亮\n2. 工具按钮:\n   - 加粗、斜体、标题、列表、引用、代码块\n   - 插入 [[wikilink]] 快捷键（选中文本后按 [[ 自动补全]]）\n3. 样式:\n   - 适配设计系统字体、颜色、间距\n   - 滚动条美化\n4. 在 NoteDetailPage.vue 中使用 MarkdownEditor\n5. 测试: 输入 Markdown 内容，确认高亮和解析正确",
+    "pass": false
+  },
+  {
+    "name": "笔记详情页 + 反链面板",
+    "description": "实现笔记详情视图，包含编辑器 + 反链显示",
+    "step": "1. 创建 src/components/notes/NoteDetail.vue:\n   a. 从 URL params 获取笔记 ID（文件名）\n   b. 从 vault 读取笔记内容（通过 notes store）\n   c. 分离 frontmatter 和 body\n   d. 头部: 标题（可编辑）、标签列表（可编辑）、类型标识\n   e. 元数据区: 创建时间、更新时间、来源会话链接、置信度\n2. 创建 src/components/editor/Backlinks.vue:\n   a. 显示所有引用当前笔记的其他笔记（反向链接）\n   b. 实现: 扫描 vault 中所有 .md 文件 → 解析 wikilink → 筛选指向当前笔记的\n   c. 利用 embedding/indexer.ts 的索引加速（如果有）\n   d. 显示每条反链的上下文（包含 [[link]] 的段落预览）\n   e. 点击反链跳转到对应笔记\n   f. 空状态: \"还没有笔记链接到这里\"\n3. 在 NoteDetailPage.vue 中布局:\n   - 左侧: MarkdownEditor（可编辑模式）\n   - 右侧: 元数据 + 反链面板\n4. 保存流程:\n   - 编辑器内容变化 → 防抖 1s → 自动保存到 vault\n   - 或 Ctrl+S 手动触发保存\n   - 保存时更新 frontmatter 中的 updated 字段\n5. 参考 note-detail.html 的样式设计",
+    "pass": false
+  },
+  {
+    "name": "笔记来源会话反链",
+    "description": "从笔记跳转回生成它的学习会话",
+    "step": "1. 从笔记 frontmatter 的 source.session 字段读取会话路径\n2. 在 NoteDetail 中显示来源区域:\n   a. \"来源会话: {session_title}\"\n   b. \"来源划线: {highlight_text}\"\n   c. 点击跳转按钮 → 打开对应的会话文件\n3. 跳转行为:\n   a. 如果会话已在 session store 中打开 → 切换到该会话标签\n   b. 如果会话未打开 → 读取 sessions/*.md → 加载为只读会话视图\n   c. 滚动到划线所在的消息位置\n4. 在 ChatView 中反向显示:\n   a. 如果当前会话的某条消息生成了笔记，在消息下方显示 \"已生成笔记: [[笔记标题]]\"\n   b. 点击跳转到笔记详情",
+    "pass": false
+  },
+  {
+    "name": "树形分支 - 创建分支与 session-tree.json",
+    "description": "实现从对话消息创建分支会话，维护分支树数据结构",
+    "step": "1. 创建 src/utils/session-tree.ts:\n   a. 定义 SessionTreeNode 接口: { id, type: 'message' | 'branch', title, file, created, fork_from, children }\n   b. 实现 createBranchNode(parentId: string, title: string, file: string): SessionTreeNode\n   c. 实现 addBranchToTree(tree: SessionTreeNode, parentId: string, branch: SessionTreeNode): SessionTreeNode\n   d. 实现 findNode(tree: SessionTreeNode, id: string): SessionTreeNode | null\n   e. 实现 serializeTree(tree: SessionTreeNode): string → JSON\n   f. 实现 deserializeTree(json: string): SessionTreeNode\n2. 创建分支的完整流程:\n   a. 用户在 HighlightMenu 或消息右键菜单选择\"创建分支\"\n   b. 弹出输入框: 输入分支名称（默认: \"关于XXX的追问\"）\n   c. 生成分支文件路径: sessions/{topic}/branch-{name}.md\n   d. 创建分支 Markdown 文件，frontmatter 包含 parent_session 和 fork_point\n   e. 更新 session-tree.json\n   f. 导航到 BranchChatPage\n3. session-tree.json 存储:\n   a. 路径: {vaultPath}/.study-thread/session-tree.json\n   b. 初始化为空树或从文件读取\n   c. 每次操作后写入\n4. 在 session store 中:\n   a. 维护 sessionTree 状态\n   b. createBranch(sessionId, forkMessageId, title): Promise<Branch>\n5. 测试: 手动创建几个嵌套分支，检查 session-tree.json 结构正确",
+    "pass": false
+  },
+  {
+    "name": "分支对话视图 - BranchChatPage",
+    "description": "将 branch-chat.html 迁移为 Vue 分支对话视图，支持上下文继承",
+    "step": "1. 创建 src/views/BranchChatPage.vue:\n   a. 从 route params 获取 sessionId 和 branchId\n   b. 加载对应的分支会话 Markdown 文件\n   c. 复用 ChatView + Composer 组件\n   d. 顶部面包屑: 主会话名称 → 一级分支 → 二级分支（如有多级）\n   e. 来源引用区域: 显示分叉点的消息内容（引用块样式）\n   f. \"返回主会话\" 按钮（参考 branch-chat.html 中的 back-main-chat）\n2. 创建 src/components/chat/BranchBreadcrumb.vue:\n   a. 渲染分支层级面包屑\n   b. 每级可点击跳转\n3. 上下文继承实现:\n   a. 在 src/utils/branch-context.ts 中:\n      - loadBranchContext(parentSessionFile: string, forkMessageIndex: number): Message[]\n      - 读取父会话 Markdown → 解析消息 → 取 [0..forkMessageIndex] 的消息\n      - 返回的消息作为分支对话的初始历史\n   b. 在 BranchChatPage setup 中:\n      - 调用 loadBranchContext 获取父会话分叉点前的消息\n      - 将 forkPointContext 注入到 ChatView 的初始 messages 中（标记为历史消息，不可编辑）\n4. 分支消息也支持划线和生成笔记\n5. 参考 branch-chat.html 的样式: 面包屑、引用块、返回按钮",
+    "pass": false
+  },
+  {
+    "name": "Skill - 分支追问 (branch-followup)",
+    "description": "创建分支追问的 SKILL.md 和执行器",
+    "step": "1. 创建 src/skills/branch-followup/SKILL.md:\n   - frontmatter: name, description, version\n   - body:\n     a. 角色: 深度追问学习伴读\n     b. 输入: {fork_context}（分叉点前的对话）, {user_question}（用户追问）, {related_notes}（相关笔记）\n     c. 要求:\n        - 必须比主对话更深入、更聚焦\n        - 不要重复主对话中已经解释过的基础概念\n        - 优先从已有笔记中引用相关知识\n        - 回答结构: 简短回顾上下文 → 深入解答 → 提出延伸思考\n     d. 输出: 标准 AI 回答格式（Markdown，结构清晰）\n2. 创建 src/api/skills/branch-followup.ts:\n   a. 导出 async function* branchFollowupStream(question: string, forkContext: Message[], relatedNotes: Note[], provider: LLMProvider): AsyncIterable<StreamChunk>\n   b. 加载 SKILL.md\n   c. 替换变量 {fork_context}（序列化 forkContext 为文本）, {user_question}, {related_notes}\n   d. 构建消息并流式返回\n3. 在 BranchChatPage 中:\n   a. 用户发送消息时调用 branchFollowupStream 而非普通的 chat\n   b. 自动收集相关笔记: 从 vault 中搜索标题与分叉上下文相关的笔记\n4. 测试: 创建分支并发送追问，确认 AI 回答引用了分叉前的上下文",
+    "pass": false
+  },
+  {
+    "name": "本地 Embedding 引擎初始化",
+    "description": "集成 transformers.js，加载 all-MiniLM-L6-v2 或 text2vec-base-chinese 模型",
+    "step": "1. npm install @xenova/transformers\n2. 创建 src/embedding/engine.ts:\n   a. 导出 class EmbeddingEngine:\n      - constructor(modelName: string = 'Xenova/all-MiniLM-L6-v2')\n      - async initialize(): Promise<void> → 调用 pipeline('feature-extraction', modelName)\n      - async embed(text: string): Promise<number[]> → 单文本向量化\n      - async embedBatch(texts: string[]): Promise<number[][]> → 批量向量化\n      - isReady(): boolean\n   b. 模型缓存: transformers.js 自动缓存到浏览器 IndexedDB，首次下载 80MB\n   c. 初始化时显示进度提示\n3. 中文优化选项:\n   - 提供 text2vec-base-chinese 作为备选（中文语义匹配更优）\n   - 通过 settings 切换模型\n4. 在 App.vue onMounted 中启动初始化（后台，不阻塞 UI）\n5. 将初始化状态存到 Pinia store 或 provide/inject\n6. 测试: 初始化后 embed 一段中文文本，验证返回 384 维向量",
+    "pass": false
+  },
+  {
+    "name": "Vault 全量与增量索引",
+    "description": "构建笔记向量的全量索引和增量更新机制",
+    "step": "1. 创建 src/embedding/indexer.ts:\n   a. 导出 class NoteIndexer:\n      - constructor(engine: EmbeddingEngine)\n      - async buildIndex(notes: Note[]): Promise<void>\n        - 遍历所有笔记\n        - 提取每篇笔记的 title + proposition + explanation 作为索引文本\n        - 调用 engine.embedBatch 批量向量化\n        - 存储到 Map<notePath, { vector: number[], updatedAt: number }>\n        - 显示索引进度条（后台 Web Worker 中运行）\n      - async updateNote(notePath: string, content: string): Promise<void>\n        - 单篇笔记的增量更新\n      - async removeNote(notePath: string): Promise<void>\n      - getVector(notePath: string): number[] | undefined\n   b. 索引持久化:\n      - 序列化为 JSON（向量数组）存入 localStorage 或 .study-thread/embeddings.json\n      - 或使用简单的 key-value store（idb-keyval）\n      - 每次启动时从持久化存储加载，避免重复索引\n      - 对比文件的 updated frontmatter 判断是否需要重新索引\n   c. Web Worker 执行:\n      - 将 EmbeddingEngine 和 NoteIndexer 放在 Web Worker 中\n      - 通过 postMessage 与主线程通信\n      - 避免阻塞 UI\n2. 在 vault store openVault 后自动触发:\n   a. 加载或创建索引\n   b. 对比 vault 笔记列表与索引列表\n   c. 新增的笔记自动索引\n   d. 修改过的笔记（updated > index.updatedAt）重新索引\n3. 性能目标:\n   - 1000 篇笔记全量索引 < 30s\n   - 单篇增量 < 50ms\n   - 索引加载（从缓存）< 1s",
+    "pass": false
+  },
+  {
+    "name": "笔记链接建议 - 编辑时自动提示",
+    "description": "编辑笔记时，本地 embedding 检索 Top-K 相关笔记，以虚线提示显示",
+    "step": "1. 创建 src/embedding/linker.ts:\n   a. 导出 class NoteLinker:\n      - constructor(indexer: NoteIndexer, engine: EmbeddingEngine)\n      - async suggestLinks(currentNotePath: string, cursorParagraph: string, topK: number = 5): Promise<LinkSuggestion[]>\n        - 将 cursorParagraph 向量化\n        - 与索引中所有其他笔记计算余弦相似度\n        - 过滤掉当前笔记自身\n        - 返回 Top-K 结果\n   b. 余弦相似度计算:\n      function cosineSimilarity(a: number[], b: number[]): number\n   c. LinkSuggestion 类型: { notePath: string, title: string, similarity: number, snippet: string }\n2. 创建 src/components/editor/LinkHint.vue:\n   a. 在 MarkdownEditor 下方或侧边显示相关笔记建议\n   b. 每条建议显示: 笔记标题、相似度百分比、内容片段预览\n   c. 视觉: 淡色虚线边框、轻柔出现动画\n   d. 点击建议 → 在当前光标位置插入 [[note-title]]\n   e. 可关闭建议面板\n3. 集成到 MarkdownEditor.vue:\n   a. 监听编辑器内容变化 → 防抖 500ms\n   b. 获取当前光标所在段落的文本 → 调用 linker.suggestLinks\n   c. 如果结果 similarity > 阈值（如 0.6），显示 LinkHint\n   d. 用户按 Esc 或点击外部关闭提示\n4. 性能优化:\n   - 相似度计算轻量（384 维向量点积，< 1ms）\n   - 如果需要，使用 TypedArrays 加速\n5. 测试: 编辑笔记内容，验证相关笔记被正确推荐",
+    "pass": false
+  },
+  {
+    "name": "学习总览页面",
+    "description": "实现学习总览仪表盘，展示会话树、统计、最近活动",
+    "step": "1. 创建 src/views/LearningHubPage.vue:\n   a. 会话树视图:\n      - 使用 src/components/chat/BranchTree.vue\n      - D3.js 或纯 CSS 缩进树形渲染\n      - 每个节点: 标题、创建时间、消息数、生成笔记数\n      - 点击节点跳转到对应会话\n   b. 统计卡片:\n      - 总会话数、总笔记数、本月学习天数、平均追问深度\n      - 使用 grid 布局排列\n   c. 最近活动时间线:\n      - 最近的学习会话、新建的笔记、打开的复习\n      - 按时间倒序\n   d. 快速入口:\n      - 继续上次学习 → 跳转到最近活跃的会话\n      - 查看所有笔记 → /notes\n      - 开始新会话 → /chat（新建）\n2. 创建 src/components/chat/BranchTree.vue:\n   a. Props: tree (SessionTreeNode)\n   b. 递归渲染树节点\n   c. 连接线: 使用 CSS border 或 SVG 线条\n   d. 展开/折叠分支\n3. 数据来源:\n   - 从 vault/.study-thread/session-tree.json 读取会话树\n   - 从 vault/.study-thread/learner.md 读取统计\n   - 从 notes store 读取笔记统计\n4. 参考 learning-hub.html 的样式设计",
+    "pass": false
+  },
+  {
+    "name": "Skill - 学习者画像更新 (update-learner)",
+    "description": "创建学习者画像更新的 SKILL.md 和执行器，带用户确认 UI",
+    "step": "1. 创建 src/skills/update-learner/SKILL.md:\n   a. frontmatter: name, description, version\n   b. body:\n      - 角色: 学习者画像分析师\n      - 输入: {session_transcript}（完整会话）, {existing_profile}（现有 learner.md）, {new_notes}（本次生成的笔记）\n      - 要求:\n        - 只标注\"用户能解释的\"概念，不是\"用户听过的\"\n        - 置信度: high（能独立解释）/ medium（能识别但不完整）/ low（刚接触）\n        - 标注概念之间的关系（前置依赖、互补等）\n        - 不要虚构用户没接触过的概念\n      - 输出格式: JSON diff 格式\n        { added_concepts: [], updated_concepts: [], removed_concepts: [], suggested_topics: [], summary: \"\" }\n2. 创建 src/api/skills/update-learner.ts:\n   a. 导出 async function generateProfileUpdate(session: Session, existingProfile: string, newNotes: Note[], provider: LLMProvider): Promise<ProfileDiff>\n   b. 加载 SKILL.md\n   c. 替换变量 → 调用 LLM → 解析 JSON\n3. 创建 src/components/common/DiffView.vue:\n   a. 显示画像变更 diff: 新增、更新、移除的概念\n   b. 绿色 = 新增，黄色 = 更新（显示旧值→新值），红色 = 移除\n   c. 用户可逐条: 接受 / 拒绝 / 编辑\n   d. 确认 → 写入 .study-thread/learner.md\n   e. 取消 → 丢弃本次更新\n4. 触发时机:\n   - 用户关闭会话标签时\n   - 用户点击\"更新学习画像\"按钮\n   - 弹出 DiffView 供确认\n5. 测试: 完成一个会话 → 触发画像更新 → 检查 learner.md 增量正确",
+    "pass": false
+  },
+  {
+    "name": "局部关系图 - D3.js 力导向图",
+    "description": "实现单笔记的局部关系图，展示 1-2 度邻居",
+    "step": "1. 创建 src/components/graph/LocalGraph.vue:\n   a. 使用 D3.js forceSimulation 渲染力导向图\n   b. Props: noteId (string), depth (number, default 1)\n   c. 数据构建:\n      - 中心节点: 当前笔记\n      - 1 度邻居: 直接通过 [[link]] 关联的笔记\n      - 2 度邻居（depth=2 时）: 邻居的邻居\n      - 节点大小: 中心最大，邻居按连接数递减\n      - 边: 连接线上标注（可选）\n   d. 交互:\n      - 拖拽节点\n      - 点击节点 → 跳转到该笔记详情\n      - 悬停显示笔记标题和摘要 tooltip\n      - 缩放/平移\n   e. 颜色编码:\n      - 中心节点: 品牌色\n      - 同类型笔记: 同色系\n      - 未访问过的笔记: 灰色虚线边框\n   f. 响应式: 容器大小自适应\n2. npm install d3 @types/d3\n3. 在 NoteDetailPage.vue 底部或侧边嵌入 LocalGraph\n4. 性能: 笔记数 > 500 时仅展示 1 度邻居或限流\n5. 参考 local-graph.html 的样式设计",
+    "pass": false
+  },
+  {
+    "name": "Tauri 打包配置 + 生成安装包",
+    "description": "配置 Tauri build 参数，生成 Windows/macOS/Linux 安装包",
+    "step": "1. 在 src-tauri/tauri.conf.json 中配置:\n   a. app: productName: \"知枝\", identifier: \"com.study-thread.app\"\n   b. build: devUrl, beforeDevCommand, beforeBuildCommand\n   c. bundle:\n      - active: true\n      - icon: 准备各平台图标（256x256 PNG → 自动转换 .icns/.ico）\n      - targets: [\"msi\", \"nsis\"] (Windows), [\"dmg\"] (macOS), [\"deb\", \"appimage\"] (Linux)\n      - resources: 内嵌 SKILL.md 文件\n   d. security: 限制 CSP、允许 fetch 到 LLM API 域名\n   e. windows: title: \"知枝\", width: 1440, height: 900, minWidth: 1024, minHeight: 700\n2. 应用图标:\n   a. 创建 1024x1024 PNG 图标\n   b. 放入 src-tauri/icons/\n   c. 运行 tauri icon 自动生成各平台图标\n3. 构建命令:\n   - npm run tauri build\n   - 测试安装包在目标平台的安装和启动\n4. 验证:\n   - 安装后能正常打开 vault\n   - 配置 API Key 后能正常对话\n   - 笔记读写正常\n5. 注意事项:\n   - Windows: WebView2 运行时（大多数 Win10+ 已预装）\n   - macOS: 需要 Apple Developer 签名（开发阶段可跳过）\n   - Linux: WebKitGTK 依赖",
+    "pass": false
+  },
+  {
+    "name": "全局质量检查与收尾",
+    "description": "统一检查: 错误处理、空状态、加载态、键盘快捷键、无障碍",
+    "step": "1. 错误处理:\n   a. 所有 invoke 调用包裹 try/catch\n   b. API 调用错误显示用户友好的 toast 通知\n   c. 文件读写失败时回退到上次保存的状态\n   d. LLM API 限流/超时错误提示重试\n2. 空状态:\n   a. 未打开 vault → 引导打开或创建\n   b. 无会话 → \"开始你的第一次学习\"\n   c. 无笔记 → \"从学习对话中摘录你的第一条笔记\"\n   d. 无搜索结果 → 建议调整过滤条件\n3. 加载态:\n   a. 文件读取: skeleton 占位\n   b. AI 生成: 流式文字 + 思考动画\n   c. embedding 索引: 进度条\n   d. 首次启动: 简短加载画面\n4. 键盘快捷键:\n   a. Ctrl+N: 新建会话\n   b. Ctrl+S: 保存笔记\n   c. Ctrl+K: 搜索（V1 基础）\n   d. Esc: 关闭弹窗/菜单\n   e. Ctrl+[: 返回上一页\n5. 国际化:\n   a. 所有用户可见文字使用中文\n   b. 统一使用相同的称呼: \"知枝\" / \"原子笔记\" / \"学习会话\"\n6. 在 App.vue 中添加全局 Toast 组件\n7. 走一遍完整用户流程: 打开 vault → 新建会话 → 对话 → 划线 → 提炼笔记 → 编辑笔记 → 创建分支 → 查看总览",
+    "pass": false
+  }
+]
