@@ -147,7 +147,7 @@
     "name": "树形分支 - 创建分支与 session-tree.json",
     "description": "实现从对话消息创建分支会话，维护分支树数据结构",
     "step": "1. 创建 src/utils/session-tree.ts:\n   a. 定义 SessionTreeNode 接口: { id, type: 'message' | 'branch', title, file, created, fork_from, children }\n   b. 实现 createBranchNode(parentId: string, title: string, file: string): SessionTreeNode\n   c. 实现 addBranchToTree(tree: SessionTreeNode, parentId: string, branch: SessionTreeNode): SessionTreeNode\n   d. 实现 findNode(tree: SessionTreeNode, id: string): SessionTreeNode | null\n   e. 实现 serializeTree(tree: SessionTreeNode): string → JSON\n   f. 实现 deserializeTree(json: string): SessionTreeNode\n2. 创建分支的完整流程:\n   a. 用户在 HighlightMenu 或消息右键菜单选择\"创建分支\"\n   b. 弹出输入框: 输入分支名称（默认: \"关于XXX的追问\"）\n   c. 生成分支文件路径: sessions/{topic}/branch-{name}.md\n   d. 创建分支 Markdown 文件，frontmatter 包含 parent_session 和 fork_point\n   e. 更新 session-tree.json\n   f. 导航到 BranchChatPage\n3. session-tree.json 存储:\n   a. 路径: {vaultPath}/.study-thread/session-tree.json\n   b. 初始化为空树或从文件读取\n   c. 每次操作后写入\n4. 在 session store 中:\n   a. 维护 sessionTree 状态\n   b. createBranch(sessionId, forkMessageId, title): Promise<Branch>\n5. 测试: 手动创建几个嵌套分支，检查 session-tree.json 结构正确",
-    "pass": false
+    "pass": true
   },
   {
     "name": "分支对话视图 - BranchChatPage",
