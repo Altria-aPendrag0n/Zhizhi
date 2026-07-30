@@ -15,7 +15,7 @@
     "name": "Vue Router 路由设置",
     "description": "设置 Vue Router 4，定义所有页面路由",
     "step": "1. 创建 src/router/index.ts\n2. 定义路由表:\n   - / → 重定向到 /chat\n   - /chat → MainChatPage（主对话）\n   - /chat/branch/:sessionId/:branchId → BranchChatPage（分支对话）\n   - /notes → NotesPage（笔记列表）\n   - /notes/:id → NoteDetailPage（笔记详情）\n   - /hub → LearningHubPage（学习总览）\n   - /settings → SettingsPage（设置）\n3. 使用 createWebHistory 模式\n4. 在 main.ts 中 app.use(router)\n5. 创建各 Page 组件的占位文件（仅包含 <template><div>PageName</div></template>）\n6. 在 App.vue 中添加 <router-view />\n7. 验证: npm run dev，访问各路由确认渲染",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Pinia Stores 初始化",
