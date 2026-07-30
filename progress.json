@@ -92,8 +92,8 @@
   {
     "name": "会话存档写入 Vault",
     "description": "AI 对话结束后，将会话保存为 Markdown 文件到 vault sessions/ 目录",
-    "step": "1. 创建 src/utils/session-serializer.ts:\n   a. serializeSession(session: Session): string\n   b. 生成 YAML frontmatter: session_id, title, created, tags\n   c. 每条消息: ## 角色 · 时间\\n内容\\n\\n（用户消息用 ## 用户，AI 消息用 ## 知枝）\n   d. 划线引用: 在 AI 消息中保留 > 划线: [[notes/xxx]] 标记\n2. 在会话结束时调用:\n   a. 构建文件路径: {vaultPath}/sessions/{topic}/{main.md 或 branch-xxx.md}\n   b. 调用 Tauri write_file 命令\n   c. 首次创建目录（通过 create_dir 命令）\n3. 会话标题生成:\n   a. 用户首条消息截取前 30 字作为标题\n   b. 或用户手动编辑标题\n   c. 目录名使用 sanitized title（移除特殊字符但保留中文）\n4. 增量保存 vs 全量保存:\n   - V1: 每次 AI 回复完成即全量写入，简单可靠\n5. 在 vault store 或 session store 中添加 saveCurrentSession() 方法",
-    "pass": false
+    "pass": true,
+    "step": "1. 创建 src/utils/session-serializer.ts:\n   a. serializeSession(session: Session): string\n   b. 生成 YAML frontmatter: session_id, title, created, tags\n   c. 每条消息: ## 角色 · 时间\\n内容\\n\\n（用户消息用 ## 用户，AI 消息用 ## 知枝）\n   d. 划线引用: 在 AI 消息中保留 > 划线: [[notes/xxx]] 标记\n2. 在会话结束时调用:\n   a. 构建文件路径: {vaultPath}/sessions/{topic}/{main.md 或 branch-xxx.md}\n   b. 调用 Tauri write_file 命令\n   c. 首次创建目录（通过 create_dir 命令）\n3. 会话标题生成:\n   a. 用户首条消息截取前 30 字作为标题\n   b. 或用户手动编辑标题\n   c. 目录名使用 sanitized title（移除特殊字符但保留中文）\n4. 增量保存 vs 全量保存:\n   - V1: 每次 AI 回复完成即全量写入，简单可靠\n5. 在 vault store 或 session store 中添加 saveCurrentSession() 方法"
   },
   {
     "name": "划线交互 - 选中文本与浮动菜单",
