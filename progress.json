@@ -201,7 +201,7 @@
     "name": "Tauri 打包配置 + 生成安装包",
     "description": "配置 Tauri build 参数，生成 Windows/macOS/Linux 安装包",
     "step": "1. 在 src-tauri/tauri.conf.json 中配置:\n   a. app: productName: \"知枝\", identifier: \"com.study-thread.app\"\n   b. build: devUrl, beforeDevCommand, beforeBuildCommand\n   c. bundle:\n      - active: true\n      - icon: 准备各平台图标（256x256 PNG → 自动转换 .icns/.ico）\n      - targets: [\"msi\", \"nsis\"] (Windows), [\"dmg\"] (macOS), [\"deb\", \"appimage\"] (Linux)\n      - resources: 内嵌 SKILL.md 文件\n   d. security: 限制 CSP、允许 fetch 到 LLM API 域名\n   e. windows: title: \"知枝\", width: 1440, height: 900, minWidth: 1024, minHeight: 700\n2. 应用图标:\n   a. 创建 1024x1024 PNG 图标\n   b. 放入 src-tauri/icons/\n   c. 运行 tauri icon 自动生成各平台图标\n3. 构建命令:\n   - npm run tauri build\n   - 测试安装包在目标平台的安装和启动\n4. 验证:\n   - 安装后能正常打开 vault\n   - 配置 API Key 后能正常对话\n   - 笔记读写正常\n5. 注意事项:\n   - Windows: WebView2 运行时（大多数 Win10+ 已预装）\n   - macOS: 需要 Apple Developer 签名（开发阶段可跳过）\n   - Linux: WebKitGTK 依赖",
-    "pass": false
+    "pass": true
   },
   {
     "name": "全局质量检查与收尾",
