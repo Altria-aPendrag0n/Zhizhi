@@ -153,7 +153,7 @@
     "name": "分支对话视图 - BranchChatPage",
     "description": "将 branch-chat.html 迁移为 Vue 分支对话视图，支持上下文继承",
     "step": "1. 创建 src/views/BranchChatPage.vue:\n   a. 从 route params 获取 sessionId 和 branchId\n   b. 加载对应的分支会话 Markdown 文件\n   c. 复用 ChatView + Composer 组件\n   d. 顶部面包屑: 主会话名称 → 一级分支 → 二级分支（如有多级）\n   e. 来源引用区域: 显示分叉点的消息内容（引用块样式）\n   f. \"返回主会话\" 按钮（参考 branch-chat.html 中的 back-main-chat）\n2. 创建 src/components/chat/BranchBreadcrumb.vue:\n   a. 渲染分支层级面包屑\n   b. 每级可点击跳转\n3. 上下文继承实现:\n   a. 在 src/utils/branch-context.ts 中:\n      - loadBranchContext(parentSessionFile: string, forkMessageIndex: number): Message[]\n      - 读取父会话 Markdown → 解析消息 → 取 [0..forkMessageIndex] 的消息\n      - 返回的消息作为分支对话的初始历史\n   b. 在 BranchChatPage setup 中:\n      - 调用 loadBranchContext 获取父会话分叉点前的消息\n      - 将 forkPointContext 注入到 ChatView 的初始 messages 中（标记为历史消息，不可编辑）\n4. 分支消息也支持划线和生成笔记\n5. 参考 branch-chat.html 的样式: 面包屑、引用块、返回按钮",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Skill - 分支追问 (branch-followup)",
