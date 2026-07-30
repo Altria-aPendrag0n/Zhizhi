@@ -14,6 +14,13 @@
     </div>
     <!-- CodeMirror 容器 -->
     <div ref="editorRef" class="editor-container"></div>
+    <!-- 链接建议 -->
+    <LinkHint
+      v-if="showSuggestions"
+      :suggestions="suggestions"
+      @close="showSuggestions = false"
+      @select="handleLinkSelect"
+    />
   </div>
 </template>
 
@@ -39,6 +46,11 @@ import {
   Quote,
   Code2,
 } from '@lucide/vue'
+import LinkHint from './LinkHint.vue'
+import type { LinkSuggestion } from '../../embedding/linker'
+import { NoteLinker } from '../../embedding/linker'
+import { getNoteIndexer } from '../../embedding/indexer'
+import { getEmbeddingEngine } from '../../embedding/engine'
 
 const props = defineProps<{
   modelValue: string
@@ -53,6 +65,12 @@ const containerRef = ref<HTMLDivElement>()
 const editorRef = ref<HTMLDivElement>()
 let editorView: EditorView | null = null
 const editableCompartment = new Compartment()
+
+// 链接建议状态
+const showSuggestions = ref(false)
+const suggestions = ref<LinkSuggestion[]>([])
+let linkDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const linker = new NoteLinker(getNoteIndexer(), getEmbeddingEngine())
 
 // 工具栏按钮
 const tools = [
@@ -126,6 +144,53 @@ function prefixLine(prefix: string) {
 }
 
 /**
+ * 处理链接建议选择
+ */
+function handleLinkSelect(item: LinkSuggestion) {
+  if (!editorView) return
+  const { from } = editorView.state.selection.main
+  const linkText = `[[${item.title}]]`
+  editorView.dispatch({
+    changes: {
+      from,
+      insert: linkText,
+    },
+    selection: {
+      anchor: from + linkText.length,
+      head: from + linkText.length,
+    },
+  })
+  editorView.focus()
+  showSuggestions.value = false
+}
+
+/**
+ * 防抖触发链接建议
+ */
+function triggerLinkSuggestions() {
+  if (!editorView) return
+
+  if (linkDebounceTimer) {
+    clearTimeout(linkDebounceTimer)
+  }
+
+  linkDebounceTimer = setTimeout(async () => {
+    const { from } = editorView!.state.selection.main
+    const line = editorView!.state.doc.lineAt(from)
+    const paragraphText = line.text.trim()
+
+    if (paragraphText.length < 10) {
+      showSuggestions.value = false
+      return
+    }
+
+    const result = await linker.suggestLinks('', paragraphText, 5)
+    suggestions.value = result
+    showSuggestions.value = result.length > 0
+  }, 500)
+}
+
+/**
  * 自定义高亮样式（匹配设计 Token）
  */
 const customTheme = EditorView.theme(
@@ -187,6 +252,7 @@ function createEditor() {
       if (update.docChanged) {
         const value = update.state.doc.toString()
         emit('update:modelValue', value)
+        triggerLinkSuggestions()
       }
     }),
     editableCompartment.of(EditorView.editable.of(!props.readonly)),
@@ -243,6 +309,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   editorView?.destroy()
   editorView = null
+  if (linkDebounceTimer) {
+    clearTimeout(linkDebounceTimer)
+  }
 })
 </script>
 

@@ -177,7 +177,7 @@
     "name": "笔记链接建议 - 编辑时自动提示",
     "description": "编辑笔记时，本地 embedding 检索 Top-K 相关笔记，以虚线提示显示",
     "step": "1. 创建 src/embedding/linker.ts:\n   a. 导出 class NoteLinker:\n      - constructor(indexer: NoteIndexer, engine: EmbeddingEngine)\n      - async suggestLinks(currentNotePath: string, cursorParagraph: string, topK: number = 5): Promise<LinkSuggestion[]>\n        - 将 cursorParagraph 向量化\n        - 与索引中所有其他笔记计算余弦相似度\n        - 过滤掉当前笔记自身\n        - 返回 Top-K 结果\n   b. 余弦相似度计算:\n      function cosineSimilarity(a: number[], b: number[]): number\n   c. LinkSuggestion 类型: { notePath: string, title: string, similarity: number, snippet: string }\n2. 创建 src/components/editor/LinkHint.vue:\n   a. 在 MarkdownEditor 下方或侧边显示相关笔记建议\n   b. 每条建议显示: 笔记标题、相似度百分比、内容片段预览\n   c. 视觉: 淡色虚线边框、轻柔出现动画\n   d. 点击建议 → 在当前光标位置插入 [[note-title]]\n   e. 可关闭建议面板\n3. 集成到 MarkdownEditor.vue:\n   a. 监听编辑器内容变化 → 防抖 500ms\n   b. 获取当前光标所在段落的文本 → 调用 linker.suggestLinks\n   c. 如果结果 similarity > 阈值（如 0.6），显示 LinkHint\n   d. 用户按 Esc 或点击外部关闭提示\n4. 性能优化:\n   - 相似度计算轻量（384 维向量点积，< 1ms）\n   - 如果需要，使用 TypedArrays 加速\n5. 测试: 编辑笔记内容，验证相关笔记被正确推荐",
-    "pass": false
+    "pass": true
   },
   {
     "name": "学习总览页面",
