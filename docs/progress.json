@@ -21,7 +21,7 @@
     "name": "Pinia Stores 初始化",
     "description": "创建 Pinia 状态管理 stores: vault, session, notes, settings",
     "step": "1. 创建 src/stores/vault.ts:\n   - state: vaultPath (string | null), fileTree (DirEntry[]), isOpen (boolean)\n   - actions: openVault(path), closeVault(), refreshFileTree()\n2. 创建 src/stores/settings.ts:\n   - state: activeProvider ('anthropic' | 'openai-compat'), apiKey (string), baseUrl (string), model (string)\n   - actions: saveSettings(), loadSettings(), getProviderConfig()\n   - 持久化: 从 localStorage 读取，保存时写入 localStorage\n3. 创建 src/stores/session.ts:\n   - state: sessions (Session[]), currentSessionId, messages (Message[]), isStreaming (boolean)\n   - actions: createSession(), switchSession(), addMessage(), createBranch(), loadBranchContext()\n4. 创建 src/stores/notes.ts:\n   - state: notes (Note[]), noteIndex (Map<string, Note>), isLoading (boolean)\n   - actions: loadAllNotes(), loadNote(path), saveNote(path, content), refreshIndex()\n5. 在 main.ts 中 app.use(createPinia())\n6. 在每个 store 文件中添加 TypeScript 类型定义",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Tauri Rust 后端 - Vault 文件系统命令 (vault.rs)",
