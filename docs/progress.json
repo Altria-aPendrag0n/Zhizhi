@@ -9,7 +9,7 @@
     "name": "Tailwind CSS 与设计 Token 配置",
     "description": "配置 Tailwind CSS 主题，将设计 Token 映射为 utility classes",
     "step": "1. 创建 src/styles/tokens.css，复制 colors_and_type.css 中的 :root 变量\n2. 在 @theme inline 块中将 CSS 变量映射为 Tailwind 颜色: --color-background, --color-foreground, --color-card, --color-primary 等\n3. 映射圆角: --radius-sm, --radius-md, --radius-lg\n4. 创建 src/styles/global.css，引入 @tailwind base/components/utilities\n5. 在 global.css 添加 body 基础样式: font-family, background, color\n6. 添加 .no-scrollbar 工具类\n7. 在 main.ts 中 import './styles/global.css'\n8. 在 vite.config.ts 确认 CSS 加载顺序正确（tokens → tailwind → global）\n9. 验证: 在 App.vue 中使用 bg-background text-foreground 等类确认生效",
-    "pass": false
+    "pass": true
   },
   {
     "name": "Vue Router 路由设置",
