@@ -36,6 +36,7 @@ export function serializeNote(
   // YAML frontmatter
   lines.push('---')
   lines.push(`title: ${note.title}`)
+  lines.push(`description: "${(note.description ?? '').replace(/"/g, '\\"')}"`)
   lines.push(`type: ${note.type}`)
   lines.push('tags:')
   for (const tag of note.tags) {

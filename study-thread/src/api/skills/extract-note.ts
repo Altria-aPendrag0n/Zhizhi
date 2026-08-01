@@ -49,6 +49,7 @@ function validateExtractedNote(data: unknown): data is ExtractedNote {
   const d = data as Record<string, unknown>
   return (
     typeof d.title === 'string' &&
+    typeof d.description === 'string' &&
     typeof d.proposition === 'string' &&
     typeof d.explanation === 'string' &&
     typeof d.type === 'string' &&
@@ -65,17 +66,22 @@ function validateExtractedNote(data: unknown): data is ExtractedNote {
  * @param highlightedText - 用户选中的文本
  * @param sessionContext - 划线文本所在对话的上下文
  * @param provider - LLM 提供商
+ * @param userTitle - 用户指定的标题（可选）；提供后 title 固定为该值，描述等其他字段围绕该标题生成
  * @returns 提取的笔记数据
  */
 export async function extractNote(
   highlightedText: string,
   sessionContext: string,
   provider: LLMProvider,
+  userTitle?: string,
 ): Promise<ExtractedNote> {
   const skill = getSkill()
   const systemPrompt = buildPrompt(skill, {
     highlighted_text: highlightedText,
     session_context: sessionContext,
+    user_title_block: userTitle
+      ? `本次笔记的标题已由用户确定为「${userTitle}」，请在输出的 title 中原样使用它，不要更改或另拟标题。`
+      : '（用户未指定标题，由你根据划线文本拟定一个简洁标题）',
   })
 
   const messages: Message[] = [
@@ -107,6 +113,11 @@ export async function extractNote(
 
   if (!validateExtractedNote(parsed)) {
     throw new Error(`笔记提取失败: 响应缺少必要字段\n响应内容: ${JSON.stringify(parsed).slice(0, 200)}`)
+  }
+
+  // 用户指定标题时，无论 LLM 是否遵守，都强制使用用户标题
+  if (userTitle && userTitle.trim()) {
+    return { ...parsed, title: userTitle.trim() }
   }
 
   return parsed

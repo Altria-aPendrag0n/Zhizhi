@@ -28,6 +28,11 @@
         />
       </div>
 
+      <!-- 描述 -->
+      <p v-if="note.description" class="note-description">
+        {{ note.description }}
+      </p>
+
       <!-- 标签 -->
       <div class="note-tags-section">
         <div class="tags">
@@ -66,6 +71,7 @@
       <div ref="editorContentRef" class="note-editor" data-highlightable="true" @mouseup="handleMouseUp">
         <MarkdownEditor
           :model-value="content"
+          :current-note-path="note?.path"
           @update:model-value="handleContentChange"
         />
       </div>
@@ -273,6 +279,14 @@ watch(showTagInput, async (val) => {
 
 .note-title-input:focus {
   border-bottom-color: var(--brand);
+}
+
+.note-description {
+  margin: -8px 0 20px;
+  padding-left: 1px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .note-tags-section {

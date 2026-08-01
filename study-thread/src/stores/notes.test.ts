@@ -35,6 +35,7 @@ describe('notes store', () => {
     const store = useNoteStore()
     const note: ExtractedNote = {
       title: '费曼学习法',
+      description: '通过教别人来检验理解',
       proposition: '核心命题',
       explanation: '解释内容',
       type: 'method',
@@ -58,6 +59,7 @@ describe('notes store', () => {
     const store = useNoteStore()
     const note: ExtractedNote = {
       title: '测试笔记',
+      description: '测试描述',
       proposition: '命题',
       explanation: '解释',
       type: 'concept',
@@ -77,6 +79,7 @@ describe('notes store', () => {
     const store = useNoteStore()
     const baseNote: ExtractedNote = {
       title: '笔记',
+      description: '基础描述',
       proposition: '命题',
       explanation: '解释',
       type: 'concept',
@@ -97,6 +100,7 @@ describe('notes store', () => {
     const store = useNoteStore()
     const localNote: ExtractedNote = {
       title: '本地笔记',
+      description: '本地描述',
       proposition: '本地命题',
       explanation: '解释',
       type: 'concept',
@@ -182,6 +186,7 @@ describe('notes store', () => {
     const store = useNoteStore()
     const path = await store.saveNote('/vault', {
       title: '待删除笔记',
+      description: '待删除描述',
       proposition: '命题',
       explanation: '解释',
       type: 'concept',
@@ -200,6 +205,7 @@ describe('notes store', () => {
     const store = useNoteStore()
     await store.saveNote('/vault', {
       title: '受保护笔记',
+      description: '受保护描述',
       proposition: '命题',
       explanation: '解释',
       type: 'concept',
@@ -218,6 +224,7 @@ describe('notes store', () => {
     const store = useNoteStore()
     const path = await store.saveNote('/vault', {
       title: '保留笔记',
+      description: '保留描述',
       proposition: '命题',
       explanation: '解释',
       type: 'concept',

@@ -5,6 +5,7 @@ import type { ExtractedNote } from '../types'
 describe('serializeNote', () => {
   const note: ExtractedNote = {
     title: '费曼学习法',
+    description: '用教别人来检验自己是否真正理解',
     proposition: '用教别人的方式来检验自己是否真正理解',
     explanation: '费曼学习法是一种通过向他人解释概念来加深理解的学习方法。',
     type: 'method',
@@ -16,10 +17,17 @@ describe('serializeNote', () => {
     const result = serializeNote(note, 'sessions/test/main.md', '划线文本')
     expect(result).toContain('---')
     expect(result).toContain('title: 费曼学习法')
+    expect(result).toContain('description: "用教别人来检验自己是否真正理解"')
     expect(result).toContain('type: method')
     expect(result).toContain('  - 学习方法')
     expect(result).toContain('  - 费曼')
     expect(result).toContain('confidence: 0.9')
+  })
+
+  it('处理描述中的引号', () => {
+    const quotedNote: ExtractedNote = { ...note, description: '他说"保持好奇"' }
+    const result = serializeNote(quotedNote, 'sessions/test/main.md', '')
+    expect(result).toContain('description: "他说\\"保持好奇\\""')
   })
 
   it('序列化笔记包含来源信息', () => {

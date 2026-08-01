@@ -33,7 +33,9 @@ import {
   drawSelection,
 } from '@codemirror/view'
 import { EditorState, type Extension, Compartment, StateField, type Range } from '@codemirror/state'
+import { autocompletion } from '@codemirror/autocomplete'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { createWikiLinkCompletionSource } from './wikilinkAutocomplete'
 import { languages } from '@codemirror/language-data'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
@@ -56,6 +58,8 @@ import { useNoteStore } from '../../stores/notes'
 const props = defineProps<{
   modelValue: string
   readonly?: boolean
+  /** 当前笔记路径（补全时排除自身） */
+  currentNotePath?: string
 }>()
 
 const emit = defineEmits<{
@@ -256,6 +260,13 @@ function triggerLinkSuggestions() {
   linkDebounceTimer = setTimeout(async () => {
     if (!editorView) return
     const { from } = editorView.state.selection.main
+    // 光标处于未闭合的 [[ 之后时，由 [[ 补全接管，不触发语义检索
+    const line = editorView.state.doc.lineAt(from)
+    const beforeCursor = line.text.slice(0, from - line.from)
+    if (/\[\[[^\[\]]*$/.test(beforeCursor)) {
+      showSuggestions.value = false
+      return
+    }
     const paragraphText = editorView.state.doc.lineAt(from).text.trim()
     if (paragraphText.length < 10) {
       showSuggestions.value = false
@@ -326,6 +337,21 @@ const customTheme = EditorView.theme({
   '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--brand, #245c4d)' },
   '&.cm-focused': { outline: 'none' },
   '.cm-matchingBracket': { backgroundColor: 'var(--brand-soft, rgba(220, 233, 225, 0.4))' },
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    border: '1px solid var(--line, #e2e8e4)',
+    borderRadius: '10px',
+    boxShadow: '0 6px 24px rgba(0, 0, 0, 0.10)',
+    overflow: 'hidden',
+  },
+  '.cm-tooltip-autocomplete ul li[aria-selected]': {
+    backgroundColor: 'var(--brand-soft, rgba(220, 233, 225, 0.6))',
+    color: 'var(--brand, #245c4d)',
+  },
+  '.cm-tooltip-autocomplete ul li': {
+    padding: '3px 8px',
+    fontFamily: '"HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
+  },
+  '.cm-completionDetail': { fontStyle: 'normal', color: 'var(--ink-3, #87928d)', fontSize: '11px' },
 })
 
 function createEditor() {
@@ -339,6 +365,10 @@ function createEditor() {
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     syntaxHighlighting(defaultHighlightStyle),
     EditorView.lineWrapping,
+    autocompletion({
+      activateOnTyping: true,
+      override: [createWikiLinkCompletionSource(noteStore.notes, props.currentNotePath)],
+    }),
     livePreviewField,
     wikiLinkField,
     EditorView.domEventHandlers({

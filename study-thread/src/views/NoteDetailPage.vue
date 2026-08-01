@@ -29,11 +29,22 @@
     <div v-if="currentNote && hasGraphRelations" class="detail-graph">
       <LocalGraph :note-id="currentNote.path" :depth="1" />
     </div>
+
+    <ExtractNoteDialog
+      :visible="extractDialog.visible"
+      :title="extractDialog.title"
+      :highlighted-text="extractDialog.highlightedText"
+      :loading="extractDialog.loading"
+      :saving="extractDialog.saving"
+      :error="extractDialog.error"
+      @close="cancelExtract"
+      @confirm="confirmExtract"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount, inject } from 'vue'
+import { ref, watch, computed, onBeforeUnmount, inject, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '../stores/notes'
 import { useVaultStore } from '../stores/vault'
@@ -42,7 +53,7 @@ import { useSettingsStore } from '../stores/settings'
 import { extractNote } from '../api/skills/extract-note'
 import { createProvider } from '../api/provider-factory'
 import { useToast } from '../composables/useToast'
-import type { Note, Session } from '../types'
+import type { Note, Session, ExtractedNote } from '../types'
 import { getSessionFilePath } from '../utils/session-serializer'
 import { loadBranchContext, parseMessages } from '../utils/branch-context'
 import { readFile } from '../utils/vault-fs'
@@ -51,6 +62,7 @@ import { parseWikiLinks, resolveWikiLinkTarget } from '../parser/wikilink'
 import NoteDetail from '../components/notes/NoteDetail.vue'
 import Backlinks, { type BacklinkEntry } from '../components/editor/Backlinks.vue'
 import LocalGraph from '../components/graph/LocalGraph.vue'
+import ExtractNoteDialog from '../components/notes/ExtractNoteDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -65,6 +77,17 @@ const isLoading = ref(false)
 const currentNote = ref<Note | null>(null)
 const backlinks = ref<BacklinkEntry[]>([])
 const loadingBacklinks = ref(false)
+
+/** 摘录为笔记弹窗状态 */
+const extractDialog = reactive({
+  visible: false,
+  loading: false,
+  saving: false,
+  title: '',
+  highlightedText: '',
+  error: '',
+  draft: null as ExtractedNote | null,
+})
 
 const hasGraphRelations = computed(() => {
   if (!currentNote.value) return false
@@ -163,18 +186,66 @@ async function handleExtractNote(highlightedText: string) {
     return
   }
 
+  extractDialog.highlightedText = highlightedText
+  extractDialog.error = ''
+  extractDialog.draft = null
+  extractDialog.visible = true
+  extractDialog.loading = true
+
   try {
-    const note = await extractNote(
+    // 先由 LLM 生成建议标题与内容，预填到弹窗，用户可修改
+    const draft = await extractNote(
       highlightedText,
       `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
       createProvider(config),
     )
+    extractDialog.draft = draft
+    extractDialog.title = draft.title
+  } catch (e) {
+    extractDialog.visible = false
+    toast.error(e instanceof Error ? e.message : '笔记提炼失败')
+  } finally {
+    extractDialog.loading = false
+  }
+}
+
+async function confirmExtract(title: string) {
+  if (!extractDialog.draft || !currentNote.value) return
+  extractDialog.saving = true
+  extractDialog.error = ''
+  try {
+    const config = settingsStore.getProviderConfig()
+    const highlightedText = extractDialog.highlightedText
+
+    let note = extractDialog.draft
+    if (title.trim() !== extractDialog.draft.title.trim()) {
+      // 用户修改了标题：用用户标题重新生成，确保描述等内容与标题一致
+      note = await extractNote(
+        highlightedText,
+        `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
+        createProvider(config),
+        title,
+      )
+    } else {
+      note = { ...extractDialog.draft, title: title.trim() }
+    }
+
     const path = await noteStore.saveNote(vaultStore.vaultPath, note, currentNote.value.path, highlightedText)
     if (!path) throw new Error('笔记保存失败')
+
+    extractDialog.visible = false
+    extractDialog.draft = null
     toast.success('已提炼并保存为原子笔记')
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '笔记提炼失败')
+    extractDialog.error = e instanceof Error ? e.message : '笔记提炼失败'
+  } finally {
+    extractDialog.saving = false
   }
+}
+
+function cancelExtract() {
+  extractDialog.visible = false
+  extractDialog.draft = null
 }
 
 async function handleCreateBranch(highlightedText: string) {

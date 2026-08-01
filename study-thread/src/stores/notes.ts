@@ -26,6 +26,7 @@ function toNoteMeta(path: string, fileName: string, content: string): NoteMeta {
   return {
     path,
     title: toString(meta.title) || fileName.replace(/\.md$/, ''),
+    description: toString(meta.description) || undefined,
     type: toString(meta.type) || 'concept',
     tags: toTags(meta.tags),
     // 时间字段兜底：缺失的 created/updated 互相回退，确保列表排序与展示始终有可解析值

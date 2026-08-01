@@ -33,6 +33,7 @@ export interface Message {
 export interface Note {
   path: string
   title: string
+  description?: string
   type: 'concept' | 'method' | 'fact' | 'question'
   tags: string[]
   created: string
@@ -53,6 +54,7 @@ export interface Note {
 export interface NoteMeta {
   path: string
   title: string
+  description?: string
   type: string
   tags: string[]
   created: string
@@ -98,6 +100,7 @@ export interface Skill {
 // 原子笔记提取结果
 export interface ExtractedNote {
   title: string
+  description: string
   proposition: string
   explanation: string
   type: 'concept' | 'method' | 'fact' | 'question'

@@ -34,11 +34,22 @@
       @send="handleSend"
       @stop="handleStop"
     />
+
+    <ExtractNoteDialog
+      :visible="extractDialog.visible"
+      :title="extractDialog.title"
+      :highlighted-text="extractDialog.highlightedText"
+      :loading="extractDialog.loading"
+      :saving="extractDialog.saving"
+      :error="extractDialog.error"
+      @close="cancelExtract"
+      @confirm="confirmExtract"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
@@ -47,7 +58,7 @@ import { useNoteStore } from '../stores/notes'
 import { createProvider } from '../api/provider-factory'
 import { branchFollowupStream } from '../api/skills/branch-followup'
 import { extractNote } from '../api/skills/extract-note'
-import type { Message, Session } from '../types'
+import type { Message, Session, ExtractedNote } from '../types'
 import { loadBranchContext } from '../utils/branch-context'
 import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession } from '../utils/session-linker'
@@ -57,6 +68,7 @@ import { useToast } from '../composables/useToast'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 import BranchBreadcrumb, { type BreadcrumbItem } from '../components/chat/BranchBreadcrumb.vue'
+import ExtractNoteDialog from '../components/notes/ExtractNoteDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -73,6 +85,18 @@ const isStreaming = ref(false)
 const streamingText = ref('')
 const error = ref<string | null>(null)
 const forkContext = ref<string>('')
+
+/** 摘录为笔记弹窗状态 */
+const extractDialog = reactive({
+  visible: false,
+  loading: false,
+  saving: false,
+  title: '',
+  highlightedText: '',
+  error: '',
+  draft: null as ExtractedNote | null,
+})
+
 const noteRefs = computed(() => extractedNotes.value)
 
 const sessionId = computed(() => route.params.sessionId as string)
@@ -208,25 +232,76 @@ async function handleExtractNote(highlightedText: string) {
     router.push('/settings')
     return
   }
+  if (!vaultStore.vaultPath) {
+    toast.error('请先在设置中选择本地 Vault')
+    return
+  }
+
+  extractDialog.highlightedText = highlightedText
+  extractDialog.error = ''
+  extractDialog.draft = null
+  extractDialog.visible = true
+  extractDialog.loading = true
 
   try {
-    const sourceSession = await saveCurrentSession()
-    if (!sourceSession) throw new Error('请先在设置中选择本地 Vault')
-    const note = await extractNote(
+    // 先由 LLM 生成建议标题与内容，预填到弹窗，用户可修改
+    const draft = await extractNote(
       highlightedText,
       messages.value.map((message) => `${message.role}: ${message.content}`).join('\n\n'),
       createProvider(config),
     )
+    extractDialog.draft = draft
+    extractDialog.title = draft.title
+  } catch (e) {
+    extractDialog.visible = false
+    toast.error(e instanceof Error ? e.message : '笔记提炼失败')
+  } finally {
+    extractDialog.loading = false
+  }
+}
+
+async function confirmExtract(title: string) {
+  if (!extractDialog.draft) return
+  extractDialog.saving = true
+  extractDialog.error = ''
+  try {
+    const config = settingsStore.getProviderConfig()
+    const highlightedText = extractDialog.highlightedText
+    const sourceSession = await saveCurrentSession()
+    if (!sourceSession) throw new Error('请先在设置中选择本地 Vault')
+
+    let note = extractDialog.draft
+    if (title.trim() !== extractDialog.draft.title.trim()) {
+      // 用户修改了标题：用用户标题重新生成，确保描述等内容与标题一致
+      note = await extractNote(
+        highlightedText,
+        messages.value.map((message) => `${message.role}: ${message.content}`).join('\n\n'),
+        createProvider(config),
+        title,
+      )
+    } else {
+      note = { ...extractDialog.draft, title: title.trim() }
+    }
+
     const path = await noteStore.saveNote(vaultStore.vaultPath, note, sourceSession, highlightedText)
     if (!path) throw new Error('笔记保存失败')
 
     const messageIndex = messages.value.map((message) => message.role === 'assistant' && message.content.includes(highlightedText)).lastIndexOf(true)
     extractedNotes.value.push({ path, title: note.title, messageIndex })
     await saveCurrentSession()
+    extractDialog.visible = false
+    extractDialog.draft = null
     toast.success('已提炼并保存为原子笔记')
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '笔记提炼失败')
+    extractDialog.error = e instanceof Error ? e.message : '笔记提炼失败'
+  } finally {
+    extractDialog.saving = false
   }
+}
+
+function cancelExtract() {
+  extractDialog.visible = false
+  extractDialog.draft = null
 }
 
 async function handleCreateBranch(highlightedText: string) {

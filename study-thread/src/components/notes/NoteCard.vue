@@ -10,7 +10,7 @@
       <span v-if="formattedDate" class="note-created">{{ formattedDate }}</span>
     </div>
     <h3>{{ note.title }}</h3>
-    <p class="note-body">{{ note.proposition }}</p>
+    <p class="note-body">{{ note.description || note.proposition }}</p>
     <div class="note-footer">
       <div class="tags">
         <span v-for="tag in note.tags" :key="tag" class="tag">{{ tag }}</span>
