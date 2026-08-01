@@ -21,22 +21,40 @@
   --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
   --s-5: 24px; --s-6: 32px; --s-7: 48px;
   --shadow-1: 0 1px 2px rgba(20, 39, 33, .05);
+  --study-background: var(--bg);
+  --study-foreground: var(--ink);
+  --study-card: var(--surface);
+  --study-card-foreground: var(--ink);
+  --study-popover: var(--surface);
+  --study-popover-foreground: var(--ink);
+  --study-primary: var(--brand);
+  --study-primary-foreground: var(--brand-ink);
+  --study-muted: var(--surface-2);
+  --study-muted-foreground: var(--ink-2);
+  --study-border: var(--line);
+  --study-input: var(--line);
+  --study-ring: var(--brand);
+  --study-radius-small: var(--r-sm);
+  --study-radius-medium: var(--r-md);
+  --study-radius-large: var(--r-lg);
 }
 
 @theme inline {
-  --color-background: var(--bg);
-  --color-foreground: var(--ink);
-  --color-card: var(--surface);
-  --color-card-foreground: var(--ink);
-  --color-primary: var(--brand);
-  --color-primary-foreground: var(--brand-ink);
+  --color-background: var(--study-background);
+  --color-foreground: var(--study-foreground);
+  --color-card: var(--study-card);
+  --color-card-foreground: var(--study-card-foreground);
+  --color-popover: var(--study-popover);
+  --color-popover-foreground: var(--study-popover-foreground);
+  --color-primary: var(--study-primary);
+  --color-primary-foreground: var(--study-primary-foreground);
   --color-secondary: var(--surface-2);
   --color-secondary-foreground: var(--ink-2);
-  --color-muted: var(--surface-2);
-  --color-muted-foreground: var(--ink-2);
-  --color-border: var(--line);
-  --color-input: var(--line);
-  --color-ring: var(--brand);
+  --color-muted: var(--study-muted);
+  --color-muted-foreground: var(--study-muted-foreground);
+  --color-border: var(--study-border);
+  --color-input: var(--study-input);
+  --color-ring: var(--study-ring);
   --color-success: var(--state-success);
   --color-warning: var(--state-warning);
   --color-error: var(--state-error);
@@ -45,8 +63,8 @@
   --color-brand-strong: var(--brand-strong);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
-  --radius-sm: var(--r-sm);
-  --radius-md: var(--r-md);
-  --radius-lg: var(--r-lg);
+  --radius-sm: var(--study-radius-small);
+  --radius-md: var(--study-radius-medium);
+  --radius-lg: var(--study-radius-large);
   --radius-pill: var(--r-pill);
 }

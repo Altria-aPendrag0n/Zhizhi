@@ -6,6 +6,7 @@
  */
 
 import type { NoteMeta } from '../types'
+import { parseNoteDate } from '../utils/date'
 import { EmbeddingEngine, getEmbeddingEngine } from './engine'
 
 /** 索引条目 */
@@ -99,7 +100,8 @@ export class NoteIndexer {
 
       // 检查是否需要重新索引：已索引且更新时间未变则跳过
       if (existing) {
-        const updatedTime = new Date(note.updated).getTime()
+        // 无效日期按 +Infinity 处理：无法判断是否更新过，保守地重新索引
+        const updatedTime = parseNoteDate(note.updated)?.getTime() ?? Number.POSITIVE_INFINITY
         if (updatedTime <= existing.indexedAt) {
           onProgress?.(i + 1, total)
           continue

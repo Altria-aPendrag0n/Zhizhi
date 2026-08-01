@@ -1,6 +1,5 @@
 <template>
   <div class="note-list-container">
-    <!-- 工具栏 -->
     <div class="notes-toolbar">
       <span>{{ filteredNotes.length }} 张笔记</span>
       <div class="toolbar-actions">
@@ -19,7 +18,6 @@
       </div>
     </div>
 
-    <!-- 搜索框 -->
     <div class="search-bar">
       <input
         v-model="searchQuery"
@@ -29,7 +27,6 @@
       />
     </div>
 
-    <!-- 笔记列表 -->
     <div v-if="filteredNotes.length > 0" class="note-stack">
       <NoteCard
         v-for="note in filteredNotes"
@@ -38,19 +35,34 @@
         :is-selected="selectedPath === note.path"
         @select="$emit('select', $event)"
         @open-source="$emit('openSource', $event)"
+        @contextmenu="openContextMenu($event, note.path)"
       />
     </div>
 
-    <!-- 空状态 -->
     <div v-else class="empty-state">
       <p v-if="notes.length === 0">还没有笔记，从学习对话中摘录你的第一条笔记吧</p>
       <p v-else>没有匹配的笔记，试试调整搜索条件</p>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="contextMenu"
+        ref="contextMenuElement"
+        class="note-context-menu"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+        role="menu"
+        @click.stop
+      >
+        <button class="is-danger" type="button" role="menuitem" @click="requestDelete">
+          删除笔记
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { NoteMeta } from '../../types'
 import NoteCard from './NoteCard.vue'
 
@@ -59,24 +71,25 @@ const props = defineProps<{
   selectedPath?: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   select: [path: string]
   openSource: [source: NonNullable<NoteMeta['source']>]
+  delete: [path: string]
 }>()
 
 const sortBy = ref<'updated' | 'created' | 'title'>('updated')
 const filterType = ref('')
 const searchQuery = ref('')
+const contextMenu = ref<{ path: string; x: number; y: number } | null>(null)
+const contextMenuElement = ref<HTMLElement>()
 
 const filteredNotes = computed(() => {
   let result = [...props.notes]
 
-  // 类型筛选
   if (filterType.value) {
     result = result.filter((n) => n.type === filterType.value)
   }
 
-  // 搜索
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.trim().toLowerCase()
     result = result.filter(
@@ -86,7 +99,6 @@ const filteredNotes = computed(() => {
     )
   }
 
-  // 排序
   result.sort((a, b) => {
     switch (sortBy.value) {
       case 'created':
@@ -101,6 +113,46 @@ const filteredNotes = computed(() => {
 
   return result
 })
+
+function openContextMenu(event: MouseEvent, path: string) {
+  const menuWidth = 128
+  const menuHeight = 44
+  contextMenu.value = {
+    path,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+  }
+}
+
+function closeContextMenu() {
+  contextMenu.value = null
+}
+
+function requestDelete() {
+  if (contextMenu.value) emit('delete', contextMenu.value.path)
+  closeContextMenu()
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  const target = event.target
+  if (target instanceof Node && !contextMenuElement.value?.contains(target)) {
+    closeContextMenu()
+  }
+}
+
+function handleDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeContextMenu()
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleDocumentPointerDown)
+  document.addEventListener('keydown', handleDocumentKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  document.removeEventListener('keydown', handleDocumentKeydown)
+})
 </script>
 
 <style scoped>
@@ -113,11 +165,10 @@ const filteredNotes = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 11px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  color: var(--ink-2);
-  font-size: 11px;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: var(--ink-2, #52635d);
+  font-size: 12px;
 }
 
 .toolbar-actions {
@@ -125,53 +176,78 @@ const filteredNotes = computed(() => {
   gap: 8px;
 }
 
-.filter-select {
-  padding: 5px 9px;
+.filter-select,
+.search-input {
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--brand);
+  border-radius: 7px;
+  background: #fffefa;
+  color: var(--ink);
+  font: inherit;
+}
+
+.filter-select {
+  padding: 6px 8px;
   font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  outline: none;
 }
 
 .search-bar {
-  margin: 14px 0;
+  margin-bottom: 16px;
 }
 
 .search-input {
+  box-sizing: border-box;
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
+  padding: 10px 12px;
   outline: none;
-  transition: border-color 0.15s;
 }
 
-.search-input:focus {
+.search-input:focus,
+.filter-select:focus {
   border-color: var(--brand);
-}
-
-.search-input::placeholder {
-  color: var(--ink-3);
 }
 
 .note-stack {
   display: grid;
-  gap: 14px;
-  margin-top: 18px;
+  gap: 12px;
 }
 
 .empty-state {
-  padding: 60px 0;
+  padding: 64px 24px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--ink-2, #52635d);
   text-align: center;
-  color: var(--ink-2);
   font-size: 13px;
-  line-height: 1.8;
+}
+
+.note-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 128px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, #fffefa);
+  box-shadow: 0 8px 24px rgba(20, 39, 33, 0.14);
+}
+
+.note-context-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.note-context-menu button:hover {
+  background: var(--surface-2, #f0eee7);
+}
+
+.note-context-menu .is-danger {
+  color: #c2413b;
 }
 </style>

@@ -4,6 +4,7 @@
  */
 
 import type { Session, Message } from '../types'
+import type { NoteReference } from './session-linker'
 import { writeFile, createDir } from './vault-fs'
 
 /**
@@ -26,7 +27,7 @@ export function sanitizeFileName(name: string): string {
 /**
  * 序列化会话为 Markdown 字符串
  */
-export function serializeSession(session: Session): string {
+export function serializeSession(session: Session, noteRefs: NoteReference[] = []): string {
   const lines: string[] = []
 
   // YAML frontmatter
@@ -47,12 +48,16 @@ export function serializeSession(session: Session): string {
   lines.push('')
 
   // 消息内容
-  for (const msg of session.messages) {
+  for (const [messageIndex, msg] of session.messages.entries()) {
     const role = msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '知枝' : '系统'
     const time = msg.timestamp ? ` · ${msg.timestamp}` : ''
     lines.push(`## ${role}${time}`)
     lines.push('')
     lines.push(msg.content)
+    for (const noteRef of noteRefs.filter((ref) => ref.messageIndex === messageIndex)) {
+      lines.push('')
+      lines.push(`> 已生成笔记: [[${noteRef.path}|${noteRef.title}]]`)
+    }
     lines.push('')
   }
 
@@ -65,20 +70,25 @@ export function serializeSession(session: Session): string {
  * @param session 会话数据
  * @param isBranch 是否为分支会话
  */
+export function getSessionFilePath(vaultPath: string, sessionId: string, isBranch = false): string {
+  const sessionsDir = `${vaultPath}/sessions`
+  const fileName = isBranch ? `branch-${sanitizeFileName(sessionId)}.md` : `${sanitizeFileName(sessionId)}.md`
+  return `${sessionsDir}/${fileName}`
+}
+
 export async function saveSessionToVault(
   vaultPath: string,
   session: Session,
   isBranch = false,
+  noteRefs: NoteReference[] = [],
 ): Promise<string> {
-  const topicDir = sanitizeFileName(generateSessionTitle(session.messages))
-  const sessionsDir = `${vaultPath}/sessions/${topicDir}`
-  const fileName = isBranch ? `branch-${session.id}.md` : 'main.md'
-  const filePath = `${sessionsDir}/${fileName}`
+  const sessionsDir = `${vaultPath}/sessions`
+  const filePath = getSessionFilePath(vaultPath, session.id, isBranch)
 
   // 确保目录存在
   await createDir(sessionsDir)
 
-  const content = serializeSession(session)
+  const content = serializeSession(session, noteRefs)
   await writeFile(filePath, content)
 
   return filePath

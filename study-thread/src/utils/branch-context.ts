@@ -38,7 +38,7 @@ export async function loadBranchContext(
  * ## 知枝 · 时间
  * 内容
  */
-function parseMessages(body: string, upToIndex: number): Message[] {
+export function parseMessages(body: string, upToIndex: number): Message[] {
   const messages: Message[] = []
   const lines = body.split('\n')
   let i = 0

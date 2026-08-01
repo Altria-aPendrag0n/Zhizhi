@@ -37,6 +37,26 @@ describe('NoteCard', () => {
     expect(tags[1].text()).toBe('费曼')
   })
 
+  it('渲染有效日期的短日期格式', () => {
+    const wrapper = mount(NoteCard, { props: { note } })
+    const dateText = wrapper.find('.note-created').text()
+    expect(dateText).not.toContain('Invalid')
+    expect(dateText).toContain('6')
+    expect(dateText).toContain('15')
+  })
+
+  it('updated 为空时不渲染日期且不显示 Invalid Date', () => {
+    const wrapper = mount(NoteCard, { props: { note: { ...note, updated: '' } } })
+    expect(wrapper.text()).not.toContain('Invalid')
+    expect(wrapper.find('.note-created').exists()).toBe(false)
+  })
+
+  it('updated 为非法字符串时兜底为空而非 Invalid Date', () => {
+    const wrapper = mount(NoteCard, { props: { note: { ...note, updated: 'not-a-date' } } })
+    expect(wrapper.text()).not.toContain('Invalid')
+    expect(wrapper.find('.note-created').exists()).toBe(false)
+  })
+
   it('点击触发 select 事件', async () => {
     const wrapper = mount(NoteCard, { props: { note } })
     await wrapper.trigger('click')

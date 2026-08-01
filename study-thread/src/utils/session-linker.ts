@@ -61,9 +61,13 @@ export function extractNoteRefsFromSession(sessionContent: string): NoteReferenc
     // 检测笔记引用
     const noteRefMatch = line.match(/已生成笔记:\s*\[\[(.+?)\]\]/)
     if (noteRefMatch && currentMessageIndex >= 0) {
+      const reference = noteRefMatch[1]
+      const separatorIndex = reference.indexOf('|')
+      const path = separatorIndex >= 0 ? reference.slice(0, separatorIndex) : reference
+      const title = separatorIndex >= 0 ? reference.slice(separatorIndex + 1) : reference.split('/').pop()?.replace(/\.md$/, '') || reference
       refs.push({
-        path: `notes/${noteRefMatch[1]}.md`,
-        title: noteRefMatch[1],
+        path,
+        title,
         messageIndex: currentMessageIndex,
       })
     }

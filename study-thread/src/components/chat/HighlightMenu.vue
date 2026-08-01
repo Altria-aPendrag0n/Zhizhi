@@ -32,6 +32,7 @@ const props = defineProps<{
   visible: boolean
   x: number
   y: number
+  highlightedText: string
 }>()
 
 const emit = defineEmits<{
@@ -49,28 +50,21 @@ const menuStyle = computed(() => ({
 }))
 
 function handleExtractNote() {
-  const text = getSelectedText()
-  if (text) emit('extract-note', text)
+  if (props.highlightedText) emit('extract-note', props.highlightedText)
   emit('close')
 }
 
 function handleCreateBranch() {
-  const text = getSelectedText()
-  if (text) emit('create-branch', text)
+  if (props.highlightedText) emit('create-branch', props.highlightedText)
   emit('close')
 }
 
 function handleCopy() {
-  const text = getSelectedText()
-  if (text) {
-    navigator.clipboard.writeText(text).catch(console.error)
-    emit('copy', text)
+  if (props.highlightedText) {
+    navigator.clipboard.writeText(props.highlightedText).catch(console.error)
+    emit('copy', props.highlightedText)
   }
   emit('close')
-}
-
-function getSelectedText(): string {
-  return window.getSelection()?.toString().trim() || ''
 }
 
 function handleClickOutside(e: MouseEvent) {
@@ -103,7 +97,7 @@ onUnmounted(() => {
   display: flex;
   gap: 2px;
   padding: 4px;
-  background: var(--surface-1);
+  background: #fff;
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -132,7 +126,7 @@ onUnmounted(() => {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 5px solid var(--surface-1);
+  border-top: 5px solid #fff;
 }
 
 .highlight-menu__item {

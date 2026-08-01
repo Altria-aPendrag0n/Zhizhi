@@ -1,5 +1,5 @@
 <template>
-  <div class="local-graph" ref="containerRef">
+  <div class="local-graph">
     <div class="local-graph__toolbar">
       <span class="local-graph__title">关系图</span>
       <div class="local-graph__controls">
@@ -60,7 +60,6 @@ const props = withDefaults(
 const router = useRouter()
 const noteStore = useNoteStore()
 
-const containerRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLElement | null>(null)
 
 const depth = ref(props.depth)

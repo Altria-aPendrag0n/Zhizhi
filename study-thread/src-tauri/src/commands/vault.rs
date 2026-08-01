@@ -16,6 +16,7 @@ pub struct DirEntry {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 pub struct VaultInfo {
     pub path: String,
     pub note_count: usize,

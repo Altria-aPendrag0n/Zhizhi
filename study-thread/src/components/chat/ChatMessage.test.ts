@@ -60,6 +60,7 @@ describe('ChatMessage', () => {
   it('AI 消息显示品牌标签', () => {
     const message: Message = { role: 'assistant', content: 'hello' }
     const wrapper = mount(ChatMessage, { props: { message } })
-    expect(wrapper.find('.chat-message__avatar--ai').exists()).toBe(true)
+    expect(wrapper.find('.chat-message__label').exists()).toBe(true)
+    expect(wrapper.find('.chat-message__label').text()).toBe('知枝 · 学习伴读')
   })
 })

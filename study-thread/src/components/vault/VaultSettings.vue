@@ -1,82 +1,247 @@
 <template>
-  <div class="vault-settings">
-    <div v-if="!vaultStore.vaultPath" class="vault-settings__empty">
-      <div class="vault-settings__welcome">
-        <h2 class="text-lg font-bold text-primary mb-2">欢迎使用知枝</h2>
-        <p class="text-muted-foreground text-sm mb-6">打开或创建一个 Vault 开始学习</p>
-        <div class="vault-settings__actions">
-          <button class="btn btn-primary" @click="handleOpenVault">打开 Vault</button>
-          <button class="btn btn-secondary" @click="handleCreateVault">新建 Vault</button>
-        </div>
+  <section class="vault-settings">
+    <div class="vault-settings__heading">
+      <div>
+        <p class="vault-settings__eyebrow">Workspace</p>
+        <h2 class="vault-settings__title">学习仓库</h2>
       </div>
-      <div v-if="settingsStore.recentVaults.length > 0" class="vault-settings__recent">
-        <h3 class="text-sm font-semibold mb-2">最近打开</h3>
-        <button
-          v-for="vault in settingsStore.recentVaults"
-          :key="vault"
-          class="vault-settings__recent-item"
-          @click="openVault(vault)"
-        >
-          {{ vault }}
-        </button>
+      <span class="vault-settings__status" :class="{ 'is-open': vaultStore.vaultPath }">
+        {{ vaultStore.vaultPath ? '已打开' : '未选择' }}
+      </span>
+    </div>
+
+    <template v-if="vaultStore.vaultPath">
+      <p class="vault-settings__path" :title="vaultStore.vaultPath">{{ vaultStore.vaultPath }}</p>
+      <div class="vault-settings__actions">
+        <button class="btn btn-primary" type="button" @click="handleOpenVault">切换 Vault</button>
+        <button class="btn btn-secondary" type="button" @click="vaultStore.closeVault()">关闭</button>
       </div>
+    </template>
+
+    <template v-else>
+      <p class="vault-settings__description">打开已有目录，或新建一个包含笔记与会话目录的 Vault。</p>
+      <div class="vault-settings__actions">
+        <button class="btn btn-primary" type="button" @click="handleOpenVault">打开 Vault</button>
+        <button class="btn btn-secondary" type="button" @click="handleCreateVault">新建 Vault</button>
+      </div>
+    </template>
+
+    <div v-if="settingsStore.recentVaults.length" class="vault-settings__recent">
+      <h3 class="vault-settings__recent-title">最近打开</h3>
+      <button
+        v-for="vault in settingsStore.recentVaults"
+        :key="vault"
+        class="vault-settings__recent-item"
+        type="button"
+        :title="vault"
+        @click="openVault(vault)"
+      >
+        {{ vault }}
+      </button>
     </div>
-    <div v-else class="vault-settings__info">
-      <span class="text-sm text-muted-foreground truncate">{{ vaultStore.vaultPath }}</span>
-      <button class="btn btn-secondary text-xs" @click="vaultStore.closeVault()">关闭</button>
-    </div>
-  </div>
+
+    <p v-if="errorMessage" class="vault-settings__error">{{ errorMessage }}</p>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { useVaultStore } from '../../stores/vault'
+import { ref } from 'vue'
 import { useSettingsStore } from '../../stores/settings'
+import { useVaultStore } from '../../stores/vault'
+import { createDir } from '../../utils/vault-fs'
 
 const vaultStore = useVaultStore()
 const settingsStore = useSettingsStore()
+const errorMessage = ref('')
 
-function handleOpenVault() {
-  // Tauri 环境下使用 dialog，非 Tauri 环境使用 prompt
-  const path = prompt('请输入 Vault 目录路径：')
-  if (path) openVault(path)
+async function handleOpenVault() {
+  const path = prompt('请输入已有 Vault 的目录路径：')?.trim()
+  if (path) await openVault(path)
 }
 
-function handleCreateVault() {
-  const name = prompt('请输入新 Vault 名称：')
-  if (name) {
-    const path = prompt('请选择父目录路径（默认：桌面）：') || ''
-    const fullPath = path ? `${path}/${name}` : name
-    openVault(fullPath)
+async function handleCreateVault() {
+  const name = prompt('请输入新 Vault 名称：')?.trim()
+  if (!name) return
+
+  const parentPath = prompt('请输入父目录路径：')?.trim()
+  if (!parentPath) return
+
+  const path = joinPath(parentPath, name)
+
+  try {
+    await Promise.all([
+      createDir(joinPath(path, 'notes')),
+      createDir(joinPath(path, 'sessions')),
+      createDir(joinPath(path, 'attachments')),
+      createDir(joinPath(path, '.study-thread')),
+    ])
+    await openVault(path)
+  } catch (error) {
+    errorMessage.value = toErrorMessage(error, '新建 Vault 失败')
   }
 }
 
-function openVault(path: string) {
-  vaultStore.openVault(path)
-  settingsStore.addRecentVault(path)
+async function openVault(path: string) {
+  errorMessage.value = ''
+
+  try {
+    await vaultStore.openVault(path)
+    settingsStore.addRecentVault(path)
+  } catch (error) {
+    errorMessage.value = toErrorMessage(error, '打开 Vault 失败')
+  }
+}
+
+function joinPath(basePath: string, name: string): string {
+  const separator = basePath.includes('\\') ? '\\' : '/'
+  return `${basePath.replace(/[\\/]+$/, '')}${separator}${name}`
+}
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? `${fallback}：${error.message}` : fallback
 }
 </script>
 
 <style scoped>
-.vault-settings { padding: 16px; }
-.vault-settings__empty { text-align: center; }
-.vault-settings__welcome { padding: 32px 16px; }
-.vault-settings__actions { display: flex; gap: 8px; justify-content: center; }
-.vault-settings__recent { margin-top: 24px; text-align: left; }
-.vault-settings__recent-item {
-  display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 6px;
-  background: transparent; color: var(--ink); font-size: 12px; text-align: left;
-  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.vault-settings {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
 }
-.vault-settings__recent-item:hover { background: var(--brand-soft); }
-.vault-settings__info { display: flex; align-items: center; gap: 8px; }
+
+.vault-settings__heading,
+.vault-settings__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vault-settings__eyebrow {
+  margin: 0 0 4px;
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vault-settings__title,
+.vault-settings__recent-title {
+  margin: 0;
+  color: var(--ink);
+}
+
+.vault-settings__title {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.vault-settings__status {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  font-size: 11px;
+}
+
+.vault-settings__status.is-open {
+  color: var(--state-success);
+  background: color-mix(in srgb, var(--state-success) 12%, transparent);
+}
+
+.vault-settings__description,
+.vault-settings__path {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.vault-settings__path {
+  overflow: hidden;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-settings__actions {
+  justify-content: flex-start;
+}
+
+.vault-settings__recent {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.vault-settings__recent-title {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.vault-settings__recent-item {
+  overflow: hidden;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-settings__recent-item:hover {
+  background: var(--brand-soft);
+  color: var(--ink);
+}
+
+.vault-settings__error {
+  margin: 0;
+  color: var(--state-error);
+  font-size: 12px;
+  line-height: 1.5;
+}
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 8px 16px; border: 0; border-radius: 8px; font-size: 13px;
-  font-weight: 590; cursor: pointer; transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 590;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.btn-primary { color: var(--brand-ink); background: var(--brand); }
-.btn-primary:hover { background: var(--brand-strong); }
-.btn-secondary { color: var(--ink); background: var(--surface-2); }
-.btn-secondary:hover { background: var(--line); }
+
+.btn-primary {
+  color: var(--brand-ink);
+  background: var(--brand);
+}
+
+.btn-primary:hover {
+  background: var(--brand-strong);
+}
+
+.btn-secondary {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.btn-secondary:hover {
+  background: var(--line);
+}
 </style>

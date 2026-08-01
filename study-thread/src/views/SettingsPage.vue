@@ -1,9 +1,12 @@
-<template>
+﻿<template>
   <div class="settings-page">
     <div class="settings-page__header">
-      <h1 class="text-xl font-bold text-primary">设置</h1>
-      <p class="text-sm text-muted-foreground mt-1">配置 API 连接和模型参数</p>
+      <div class="eyebrow">Configuration</div>
+      <h1 class="settings-page__title">设置</h1>
+      <p class="settings-page__subtitle">管理学习仓库，并配置 API 连接和模型参数</p>
     </div>
+
+    <VaultSettings class="settings-page__vault" />
 
     <div class="settings-page__form">
       <!-- 服务商选择 -->
@@ -96,6 +99,7 @@ import { Eye, EyeOff, CheckCircle, AlertCircle } from '@lucide/vue'
 import { useSettingsStore } from '../stores/settings'
 import { PROVIDER_PRESETS } from '../api/openai-compat'
 import { createProvider } from '../api/provider-factory'
+import VaultSettings from '../components/vault/VaultSettings.vue'
 
 const settingsStore = useSettingsStore()
 
@@ -203,11 +207,51 @@ onMounted(() => {
 .settings-page {
   max-width: 560px;
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: 42px 54px 72px;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .settings-page__header {
   margin-bottom: 32px;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.eyebrow::before {
+  width: 22px;
+  height: 1px;
+  content: '';
+  background: var(--brand);
+}
+
+.settings-page__title {
+  margin: 0;
+  font-family: Georgia, 'Songti SC', serif;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.settings-page__subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.settings-page__vault {
+  margin-bottom: 28px;
 }
 
 .settings-page__form {
@@ -232,8 +276,8 @@ onMounted(() => {
 .form-select {
   padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-1);
+  border-radius: var(--r-md);
+  background: var(--surface);
   color: var(--ink);
   font-size: 13px;
   outline: none;
@@ -264,7 +308,7 @@ onMounted(() => {
   justify-content: center;
   border: 0;
   background: transparent;
-  color: var(--muted-foreground);
+  color: var(--ink-2);
   cursor: pointer;
   padding: 2px;
 }
@@ -285,7 +329,7 @@ onMounted(() => {
   justify-content: center;
   padding: 8px 20px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: 13px;
   font-weight: 590;
   cursor: pointer;
@@ -320,18 +364,18 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: 13px;
 }
 
 .test-result.success {
-  background: color-mix(in srgb, var(--color-green, #22c55e) 12%, transparent);
-  color: var(--color-green, #16a34a);
+  background: color-mix(in srgb, var(--state-success) 12%, transparent);
+  color: var(--state-success);
 }
 
 .test-result.error {
-  background: color-mix(in srgb, var(--color-red, #ef4444) 12%, transparent);
-  color: var(--color-red, #dc2626);
+  background: color-mix(in srgb, var(--state-error) 12%, transparent);
+  color: var(--state-error);
 }
 
 .test-result__icon {
@@ -343,4 +387,11 @@ onMounted(() => {
 .test-result__text {
   line-height: 1.4;
 }
+
+@media (max-width: 1240px) {
+  .settings-page {
+    padding: 34px 34px 64px;
+  }
+}
 </style>
+

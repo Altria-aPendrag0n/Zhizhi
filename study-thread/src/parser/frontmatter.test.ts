@@ -24,6 +24,39 @@ created: 2024-01-01
     expect(result.body).toBe('# 标题\n\n正文内容')
   })
 
+  it('将 YAML 日期标准化为字符串', () => {
+    const result = parseFrontmatter(`---
+title: 日期笔记
+created: 2024-01-01
+updated: 2024-01-01T12:30:00Z
+---
+正文`)
+    expect(result.meta).toMatchObject({
+      created: '2024-01-01',
+      updated: '2024-01-01T12:30:00Z',
+    })
+    expect(result.meta.created).toEqual(expect.any(String))
+    expect(result.meta.updated).toEqual(expect.any(String))
+  })
+
+  it('日期字段保持字符串，不产生 Date 对象或时区偏移', () => {
+    const result = parseFrontmatter(`---
+created: 2024-01-01
+updated: '2026-07-31T15:48:23.809Z'
+---
+正文`)
+    expect(result.meta.created).toBe('2024-01-01')
+    expect(result.meta.updated).toBe('2026-07-31T15:48:23.809Z')
+    expect(result.meta.created).toEqual(expect.any(String))
+  })
+
+  it('非标准日期字符串保持原样，不被错误转换', () => {
+    const result = parseFrontmatter(`---
+updated: 2026年7月31日
+---
+正文`)
+    expect(result.meta.updated).toBe('2026年7月31日')
+  })
   it('处理没有 frontmatter 的内容', () => {
     const input = '# 直接正文'
     const result = parseFrontmatter(input)

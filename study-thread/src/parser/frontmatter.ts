@@ -1,36 +1,27 @@
-/**
- * Frontmatter 解析器
- *
- * 解析 Markdown 文件的 YAML frontmatter 块（--- ... ---）。
- *
- * 用法:
- * ```
- * import { parseFrontmatter } from '@/parser/frontmatter'
- *
- * const { meta, body } = parseFrontmatter(content)
- * // meta = { title: '...', type: '...', tags: [...] }
- * // body = '# 标题\n\n正文内容...'
- * ```
- */
-
 import * as yaml from 'js-yaml'
 
-/**
- * 解析 frontmatter 的结果
- */
 export interface FrontmatterResult {
-  /** 解析后的元数据 */
   meta: Record<string, unknown>
-  /** 移除 frontmatter 后的正文内容 */
   body: string
 }
 
-/**
- * 解析 Markdown 文件的 YAML frontmatter
- *
- * @param content - 完整的 Markdown 文件内容
- * @returns 解析后的元数据和正文
- */
+function normalizeYamlValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return ''
+    return value.getUTCHours() === 0 && value.getUTCMinutes() === 0 && value.getUTCSeconds() === 0 && value.getUTCMilliseconds() === 0
+      ? value.toISOString().slice(0, 10)
+      : value.toISOString()
+  }
+
+  if (Array.isArray(value)) return value.map(normalizeYamlValue)
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeYamlValue(item)]))
+  }
+
+  return value
+}
+
 export function parseFrontmatter(content: string): FrontmatterResult {
   const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/
   const match = content.match(frontmatterRegex)
@@ -39,20 +30,18 @@ export function parseFrontmatter(content: string): FrontmatterResult {
     return { meta: {}, body: content }
   }
 
-  const frontmatterStr = match[1]
   let meta: Record<string, unknown> = {}
 
   try {
-    const parsed = yaml.load(frontmatterStr)
+    // 使用 YAML 1.2 core schema：日期字符串（如 2024-01-01）保持为字符串，
+    // 避免被默认 schema 解析为 Date 后产生时区偏移或无效日期。
+    const parsed = yaml.load(match[1], { schema: yaml.CORE_SCHEMA })
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      meta = parsed as Record<string, unknown>
+      meta = normalizeYamlValue(parsed) as Record<string, unknown>
     }
   } catch {
-    // frontmatter 解析失败时返回空 meta
     meta = {}
   }
 
-  const body = content.slice(match[0].length)
-
-  return { meta, body }
+  return { meta, body: content.slice(match[0].length) }
 }

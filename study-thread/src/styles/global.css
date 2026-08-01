@@ -1,11 +1,23 @@
 @import './tokens.css';
 @import 'tailwindcss';
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   background: var(--bg);
   color: var(--ink);
+}
+
+button, textarea, input, select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
 }
 
 /* 隐藏滚动条 */
@@ -16,3 +28,39 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* 语义化令牌回退类 */
+.bg-background { background-color: var(--study-background); }
+.text-background { color: var(--study-background); }
+.border-background { border-color: var(--study-background); }
+.bg-foreground { background-color: var(--study-foreground); }
+.text-foreground { color: var(--study-foreground); }
+.border-foreground { border-color: var(--study-foreground); }
+.bg-card { background-color: var(--study-card); }
+.text-card { color: var(--study-card); }
+.border-card { border-color: var(--study-card); }
+.bg-card-foreground { background-color: var(--study-card-foreground); }
+.text-card-foreground { color: var(--study-card-foreground); }
+.border-card-foreground { border-color: var(--study-card-foreground); }
+.bg-popover { background-color: var(--study-popover); }
+.text-popover { color: var(--study-popover); }
+.bg-popover-foreground { background-color: var(--study-popover-foreground); }
+.text-popover-foreground { color: var(--study-popover-foreground); }
+.bg-primary { background-color: var(--study-primary); }
+.text-primary { color: var(--study-primary); }
+.border-primary { border-color: var(--study-primary); }
+.bg-primary-foreground { background-color: var(--study-primary-foreground); }
+.text-primary-foreground { color: var(--study-primary-foreground); }
+.bg-muted { background-color: var(--study-muted); }
+.text-muted { color: var(--study-muted); }
+.bg-muted-foreground { background-color: var(--study-muted-foreground); }
+.text-muted-foreground { color: var(--study-muted-foreground); }
+.bg-border { background-color: var(--study-border); }
+.text-border { color: var(--study-border); }
+.border-border { border-color: var(--study-border); }
+.bg-input { background-color: var(--study-input); }
+.text-input { color: var(--study-input); }
+.border-input { border-color: var(--study-input); }
+.bg-ring { background-color: var(--study-ring); }
+.text-ring { color: var(--study-ring); }
+.border-ring { border-color: var(--study-ring); }

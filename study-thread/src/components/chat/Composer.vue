@@ -1,36 +1,34 @@
 <template>
   <div class="composer">
-    <div class="composer__inner">
-      <textarea
-        ref="textareaRef"
-        v-model="input"
-        class="composer__textarea"
-        :placeholder="placeholder"
-        rows="1"
-        :disabled="disabled"
-        @keydown="handleKeydown"
-        @input="handleInput"
-      />
-      <div class="composer__actions">
-        <button
-          v-if="isStreaming"
-          class="composer__stop-btn"
-          title="停止生成"
-          @click="$emit('stop')"
-        >
-          <Square :size="16" />
-        </button>
-        <button
-          v-else
-          class="composer__send-btn"
-          :class="{ 'composer__send-btn--disabled': !canSend }"
-          :disabled="!canSend"
-          title="发送"
-          @click="handleSend"
-        >
-          <ArrowUp :size="18" />
-        </button>
-      </div>
+    <textarea
+      ref="textareaRef"
+      v-model="input"
+      class="composer__textarea"
+      :placeholder="placeholder"
+      rows="1"
+      :disabled="disabled"
+      @keydown="handleKeydown"
+      @input="handleInput"
+    />
+    <div class="composer__actions">
+      <button
+        v-if="isStreaming"
+        class="composer__stop-btn"
+        title="停止生成"
+        @click="$emit('stop')"
+      >
+        <Square :size="16" />
+      </button>
+      <button
+        v-else
+        class="composer__send-btn"
+        :class="{ 'composer__send-btn--disabled': !canSend }"
+        :disabled="!canSend"
+        title="发送"
+        @click="handleSend"
+      >
+        <ArrowUp :size="18" />
+      </button>
     </div>
   </div>
 </template>
@@ -56,7 +54,6 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const canSend = computed(() => input.value.trim().length > 0 && !props.disabled)
 
 function handleInput() {
-  // 自动增高
   nextTick(() => {
     const el = textareaRef.value
     if (el) {
@@ -77,7 +74,6 @@ function handleSend() {
   if (!canSend.value) return
   const content = input.value.trim()
   input.value = ''
-  // 重置高度
   nextTick(() => {
     const el = textareaRef.value
     if (el) {
@@ -90,40 +86,43 @@ function handleSend() {
 
 <style scoped>
 .composer {
-  padding: 12px 24px 20px;
-  background: var(--surface-1);
-  border-top: 1px solid var(--line);
-}
-
-.composer__inner {
+  position: fixed;
+  z-index: 2;
+  bottom: 23px;
+  left: calc(76px + 244px + max(48px, 8vw));
+  right: calc(292px + max(48px, 8vw));
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  max-width: 720px;
-  margin: 0 auto;
-  background: var(--surface-2);
+  gap: 10px;
+  padding: 11px 11px 11px 16px;
   border: 1px solid var(--line);
   border-radius: 15px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background: rgba(251, 250, 246, 0.96);
+  box-shadow: 0 12px 30px rgba(25, 49, 43, 0.08);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.composer:focus-within {
+  box-shadow: 0 12px 30px rgba(25, 49, 43, 0.12), 0 0 0 2px var(--brand-soft);
+  border-color: var(--brand);
 }
 
 .composer__textarea {
   flex: 1;
+  height: 25px;
+  padding: 2px 0;
   border: 0;
-  outline: none;
-  background: transparent;
+  outline: 0;
   color: var(--ink);
+  background: transparent;
   font-size: 14px;
-  line-height: 1.5;
+  font-family: inherit;
   resize: none;
   max-height: 200px;
-  font-family: inherit;
-  padding: 4px 0;
 }
 
 .composer__textarea::placeholder {
-  color: var(--muted-foreground);
+  color: var(--ink-3);
 }
 
 .composer__textarea:disabled {
@@ -141,18 +140,19 @@ function handleSend() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 35px;
+  height: 35px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--brand);
   color: var(--brand-ink);
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.18s ease, opacity 0.18s ease, transform 0.15s ease;
 }
 
-.composer__send-btn:hover {
+.composer__send-btn:hover:not(.composer__send-btn--disabled) {
   background: var(--brand-strong);
+  transform: scale(1.05);
 }
 
 .composer__send-btn--disabled {
@@ -164,17 +164,24 @@ function handleSend() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 35px;
+  height: 35px;
   border: 0;
-  border-radius: 8px;
-  background: var(--color-red, #ef4444);
+  border-radius: 10px;
+  background: var(--state-error);
   color: white;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.18s ease;
 }
 
 .composer__stop-btn:hover {
-  background: color-mix(in srgb, var(--color-red, #ef4444) 80%, black);
+  background: color-mix(in srgb, var(--state-error) 80%, black);
+}
+
+@media (max-width: 1100px) {
+  .composer {
+    left: calc(64px + 218px + 38px);
+    right: calc(270px + 38px);
+  }
 }
 </style>

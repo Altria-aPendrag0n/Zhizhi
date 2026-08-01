@@ -2,12 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useSessionStore } from './session'
 
-// Mock vault-fs
-vi.mock('../utils/vault-fs', () => ({
-  readFile: vi.fn(),
-  writeFile: vi.fn(),
-  createDir: vi.fn(),
+const vaultFs = vi.hoisted(() => ({
+  createDir: vi.fn().mockResolvedValue(undefined),
+  fileExists: vi.fn().mockResolvedValue(true),
+  readFile: vi.fn().mockRejectedValue(new Error('not found')),
+  writeFile: vi.fn().mockResolvedValue(undefined),
 }))
+
+vi.mock('../utils/vault-fs', () => vaultFs)
+
+
 
 describe('session store', () => {
   beforeEach(() => {
@@ -19,7 +23,7 @@ describe('session store', () => {
     const store = useSessionStore()
     const id = store.createSession('测试会话')
 
-    expect(id).toMatch(/^sess_\d+$/)
+    expect(id).toMatch(/^sess_\d+_\d+$/)
     expect(store.currentSessionId).toBe(id)
     expect(store.sessions).toHaveLength(1)
     expect(store.sessions[0].title).toBe('测试会话')
@@ -64,12 +68,31 @@ describe('session store', () => {
     store.createSession('主会话')
     const branchId = store.createBranch('sess_1', 'msg_3', '追问')
 
-    expect(branchId).toMatch(/^branch_\d+$/)
+    expect(branchId).toMatch(/^branch_\d+_\d+$/)
     const branch = store.sessions.find(s => s.id === branchId)
     expect(branch).toBeDefined()
     expect(branch!.parent_session).toBe('sess_1')
     expect(branch!.fork_point).toBe('msg_3')
     expect(branch!.title).toBe('追问')
+  })
+
+  it('createBranchInVault 复用已存在的真实来源会话文件', async () => {
+    const store = useSessionStore()
+    const parent = {
+      id: 'source-session',
+      title: '来源会话',
+      created: '2026-01-01T00:00:00.000Z',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [{ role: 'user' as const, content: '来源消息' }],
+    }
+
+    const branchId = await store.createBranchInVault('/vault', parent, 0, '笔记追问', '/vault/sessions/existing.md')
+
+    expect(branchId).toMatch(/^branch_\d+_\d+$/)
+    expect(vaultFs.fileExists).toHaveBeenCalledWith('/vault/sessions/existing.md')
+    expect(vaultFs.writeFile).not.toHaveBeenCalledWith('/vault/sessions/source-session.md', expect.any(String))
   })
 
   it('loadBranchContext 加载分支上下文', () => {

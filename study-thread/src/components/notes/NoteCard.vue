@@ -3,10 +3,11 @@
     class="note-card"
     :class="{ selected: isSelected }"
     @click="$emit('select', note.path)"
+    @contextmenu.prevent="$emit('contextmenu', $event)"
   >
     <div class="note-top">
       <span class="note-kind">{{ typeLabel }}</span>
-      <span class="note-created">{{ formattedDate }}</span>
+      <span v-if="formattedDate" class="note-created">{{ formattedDate }}</span>
     </div>
     <h3>{{ note.title }}</h3>
     <p class="note-body">{{ note.proposition }}</p>
@@ -24,6 +25,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { NoteMeta } from '../../types'
+import { formatNoteShortDate } from '../../utils/date'
 
 const props = defineProps<{
   note: NoteMeta
@@ -33,6 +35,7 @@ const props = defineProps<{
 defineEmits<{
   select: [path: string]
   openSource: [source: NonNullable<NoteMeta['source']>]
+  contextmenu: [event: MouseEvent]
 }>()
 
 const typeLabels: Record<string, string> = {
@@ -44,14 +47,7 @@ const typeLabels: Record<string, string> = {
 
 const typeLabel = computed(() => typeLabels[props.note.type] || '笔记')
 
-const formattedDate = computed(() => {
-  try {
-    const d = new Date(props.note.updated)
-    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
-  } catch {
-    return ''
-  }
-})
+const formattedDate = computed(() => formatNoteShortDate(props.note.updated))
 </script>
 
 <style scoped>

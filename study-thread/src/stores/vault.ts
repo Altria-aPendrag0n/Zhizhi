@@ -1,10 +1,13 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DirEntry, NoteMeta } from '../types'
-import { listDir, startWatching, stopWatching, readFile } from '../utils/vault-fs'
-import { saveSessionToVault } from '../utils/session-serializer'
+import { listDir, startWatching, stopWatching, readFile, deleteFile, fileExists } from '../utils/vault-fs'
+import { getSessionFilePath, saveSessionToVault } from '../utils/session-serializer'
+import type { NoteReference } from '../utils/session-linker'
 import type { Session } from '../types'
 import { getNoteIndexer } from '../embedding/indexer'
+
+const LAST_VAULT_KEY = 'study-thread-last-vault'
 
 export const useVaultStore = defineStore('vault', () => {
   const vaultPath = ref<string | null>(null)
@@ -25,6 +28,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function openVault(path: string) {
     vaultPath.value = path
     isOpen.value = true
+    localStorage.setItem(LAST_VAULT_KEY, path)
     // 启动文件监听
     startWatching(path, (event) => {
       console.log('文件变更:', event)
@@ -100,10 +104,24 @@ export const useVaultStore = defineStore('vault', () => {
     }
   }
 
+  async function restoreLastVault(): Promise<boolean> {
+    const path = localStorage.getItem(LAST_VAULT_KEY)
+    if (!path) return false
+
+    try {
+      await openVault(path)
+      return true
+    } catch {
+      localStorage.removeItem(LAST_VAULT_KEY)
+      return false
+    }
+  }
+
   function closeVault() {
     vaultPath.value = null
     fileTree.value = []
     isOpen.value = false
+    localStorage.removeItem(LAST_VAULT_KEY)
     // 停止文件监听
     stopWatching().catch(console.error)
   }
@@ -118,15 +136,35 @@ export const useVaultStore = defineStore('vault', () => {
     }
   }
 
-  async function saveCurrentSession(session: Session, isBranch = false): Promise<string | null> {
+  async function saveCurrentSession(
+    session: Session,
+    isBranch = false,
+    noteRefs: NoteReference[] = [],
+  ): Promise<string | null> {
     if (!vaultPath.value) return null
     try {
-      const filePath = await saveSessionToVault(vaultPath.value, session, isBranch)
+      const filePath = await saveSessionToVault(vaultPath.value, session, isBranch, noteRefs)
       await refreshFileTree()
       return filePath
     } catch (e) {
       console.error('保存会话失败:', e)
       return null
+    }
+  }
+
+  async function deleteSession(sessionId: string, isBranch = false): Promise<boolean> {
+    if (!vaultPath.value) return true
+
+    try {
+      const filePath = getSessionFilePath(vaultPath.value, sessionId, isBranch)
+      if (await fileExists(filePath)) {
+        await deleteFile(filePath)
+      }
+      await refreshFileTree()
+      return true
+    } catch (e) {
+      console.error('删除会话文件失败:', e)
+      return false
     }
   }
 
@@ -137,11 +175,12 @@ export const useVaultStore = defineStore('vault', () => {
     isIndexing,
     indexProgress,
     noteCount,
-    sessionCount,
-    openVault,
+    sessionCount,    openVault,
+    restoreLastVault,
     closeVault,
     refreshFileTree,
     saveCurrentSession,
+    deleteSession,
     initIndex,
   }
 })

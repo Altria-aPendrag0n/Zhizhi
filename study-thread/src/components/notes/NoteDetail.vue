@@ -63,20 +63,32 @@
       </div>
 
       <!-- 编辑器 -->
-      <div class="note-editor">
+      <div ref="editorContentRef" class="note-editor" data-highlightable="true" @mouseup="handleMouseUp">
         <MarkdownEditor
           :model-value="content"
           @update:model-value="handleContentChange"
         />
       </div>
+
+      <HighlightMenu
+        :visible="highlightMenu.visible"
+        :x="highlightMenu.x"
+        :y="highlightMenu.y"
+        :highlighted-text="highlightMenu.text"
+        @close="closeHighlightMenu"
+        @extract-note="emit('extractNote', $event)"
+        @create-branch="emit('createBranch', $event)"
+      />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, reactive } from 'vue'
 import type { Note } from '../../types'
+import { formatNoteFullDate } from '../../utils/date'
 import MarkdownEditor from '../editor/MarkdownEditor.vue'
+import HighlightMenu from '../chat/HighlightMenu.vue'
 
 const props = defineProps<{
   note: Note | null
@@ -86,6 +98,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   update: [note: Note]
   openSource: [source: NonNullable<Note['source']>]
+  extractNote: [text: string]
+  createBranch: [text: string]
 }>()
 
 const editableTitle = ref('')
@@ -94,6 +108,13 @@ const content = ref('')
 const showTagInput = ref(false)
 const newTag = ref('')
 const tagInputRef = ref<HTMLInputElement>()
+const editorContentRef = ref<HTMLElement | null>(null)
+const highlightMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  text: '',
+})
 
 const typeLabels: Record<string, string> = {
   concept: '概念卡',
@@ -108,16 +129,7 @@ const typeLabel = computed(() => {
 })
 
 function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  } catch {
-    return dateStr
-  }
+  return formatNoteFullDate(dateStr)
 }
 
 // 同步 note 数据到本地编辑状态
@@ -161,6 +173,35 @@ function removeTag(tag: string) {
   if (props.note) {
     emit('update', { ...props.note, tags: [...editableTags.value] })
   }
+}
+
+function handleMouseUp() {
+  const selection = window.getSelection()
+  const editorContent = editorContentRef.value
+  const hasSelectionInEditor = selection
+    && !selection.isCollapsed
+    && selection.rangeCount > 0
+    && selection.anchorNode
+    && selection.focusNode
+    && editorContent?.contains(selection.anchorNode)
+    && editorContent.contains(selection.focusNode)
+
+  const text = hasSelectionInEditor && selection ? selection.toString().trim() : ''
+  if (!text || !selection) {
+    // 仅关闭菜单，不清除浏览器选区（removeAllRanges 会破坏 CodeMirror 的光标定位）
+    closeHighlightMenu()
+    return
+  }
+
+  const rect = selection.getRangeAt(0).getBoundingClientRect()
+  highlightMenu.x = rect.left + rect.width / 2
+  highlightMenu.y = rect.top
+  highlightMenu.text = text
+  highlightMenu.visible = true
+}
+function closeHighlightMenu() {
+  highlightMenu.visible = false
+  highlightMenu.text = ''
 }
 
 function cancelTagInput() {

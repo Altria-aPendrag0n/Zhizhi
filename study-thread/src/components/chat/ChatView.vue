@@ -1,24 +1,22 @@
-<template>
+﻿<template>
   <div class="chat-view" ref="containerRef" @mouseup="handleMouseUp">
     <!-- 空状态 -->
     <div v-if="!messages.length && !isStreaming" class="chat-view__empty">
-      <div class="chat-view__empty-icon">
-        <MessageSquare :size="48" />
-      </div>
-      <h2 class="text-lg font-bold text-primary mt-4">开始学习对话</h2>
-      <p class="text-sm text-muted-foreground mt-2">
+      <div class="chat-view__eyebrow">Conceptual study</div>
+      <h1 class="chat-view__hero-title">把「费曼学习法」从口诀变成一次真的理解</h1>
+      <p class="chat-view__hero-desc">
         向知枝提问，或粘贴一段想要拆解的概念
       </p>
     </div>
 
-    <!-- 消息列表 -->
-    <div v-else class="chat-view__messages">
-      <div v-for="(msg, index) in messages" :key="index">
+    <!-- 对话区域 -->
+    <div v-else class="chat-view__conversation">
+      <div class="chat-view__eyebrow">Conceptual study</div>
+      <div v-for="(msg, index) in displayMessages" :key="index">
         <ChatMessage
           :message="msg"
           :note-count="getNoteCountForMessage(index)"
         />
-        <!-- 笔记反链 -->
         <div v-if="getNotesForMessage(index).length > 0" class="chat-view__note-refs">
           <span class="note-refs-label">已生成笔记：</span>
           <button
@@ -33,19 +31,18 @@
       </div>
 
       <!-- 流式文本 -->
-      <div v-if="streamingText || isStreaming" class="chat-message chat-message--assistant">
-        <div class="chat-message__avatar chat-message__avatar--ai">
-          <span class="text-xs font-bold">枝</span>
+      <div v-if="isStreaming" class="chat-view__streaming">
+        <div class="chat-view__streaming-answer">
+          <StreamText :text="streamingText" :is-streaming="isStreaming" />
         </div>
-        <StreamText :text="streamingText" :is-streaming="isStreaming" />
       </div>
     </div>
 
-    <!-- 重试按钮 -->
+    <!-- 错误提示 -->
     <div v-if="error" class="chat-view__error">
       <AlertCircle :size="16" />
-      <span class="text-sm">{{ error }}</span>
-      <button class="btn btn-secondary text-xs" @click="$emit('retry')">重试</button>
+      <span>{{ error }}</span>
+      <button class="chat-view__retry-btn" @click="$emit('retry')">重试</button>
     </div>
 
     <!-- 划线浮动菜单 -->
@@ -53,7 +50,8 @@
       :visible="highlightMenu.visible"
       :x="highlightMenu.x"
       :y="highlightMenu.y"
-      @close="highlightMenu.visible = false"
+      :highlighted-text="highlightMenu.text"
+      @close="closeHighlightMenu"
       @extract-note="handleExtractNote"
       @create-branch="handleCreateBranch"
       @copy="handleCopy"
@@ -62,8 +60,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, reactive } from 'vue'
-import { MessageSquare, AlertCircle } from '@lucide/vue'
+import { ref, watch, nextTick, reactive, computed } from 'vue'
+import { AlertCircle } from '@lucide/vue'
 import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
 import ChatMessage from './ChatMessage.vue'
@@ -87,32 +85,56 @@ const emit = defineEmits<{
 
 const containerRef = ref<HTMLElement | null>(null)
 
+// 流式期间隐藏最后一条空的 assistant 占位消息（由流式区域负责显示）
+const displayMessages = computed(() => {
+  if (!props.isStreaming) return props.messages
+  const msgs = props.messages
+  if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant' && !msgs[msgs.length - 1].content) {
+    return msgs.slice(0, -1)
+  }
+  return msgs
+})
+
 const highlightMenu = reactive({
   visible: false,
   x: 0,
   y: 0,
+  text: '',
 })
 
 function handleMouseUp() {
   const selection = window.getSelection()
-  if (!selection || selection.isCollapsed) {
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    closeHighlightMenu()
     return
   }
 
   const text = selection.toString().trim()
-  if (!text) return
+  if (!text) {
+    closeHighlightMenu()
+    return
+  }
 
-  // 检查选中的文本是否在 AI 消息（.selectable）内
   const range = selection.getRangeAt(0)
-  const container = range.commonAncestorContainer
-  const selectableEl = (container as Element).closest?.('.selectable')
-  if (!selectableEl) return
+  const ancestor = range.commonAncestorContainer
+  const highlightableEl = (ancestor.nodeType === Node.ELEMENT_NODE
+    ? ancestor as Element
+    : ancestor.parentElement)?.closest('[data-highlightable="true"]')
+  if (!highlightableEl || !containerRef.value?.contains(highlightableEl)) {
+    closeHighlightMenu()
+    return
+  }
 
-  // 获取选区位置
   const rect = range.getBoundingClientRect()
   highlightMenu.x = rect.left + rect.width / 2
   highlightMenu.y = rect.top
+  highlightMenu.text = text
   highlightMenu.visible = true
+}
+function closeHighlightMenu() {
+  highlightMenu.visible = false
+  highlightMenu.text = ''
+  window.getSelection()?.removeAllRanges()
 }
 
 function handleExtractNote(text: string) {
@@ -123,9 +145,7 @@ function handleCreateBranch(text: string) {
   emit('create-branch', text)
 }
 
-function handleCopy(_text: string) {
-  // 复制逻辑已在 HighlightMenu 中处理
-}
+function handleCopy(_text: string) {}
 
 function getNotesForMessage(messageIndex: number): NoteReference[] {
   return (props.noteRefs || []).filter((ref) => ref.messageIndex === messageIndex)
@@ -135,7 +155,7 @@ function getNoteCountForMessage(messageIndex: number): number {
   return getNotesForMessage(messageIndex).length
 }
 
-// 自动滚动到底部
+// 自动滚动
 watch(
   () => [props.messages.length, props.streamingText, props.isStreaming],
   async () => {
@@ -152,67 +172,84 @@ watch(
 .chat-view {
   flex: 1;
   overflow-y: auto;
-  padding: 0 24px;
+  padding: 50px max(48px, 8vw) 152px;
+  background: var(--surface);
 }
 
+/* 空状态 */
 .chat-view__empty {
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
   height: 100%;
-  text-align: center;
-  padding: 48px 24px;
-}
-
-.chat-view__empty-icon {
-  color: var(--muted-foreground);
-  opacity: 0.5;
-}
-
-.chat-view__messages {
-  max-width: 720px;
+  width: min(760px, 100%);
   margin: 0 auto;
-  padding: 24px 0;
 }
 
-.chat-message {
-  display: flex;
-  gap: 12px;
-  padding: 16px 0;
-}
-
-.chat-message--assistant {
-  flex-direction: row;
-}
-
-.chat-message__avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.chat-view__eyebrow {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  margin-bottom: 17px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.chat-view__eyebrow::before {
+  width: 22px;
+  height: 1px;
+  content: '';
+  background: var(--brand);
   flex-shrink: 0;
 }
 
-.chat-message__avatar--ai {
-  background: var(--brand);
-  color: var(--brand-ink);
+.chat-view__hero-title {
+  max-width: 610px;
+  margin: 0 0 25px;
+  font-family: Georgia, 'Songti SC', serif;
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.16;
+  color: var(--ink);
 }
 
+.chat-view__hero-desc {
+  max-width: 500px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 对话区域 */
+.chat-view__conversation {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+/* 流式文本 */
+.chat-view__streaming-answer {
+  padding: 4px 0 0 40px;
+  border-left: 1px solid var(--line);
+}
+
+/* 错误 */
 .chat-view__error {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  margin: 0 24px;
+  margin: 0 auto;
+  width: min(760px, 100%);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-red, #ef4444) 10%, transparent);
-  color: var(--color-red, #dc2626);
+  background: color-mix(in srgb, var(--state-error) 10%, transparent);
+  color: var(--state-error);
 }
 
-.btn {
+.chat-view__retry-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -222,17 +259,16 @@ watch(
   font-size: 12px;
   font-weight: 590;
   cursor: pointer;
-}
-
-.btn-secondary {
   color: var(--ink);
   background: var(--surface-2);
+  transition: background 0.15s;
 }
 
-.btn-secondary:hover {
+.chat-view__retry-btn:hover {
   background: var(--line);
 }
 
+/* 笔记反链 */
 .chat-view__note-refs {
   display: flex;
   align-items: center;
@@ -254,11 +290,17 @@ watch(
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
-  transition: background-color 0.15s;
+  transition: background 0.18s, color 0.18s;
 }
 
 .note-ref-link:hover {
   background: var(--brand);
-  color: white;
+  color: #fff;
+}
+
+@media (max-width: 1100px) {
+  .chat-view {
+    padding: 38px 38px 152px;
+  }
 }
 </style>

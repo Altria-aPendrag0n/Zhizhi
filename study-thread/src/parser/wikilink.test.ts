@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { parseWikiLinks, extractAllLinks, renderWikiLink } from './wikilink'
+﻿import { describe, it, expect, vi } from 'vitest'
+import { parseWikiLinks, extractAllLinks, renderWikiLink, resolveWikiLinkTarget } from './wikilink'
 import type { WikiLink } from './wikilink'
 
 // Mock vault-fs 模块
@@ -118,5 +118,23 @@ describe('renderWikiLink', () => {
     const aliasLink: WikiLink = { ...link, alias: '费曼' }
     const html = renderWikiLink(aliasLink, true)
     expect(html).toContain('>费曼<')
+  })
+})
+describe('resolveWikiLinkTarget', () => {
+  const notes = [
+    { path: 'C:/vault/notes/学习/费曼学习法.md', title: '费曼学习法' },
+    { path: 'C:/vault/notes/间隔重复.md', title: '间隔重复' },
+  ]
+
+  it('按标题解析到真实 Vault note.path', () => {
+    expect(resolveWikiLinkTarget('费曼学习法', notes)?.path).toBe('C:/vault/notes/学习/费曼学习法.md')
+  })
+
+  it('按相对路径解析到真实 Vault note.path', () => {
+    expect(resolveWikiLinkTarget('学习/费曼学习法', notes)?.path).toBe('C:/vault/notes/学习/费曼学习法.md')
+  })
+
+  it('未解析的目标返回 null', () => {
+    expect(resolveWikiLinkTarget('不存在', notes)).toBeNull()
   })
 })

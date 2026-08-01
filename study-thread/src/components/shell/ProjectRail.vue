@@ -1,7 +1,7 @@
 <template>
   <div class="project-rail">
     <button class="project-rail__brand" type="button" aria-label="知枝" title="知枝">
-      <span class="brand-text">枝</span>
+      <Sprout :size="22" :stroke-width="1.75" />
     </button>
     <button
       v-for="project in projects"
@@ -13,7 +13,7 @@
       :title="project.name"
       @click="$emit('select', project.id)"
     >
-      <span class="project-initial">{{ project.name.charAt(0) }}</span>
+      <component :is="projectIcon(project)" :size="20" :stroke-width="1.75" />
     </button>
     <button
       class="project-rail__button project-rail__button--add"
@@ -22,12 +22,15 @@
       title="新建项目"
       @click="$emit('add')"
     >
-      <span>+</span>
+      <Plus :size="20" :stroke-width="1.75" />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Sprout, BookOpen, Library, Map, Plus } from '@lucide/vue'
+import type { Component } from 'vue'
+
 export interface Project {
   id: string
   name: string
@@ -42,6 +45,15 @@ defineEmits<{
   select: [id: string]
   add: []
 }>()
+
+function projectIcon(project: Project): Component {
+  switch (project.id) {
+    case '1': return BookOpen
+    case '2': return Library
+    case '3': return Map
+    default: return BookOpen
+  }
+}
 </script>
 
 <style scoped>
@@ -62,11 +74,15 @@ defineEmits<{
   margin-bottom: 12px;
   border: 0;
   border-radius: 14px;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--brand-ink);
+  color: #fff;
   background: var(--brand);
   cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.project-rail__brand:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 12px rgba(31, 90, 69, 0.25);
 }
 
 .project-rail__button {
@@ -76,25 +92,26 @@ defineEmits<{
   height: 42px;
   border: 0;
   border-radius: 13px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   background: transparent;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
 }
 
 .project-rail__button:hover {
   color: var(--brand);
   background: var(--brand-soft);
+  transform: scale(1.06);
 }
 
 .project-rail__button.is-active {
   color: var(--brand);
   background: var(--brand-soft);
+  box-shadow: inset 2px 0 0 var(--brand);
 }
 
 .project-rail__button--add {
   margin-top: auto;
+  color: var(--ink-3);
 }
 </style>

@@ -4,23 +4,21 @@
       class="breadcrumb-home"
       @click="$emit('navigate', 'home')"
     >
-      返回主会话
+      ← 返回主对话
     </button>
     <span class="breadcrumb-separator">/</span>
-    <span
+    <template
       v-for="(crumb, index) in breadcrumbs"
       :key="crumb.id"
-      class="breadcrumb-wrapper"
     >
-      <button
+      <span
         class="breadcrumb-item"
         :class="{ active: index === breadcrumbs.length - 1 }"
-        @click="$emit('navigate', crumb.id)"
       >
         {{ crumb.title }}
-      </button>
+      </span>
       <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
-    </span>
+    </template>
   </nav>
 </template>
 
@@ -43,52 +41,48 @@ defineEmits<{
 .branch-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 24px;
+  gap: 10px;
+  padding: 0 22px;
+  min-height: 62px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: rgba(251, 250, 246, 0.8);
   font-size: 13px;
+  color: var(--ink-2);
 }
 
 .breadcrumb-home {
-  border: none;
-  background: transparent;
-  color: var(--brand);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 0;
-}
-
-.breadcrumb-home:hover {
-  text-decoration: underline;
-}
-
-.breadcrumb-item {
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
   background: transparent;
   color: var(--ink-2);
   cursor: pointer;
   font-size: 13px;
-  padding: 0;
+  text-decoration: none;
 }
 
-.breadcrumb-item:hover {
-  color: var(--ink);
+.breadcrumb-home:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.breadcrumb-item {
+  font-size: 13px;
 }
 
 .breadcrumb-item.active {
+  overflow: hidden;
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .breadcrumb-separator {
   color: var(--ink-3);
-  font-size: 12px;
-}
-
-.breadcrumb-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 </style>
