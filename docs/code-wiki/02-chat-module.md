@@ -77,7 +77,12 @@ fork_point: <分叉消息索引>
 <!-- /fork-context -->
 
 ## 用户 · …
+
+> 已生成笔记: [[notes/a.md|笔记A]] 划线「划线文本」
+> 已生成分支: [[branch_1|分支追问]] 划线「划线文本」
 ```
+
+消息后方的 `> 已生成笔记/分支` 引用行持久化划线文本（`划线「…」`），加载时由 `extractNoteRefsFromSession` 解析（`NoteReference` 增加 `kind`/`highlight` 字段）；渲染时在原消息中把划线文本转为虚线链接，点击跳转对应笔记或分支会话。旧格式（无划线文本）仍兼容。
 
 ## 3. 组件层（`src/components/chat/`）
 
@@ -105,9 +110,10 @@ fork_point: <分叉消息索引>
 
 ### 3.2 `ChatMessage.vue` — 单条消息
 
-- props：`message: Message`、`noteCount?`。
+- props：`message: Message`、`noteCount?`、`marks?: NoteReference[]`（该消息的划线标记）。
 - 按角色区分样式；assistant 用 `marked(content, {breaks:true, gfm:true})` 渲染 Markdown。
 - 正文容器标记 `data-highlightable="true"` 供划线识别；`thinking` 非空时渲染 `ThinkingBlock`。
+- **划线标记**：渲染前把 `marks` 中的划线文本替换为伪协议链接 `[文本](zhizhi://note/<path>|zhizhi://branch/<branchId>)`（跨 markdown 标记匹配不到时跳过）；链接以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。
 
 ### 3.3 `StreamText.vue` — 流式文本
 

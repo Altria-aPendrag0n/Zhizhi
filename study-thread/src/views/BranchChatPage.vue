@@ -25,6 +25,7 @@
         @add-to-note="handleAddToNote"
         @create-branch="handleCreateBranch"
         @navigate-note="handleNavigateNote"
+        @navigate-branch="handleNavigateBranch"
       />
     </div>
 
@@ -409,7 +410,8 @@ async function confirmExtract(title: string) {
 
     // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退
     const messageIndex = resolveMessageIndex(highlightedText, messages.value, extractDialog.messageIndex, 'assistant')
-    extractedNotes.value.push({ path, title: note.title, messageIndex })
+    // 记录划线文本，供分支会话消息中以虚线标记并跳转笔记
+    extractedNotes.value.push({ path, title: note.title, messageIndex, kind: 'note', highlight: highlightedText })
     await saveCurrentSession()
     extractDialog.visible = false
     extractDialog.draft = null
@@ -459,6 +461,16 @@ async function handleCreateBranch(highlightedText: string, domMessageIndex: numb
     return
   }
 
+  // 记录划线文本与分支引用，供分支会话消息中以虚线标记并跳转嵌套分支
+  extractedNotes.value.push({
+    path: nestedBranchId,
+    title: branchTitle,
+    messageIndex: forkMessageIndex,
+    kind: 'branch',
+    highlight: highlightedText,
+  })
+  await saveCurrentSession()
+
   await vaultStore.refreshFileTree()
   router.push({
     name: 'branch-chat',
@@ -469,6 +481,13 @@ async function handleCreateBranch(highlightedText: string, domMessageIndex: numb
 
 function handleNavigateNote(path: string) {
   router.push(`/notes/${encodeURIComponent(path)}`)
+}
+
+function handleNavigateBranch(nestedBranchId: string) {
+  router.push({
+    name: 'branch-chat',
+    params: { sessionId: branchId.value, branchId: nestedBranchId },
+  })
 }
 
 function handleNavigate(target: string) {

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="chat-message" :class="`chat-message--${message.role}`">
     <!-- 用户消息 -->
     <template v-if="message.role === 'user'">
@@ -16,7 +16,8 @@
     <template v-else-if="message.role === 'assistant'">
       <div class="chat-message__answer">
         <p class="chat-message__label">知枝 · 学习伴读</p>
-        <div class="chat-message__body" data-highlightable="true" v-html="renderedContent" />
+        <ThinkingBlock v-if="message.thinking" :text="message.thinking" />
+        <div class="chat-message__body" data-highlightable="true" v-html="renderedContent" @click="handleBodyClick" />
         <div v-if="noteCount > 0" class="chat-message__source">
           <span class="chat-message__source-dot"></span>
           本次回答已生成 {{ noteCount }} 张原子笔记
@@ -37,20 +38,69 @@
 import { computed } from 'vue'
 import { marked } from 'marked'
 import type { Message } from '../../types'
+import type { NoteReference } from '../../utils/session-linker'
+import ThinkingBlock from './ThinkingBlock.vue'
+
+/** 划线标记链接的伪协议：zhizhi://note/<path> 或 zhizhi://branch/<branchId> */
+const MARK_SCHEME = 'zhizhi://'
 
 const props = defineProps<{
   message: Message
   noteCount?: number
+  /** 该消息上的划线标记（笔记/分支，含划线文本），用于在原消息中渲染虚线跳转链接 */
+  marks?: NoteReference[]
+}>()
+
+const emit = defineEmits<{
+  'navigate-link': [payload: { kind: 'note' | 'branch'; id: string }]
 }>()
 
 const noteCount = computed(() => props.noteCount ?? 0)
 
+/**
+ * 将划线文本替换为可跳转的 markdown 链接（虚线标记）。
+ *
+ * 划线文本可能跨 markdown 标记（如 **加粗**）导致源中匹配不到完整子串，
+ * 此时跳过该标记（保持消息原样）。
+ */
+function injectMarkLinks(content: string, marks: NoteReference[]): string {
+  let result = content
+  for (const mark of marks) {
+    if (!mark.highlight) continue
+    const highlight = mark.highlight.replace(/\s+/g, ' ')
+    if (!highlight || !result.includes(highlight)) continue
+    const id = mark.kind === 'branch' ? mark.path : encodeURIComponent(mark.path)
+    const href = `${MARK_SCHEME}${mark.kind === 'branch' ? 'branch' : 'note'}/${id}`
+    result = result.replace(highlight, (match) => `[${match}](${href})`)
+  }
+  return result
+}
+
 const renderedContent = computed(() => {
-  return marked(props.message.content, {
+  const content = injectMarkLinks(props.message.content, props.marks || [])
+  return marked(content, {
     breaks: true,
     gfm: true,
   }) as string
 })
+
+function handleBodyClick(event: MouseEvent) {
+  const anchor = (event.target as Element).closest?.<HTMLAnchorElement>('a[href^="zhizhi://"]')
+  if (!anchor) return
+  event.preventDefault()
+  const payload = (anchor.getAttribute('href') || '').slice(MARK_SCHEME.length)
+  const slashIndex = payload.indexOf('/')
+  const kind = slashIndex >= 0 ? payload.slice(0, slashIndex) : ''
+  let id = slashIndex >= 0 ? payload.slice(slashIndex + 1) : ''
+  try {
+    id = decodeURIComponent(id)
+  } catch {
+    // 无效的编码序列时保持原样
+  }
+  if ((kind === 'note' || kind === 'branch') && id) {
+    emit('navigate-link', { kind, id })
+  }
+}
 </script>
 
 <style scoped>
@@ -176,6 +226,33 @@ const renderedContent = computed(() => {
   font-style: normal;
 }
 
+/* 表格：格子间留出间距，独立圆角边框，便于分辨 */
+.chat-message__body :deep(table) {
+  width: 100%;
+  margin: 18px 0;
+  border-collapse: separate;
+  border-spacing: 4px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.chat-message__body :deep(th),
+.chat-message__body :deep(td) {
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  vertical-align: top;
+}
+
+.chat-message__body :deep(th) {
+  background: var(--surface-2);
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
 .chat-message__body :deep(.selectable) {
   position: relative;
   padding: 1px 3px 2px;
@@ -195,6 +272,21 @@ const renderedContent = computed(() => {
   text-decoration: underline;
   text-underline-offset: 3px;
   transition: color 0.15s;
+}
+
+/* 划线标记链接：虚线标明原会话中的划线位置 */
+.chat-message__body :deep(a[href^="zhizhi://"]) {
+  color: var(--brand-strong);
+  font-weight: 650;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--brand);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.chat-message__body :deep(a[href^="zhizhi://"]:hover) {
+  color: var(--brand);
 }
 
 .chat-message__body :deep(a:hover) {

@@ -9,12 +9,16 @@ import { parseFrontmatter } from '../parser/frontmatter'
 import type { NoteMeta } from '../types'
 
 /**
- * 会话中的笔记引用
+ * 会话中的划线引用（笔记或分支）
  */
 export interface NoteReference {
   path: string
   title: string
   messageIndex: number
+  /** 划线文本（用于在原会话消息中以虚线标记并跳转） */
+  highlight?: string
+  /** 引用类型：笔记（默认）或分支 */
+  kind?: 'note' | 'branch'
 }
 
 /**
@@ -40,8 +44,12 @@ export async function getNoteSourceSession(
 }
 
 /**
- * 从会话 Markdown 文件中提取生成的笔记引用
- * 查找 > 已生成笔记: [[note-title]] 格式的行
+ * 从会话 Markdown 文件中提取生成的笔记/分支引用
+ *
+ * 格式：
+ *   > 已生成笔记: [[path|title]] 划线「划线文本」
+ *   > 已生成分支: [[branchId|title]] 划线「划线文本」
+ * 向后兼容无划线文本的旧格式（highlight 为空）。
  */
 export function extractNoteRefsFromSession(sessionContent: string): NoteReference[] {
   const refs: NoteReference[] = []
@@ -58,17 +66,21 @@ export function extractNoteRefsFromSession(sessionContent: string): NoteReferenc
       continue
     }
 
-    // 检测笔记引用
-    const noteRefMatch = line.match(/已生成笔记:\s*\[\[(.+?)\]\]/)
-    if (noteRefMatch && currentMessageIndex >= 0) {
-      const reference = noteRefMatch[1]
+    // 检测笔记/分支引用（含可选划线文本）
+    const refMatch = line.match(/已生成(笔记|分支):\s*\[\[(.+?)\]\](?:\s*划线「(.+?)」)?/)
+    if (refMatch && currentMessageIndex >= 0) {
+      const kind = refMatch[1] === '分支' ? 'branch' : 'note'
+      const reference = refMatch[2]
       const separatorIndex = reference.indexOf('|')
       const path = separatorIndex >= 0 ? reference.slice(0, separatorIndex) : reference
       const title = separatorIndex >= 0 ? reference.slice(separatorIndex + 1) : reference.split('/').pop()?.replace(/\.md$/, '') || reference
+      const highlight = refMatch[3]
       refs.push({
         path,
         title,
         messageIndex: currentMessageIndex,
+        kind,
+        ...(highlight ? { highlight } : {}),
       })
     }
   }

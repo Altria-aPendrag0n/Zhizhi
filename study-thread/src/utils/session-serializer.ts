@@ -62,8 +62,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     lines.push('')
     lines.push(msg.content)
     for (const noteRef of noteRefs.filter((ref) => ref.messageIndex === messageIndex)) {
+      const kindLabel = noteRef.kind === 'branch' ? '已生成分支' : '已生成笔记'
+      const highlight = noteRef.highlight ? ` 划线「${noteRef.highlight.replace(/\s+/g, ' ')}」` : ''
       lines.push('')
-      lines.push(`> 已生成笔记: [[${noteRef.path}|${noteRef.title}]]`)
+      lines.push(`> ${kindLabel}: [[${noteRef.path}|${noteRef.title}]]${highlight}`)
     }
     lines.push('')
   }

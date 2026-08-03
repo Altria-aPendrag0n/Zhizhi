@@ -63,4 +63,90 @@ describe('ChatMessage', () => {
     expect(wrapper.find('.chat-message__label').exists()).toBe(true)
     expect(wrapper.find('.chat-message__label').text()).toBe('知枝 · 学习伴读')
   })
+
+  it('AI 消息带 thinking 时渲染思考块（默认折叠）', () => {
+    const message: Message = { role: 'assistant', content: '回答内容', thinking: '思考过程内容' }
+    const wrapper = mount(ChatMessage, { props: { message } })
+
+    expect(wrapper.find('.thinking-block').exists()).toBe(true)
+    expect(wrapper.find('.thinking-block__label').text()).toBe('思考过程')
+    expect(wrapper.text()).toContain('思考过程内容')
+    expect((wrapper.find('.thinking-block__content').element as HTMLElement).style.display).toBe('none')
+  })
+
+  it('AI 消息无 thinking 时不渲染思考块', () => {
+    const message: Message = { role: 'assistant', content: '回答内容' }
+    const wrapper = mount(ChatMessage, { props: { message } })
+    expect(wrapper.find('.thinking-block').exists()).toBe(false)
+  })
+
+  it('划线标记（笔记）在原消息中渲染为虚线跳转链接', () => {
+    const message: Message = { role: 'assistant', content: '这里有一个划线词需要关注' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'notes/测试.md', title: '测试笔记', messageIndex: 0, kind: 'note', highlight: '划线词' }],
+      },
+    })
+    expect(wrapper.html()).toContain('zhizhi://note/')
+    expect(wrapper.find('a[href^="zhizhi://note/"]').text()).toBe('划线词')
+  })
+
+  it('划线标记（分支）在原消息中渲染为分支跳转链接', () => {
+    const message: Message = { role: 'assistant', content: '深入讨论一下这个机制' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'branch_123', title: '分支追问', messageIndex: 0, kind: 'branch', highlight: '这个机制' }],
+      },
+    })
+    expect(wrapper.find('a[href="zhizhi://branch/branch_123"]').text()).toBe('这个机制')
+  })
+
+  it('划线文本跨标记匹配不到时不注入链接，保持消息原样', () => {
+    const message: Message = { role: 'assistant', content: '包含 **加粗标记** 的句子' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '标记 的句子' }],
+      },
+    })
+    expect(wrapper.html()).not.toContain('zhizhi://')
+    expect(wrapper.html()).toContain('<strong>加粗标记</strong>')
+  })
+
+  it('无划线文本的旧引用不注入链接', () => {
+    const message: Message = { role: 'assistant', content: '普通内容' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note' }],
+      },
+    })
+    expect(wrapper.html()).not.toContain('zhizhi://')
+  })
+
+  it('点击划线链接时发出 navigate-link 事件（笔记）', async () => {
+    const message: Message = { role: 'assistant', content: '点击笔记划线处' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '笔记划线处' }],
+      },
+    })
+    await wrapper.find('a[href^="zhizhi://note/"]').trigger('click')
+    expect(wrapper.emitted('navigate-link')?.[0]).toEqual([{ kind: 'note', id: 'notes/a.md' }])
+  })
+
+  it('点击划线链接时发出 navigate-link 事件（分支）', async () => {
+    const message: Message = { role: 'assistant', content: '点击分支划线处' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'branch_9', title: '分支', messageIndex: 0, kind: 'branch', highlight: '分支划线处' }],
+      },
+    })
+    await wrapper.find('a[href="zhizhi://branch/branch_9"]').trigger('click')
+    expect(wrapper.emitted('navigate-link')?.[0]).toEqual([{ kind: 'branch', id: 'branch_9' }])
+  })
 })

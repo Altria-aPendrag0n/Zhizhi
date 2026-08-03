@@ -160,4 +160,36 @@ describe('serializeSession', () => {
     const result = serializeSession(session)
     expect(result).not.toContain('<!-- fork-context -->')
   })
+
+  it('序列化分支引用与划线文本', () => {
+    const session: Session = {
+      id: 'sess-5',
+      title: '引用测试',
+      created: '2024-01-01',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [{ role: 'assistant', content: '回答内容' }],
+    }
+    const result = serializeSession(session, [
+      { path: 'branch_1', title: '分支追问', messageIndex: 0, kind: 'branch', highlight: '划线内容' },
+      { path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '笔记划线' },
+    ])
+    expect(result).toContain('> 已生成分支: [[branch_1|分支追问]] 划线「划线内容」')
+    expect(result).toContain('> 已生成笔记: [[notes/a.md|笔记A]] 划线「笔记划线」')
+  })
+
+  it('旧引用（无划线文本）仍按笔记引用写入', () => {
+    const session: Session = {
+      id: 'sess-6',
+      title: '旧引用',
+      created: '2024-01-01',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [{ role: 'assistant', content: '回答' }],
+    }
+    const result = serializeSession(session, [{ path: 'notes/a.md', title: 'A', messageIndex: 0 }])
+    expect(result).toContain('> 已生成笔记: [[notes/a.md|A]]')
+  })
 })

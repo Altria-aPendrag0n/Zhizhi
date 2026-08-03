@@ -13,6 +13,7 @@
       @add-to-note="handleAddToNote"
       @create-branch="handleCreateBranch"
       @navigate-note="handleNavigateNote"
+      @navigate-branch="handleNavigateBranch"
     />
     <Composer
       :is-streaming="isStreaming"
@@ -452,7 +453,8 @@ async function handleExtractNote(highlightedText: string, domMessageIndex: numbe
 
     // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退（渲染文本与 markdown 源可能不一致）
     const messageIndex = resolveMessageIndex(highlightedText, messages.value, domMessageIndex, 'assistant')
-    extractedNotes.value.push({ path, title: note.title, messageIndex })
+    // 记录划线文本，供原会话消息中以虚线标记并跳转笔记
+    extractedNotes.value.push({ path, title: note.title, messageIndex, kind: 'note', highlight: highlightedText })
     if (threadId) await saveCurrentSession(threadId)
     toast.success('已提炼并保存为原子笔记')
   } catch (e) {
@@ -539,6 +541,16 @@ async function handleCreateBranch(highlightedText: string, domMessageIndex: numb
     return
   }
 
+  // 记录划线文本与分支引用，供原会话消息中以虚线标记并跳转分支
+  extractedNotes.value.push({
+    path: branchId,
+    title: branchTitle,
+    messageIndex: forkMessageIndex,
+    kind: 'branch',
+    highlight: highlightedText,
+  })
+  await saveCurrentSession(threadId)
+
   await vaultStore.refreshFileTree()
   router.push({
     name: 'branch-chat',
@@ -548,6 +560,12 @@ async function handleCreateBranch(highlightedText: string, domMessageIndex: numb
 }
 function handleNavigateNote(path: string) {
   router.push(`/notes/${encodeURIComponent(path)}`)
+}
+
+function handleNavigateBranch(branchId: string) {
+  const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
+  if (!threadId) return
+  router.push({ name: 'branch-chat', params: { sessionId: threadId, branchId } })
 }
 
 function handleStop() {

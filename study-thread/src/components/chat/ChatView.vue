@@ -16,6 +16,8 @@
         <ChatMessage
           :message="msg"
           :note-count="getNoteCountForMessage(index)"
+          :marks="getMarksForMessage(index)"
+          @navigate-link="handleNavigateLink"
         />
         <div v-if="getNotesForMessage(index).length > 0" class="chat-view__note-refs">
           <span class="note-refs-label">已生成笔记：</span>
@@ -95,6 +97,7 @@ const emit = defineEmits<{
   'add-to-note': [text: string]
   'create-branch': [text: string, messageIndex: number | null]
   'navigate-note': [path: string]
+  'navigate-branch': [branchId: string]
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -182,8 +185,18 @@ function handleCreateBranch(text: string, messageIndex: number | null) {
 
 function handleCopy(_text: string) {}
 
+function handleNavigateLink(payload: { kind: 'note' | 'branch'; id: string }) {
+  if (payload.kind === 'note') emit('navigate-note', payload.id)
+  else emit('navigate-branch', payload.id)
+}
+
 function getNotesForMessage(messageIndex: number): NoteReference[] {
-  return (props.noteRefs || []).filter((ref) => ref.messageIndex === messageIndex)
+  // 仅笔记显示在"已生成笔记"按钮区；分支引用通过消息内划线链接跳转
+  return (props.noteRefs || []).filter((ref) => ref.messageIndex === messageIndex && ref.kind !== 'branch')
+}
+
+function getMarksForMessage(messageIndex: number): NoteReference[] {
+  return (props.noteRefs || []).filter((ref) => ref.messageIndex === messageIndex && !!ref.highlight)
 }
 
 function getNoteCountForMessage(messageIndex: number): number {
