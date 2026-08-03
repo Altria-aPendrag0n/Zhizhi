@@ -113,7 +113,7 @@ fork_point: <分叉消息索引>
 - props：`message: Message`、`noteCount?`、`marks?: NoteReference[]`（该消息的划线标记）。
 - 按角色区分样式；assistant 用 `marked(content, {breaks:true, gfm:true})` 渲染 Markdown。
 - 正文容器标记 `data-highlightable="true"` 供划线识别；`thinking` 非空时渲染 `ThinkingBlock`。
-- **划线标记**：渲染前把 `marks` 中的划线文本包裹为自创 HTML 标签 `<a class="zhizhi-mark" data-zhizhi-kind="note|branch" data-zhizhi-id="…">`。用原始 HTML 标签而非 markdown 链接语法（`[text](url)`），避免划线文本含 `*` `[` `]` `|` 等特殊字符、或位于表格/链接内部时破坏语法导致标记消失（marked 对 inline HTML 原样透传）；以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。划线文本跨 markdown 标记（如 `**加粗**`）匹配不到时跳过该标记。
+- **划线标记**：先由 `marked` 渲染出完整 HTML，再用 `document.createTreeWalker` 遍历正文文本节点，`splitText` 拆分并把包含划线文本的片段包裹为 `<a class="zhizhi-mark" data-zhizhi-kind="note|branch" data-zhizhi-id="…">`（**渲染后 DOM 包裹**，不在 markdown 源中插入标签——当划线文本位于 `**加粗**` / `*斜体*` 等行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏成字面 `**`）。以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。执行时机：`onMounted` 兜底 + watch `[renderedContent, marks]`，`nextTick` 后调用，且每轮先 unwrap 旧标记保证幂等。划线文本跨多个文本节点（如跨 `</strong>`）时单节点内匹配不到，跳过该标记。
 
 ### 3.3 `StreamText.vue` — 流式文本
 

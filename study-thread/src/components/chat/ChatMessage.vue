@@ -17,7 +17,7 @@
       <div class="chat-message__answer">
         <p class="chat-message__label">知枝 · 学习伴读</p>
         <ThinkingBlock v-if="message.thinking" :text="message.thinking" />
-        <div class="chat-message__body" data-highlightable="true" v-html="renderedContent" @click="handleBodyClick" />
+        <div ref="bodyRef" class="chat-message__body" data-highlightable="true" v-html="renderedContent" @click="handleBodyClick" />
         <div v-if="noteCount > 0" class="chat-message__source">
           <span class="chat-message__source-dot"></span>
           本次回答已生成 {{ noteCount }} 张原子笔记
@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
@@ -53,41 +53,75 @@ const emit = defineEmits<{
 }>()
 
 const noteCount = computed(() => props.noteCount ?? 0)
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-/**
- * 将划线文本替换为自创 HTML 标签 `<a class="zhizhi-mark">`（虚线标记）。
- *
- * 使用原始 HTML 标签而非 markdown 链接语法（`[text](url)`），避免划线文本含
- * markdown 特殊字符（* [ ] | 等）或位于表格/链接内部时破坏语法导致标记消失；
- * marked 对 inline HTML 原样透传。划线文本跨 markdown 标记（如 **加粗**）导致
- * 源中匹配不到完整子串时跳过该标记（保持消息原样）。
- */
-function injectMarkLinks(content: string, marks: NoteReference[]): string {
-  let result = content
-  for (const mark of marks) {
-    if (!mark.highlight) continue
-    const highlight = mark.highlight.replace(/\s+/g, ' ')
-    if (!highlight || !result.includes(highlight)) continue
-    const kind = mark.kind === 'branch' ? 'branch' : 'note'
-    const id = kind === 'branch' ? mark.path : encodeURIComponent(mark.path)
-    result = result.replace(highlight, (match) =>
-      `<a class="zhizhi-mark" data-zhizhi-kind="${kind}" data-zhizhi-id="${id}">${escapeHtml(match)}</a>`,
-    )
-  }
-  return result
-}
+const bodyRef = ref<HTMLElement | null>(null)
 
 const renderedContent = computed(() => {
-  const content = injectMarkLinks(props.message.content, props.marks || [])
-  return marked(content, {
+  return marked(props.message.content, {
     breaks: true,
     gfm: true,
   }) as string
 })
+
+/**
+ * 在渲染后的 DOM 上把划线文本包裹为虚线跳转链接。
+ *
+ * 不能直接在 markdown 源中插入标签：当划线文本位于 `**加粗**` / `*斜体*` 等
+ * 行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏
+ * （`**` 变成字面文本）。因此先由 marked 渲染出完整 HTML，再用 TreeWalker 遍历
+ * 文本节点，把包含划线文本的片段拆出并包进 `<a class="zhizhi-mark">`。
+ * 划线文本跨多个文本节点（如跨 `</strong>`）时单节点内匹配不到，跳过该标记。
+ */
+function applyMarkLinks() {
+  const body = bodyRef.value
+  if (!body) return
+  // 先清除上一次的标记（unwrap），保证幂等
+  body.querySelectorAll('a.zhizhi-mark').forEach((anchor) => {
+    const parent = anchor.parentNode
+    if (!parent) return
+    while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor)
+    anchor.remove()
+  })
+
+  for (const mark of props.marks || []) {
+    if (!mark.highlight) continue
+    const highlight = mark.highlight.replace(/\s+/g, ' ')
+    if (!highlight) continue
+    // 每条标记重新收集文本节点，避免命中已被前一条标记包裹的文本
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    for (const node of nodes) {
+      const text = node.nodeValue || ''
+      const index = text.indexOf(highlight)
+      if (index === -1) continue
+      // splitText(n) 会把节点在 n 处切开并返回后半段：
+      //   after = 划线文本 + 后缀，再把 after 切开一次得到 after = 划线文本、mid = 后缀
+      const after = node.splitText(index)
+      after.splitText(highlight.length)
+      const anchor = document.createElement('a')
+      anchor.className = 'zhizhi-mark'
+      anchor.dataset.zhizhiKind = mark.kind === 'branch' ? 'branch' : 'note'
+      anchor.dataset.zhizhiId = mark.kind === 'branch' ? mark.path : encodeURIComponent(mark.path)
+      after.parentNode?.insertBefore(anchor, after)
+      anchor.appendChild(after)
+      break
+    }
+  }
+}
+
+// v-html 更新后（nextTick）在 DOM 上应用划线标记。
+// onMounted 兜底保证首次挂载后一定执行（此时 bodyRef 与 v-html 内容均已就绪）；
+// watch 处理内容或划线引用后续变化。applyMarkLinks 内部对 bodyRef 空值做了守卫，幂等。
+function scheduleApplyMarkLinks() {
+  nextTick().then(applyMarkLinks)
+}
+
+onMounted(scheduleApplyMarkLinks)
+watch(
+  [renderedContent, () => props.marks],
+  scheduleApplyMarkLinks,
+  { immediate: true },
+)
 
 function handleBodyClick(event: MouseEvent) {
   const anchor = (event.target as Element).closest?.<HTMLAnchorElement>('a.zhizhi-mark')

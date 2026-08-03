@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ChatMessage from './ChatMessage.vue'
 import type { Message } from '../../types'
 
@@ -80,7 +81,7 @@ describe('ChatMessage', () => {
     expect(wrapper.find('.thinking-block').exists()).toBe(false)
   })
 
-  it('划线标记（笔记）在原消息中渲染为虚线跳转链接', () => {
+  it('划线标记（笔记）在原消息中渲染为虚线跳转链接', async () => {
     const message: Message = { role: 'assistant', content: '这里有一个划线词需要关注' }
     const wrapper = mount(ChatMessage, {
       props: {
@@ -88,13 +89,14 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/测试.md', title: '测试笔记', messageIndex: 0, kind: 'note', highlight: '划线词' }],
       },
     })
+    await nextTick()
     const mark = wrapper.find('a.zhizhi-mark[data-zhizhi-kind="note"]')
     expect(mark.exists()).toBe(true)
     expect(mark.attributes('data-zhizhi-id')).toBe(encodeURIComponent('notes/测试.md'))
     expect(mark.text()).toBe('划线词')
   })
 
-  it('划线标记（分支）在原消息中渲染为分支跳转链接', () => {
+  it('划线标记（分支）在原消息中渲染为分支跳转链接', async () => {
     const message: Message = { role: 'assistant', content: '深入讨论一下这个机制' }
     const wrapper = mount(ChatMessage, {
       props: {
@@ -102,12 +104,13 @@ describe('ChatMessage', () => {
         marks: [{ path: 'branch_123', title: '分支追问', messageIndex: 0, kind: 'branch', highlight: '这个机制' }],
       },
     })
+    await nextTick()
     const mark = wrapper.find('a.zhizhi-mark[data-zhizhi-kind="branch"][data-zhizhi-id="branch_123"]')
     expect(mark.exists()).toBe(true)
     expect(mark.text()).toBe('这个机制')
   })
 
-  it('划线文本含 markdown 特殊字符时标记仍渲染不消失', () => {
+  it('划线文本含 markdown 特殊字符时标记仍渲染不消失', async () => {
     const message: Message = { role: 'assistant', content: '计算 a*b 与 [x] 的结果' }
     const wrapper = mount(ChatMessage, {
       props: {
@@ -115,12 +118,47 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: 'a*b' }],
       },
     })
+    await nextTick()
     const mark = wrapper.find('a.zhizhi-mark')
     expect(mark.exists()).toBe(true)
     expect(mark.text()).toBe('a*b')
   })
 
-  it('划线文本跨标记匹配不到时不注入链接，保持消息原样', () => {
+  it('划线文本位于加粗内时仍正确包裹且保留加粗', async () => {
+    const message: Message = { role: 'assistant', content: '重点在于 **虾蛄并不是真正的虾** 这句话' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'branch_1', title: '分支', messageIndex: 0, kind: 'branch', highlight: '虾蛄并不是真正的虾' }],
+      },
+    })
+    await nextTick()
+    const mark = wrapper.find('a.zhizhi-mark')
+    expect(mark.exists()).toBe(true)
+    expect(mark.text()).toBe('虾蛄并不是真正的虾')
+    // 加粗结构保留：mark 应位于 <strong> 内部
+    expect(mark.element.parentElement?.tagName).toBe('STRONG')
+    // 不出现字面 ** 残留
+    expect(wrapper.text()).not.toContain('**')
+  })
+
+  it('划线文本位于斜体内时仍正确包裹', async () => {
+    const message: Message = { role: 'assistant', content: '这里是 *斜体划线文本* 示例' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '斜体划线文本' }],
+      },
+    })
+    await nextTick()
+    const mark = wrapper.find('a.zhizhi-mark')
+    expect(mark.exists()).toBe(true)
+    expect(mark.text()).toBe('斜体划线文本')
+    expect(mark.element.parentElement?.tagName).toBe('EM')
+    expect(wrapper.text()).not.toContain('*')
+  })
+
+  it('划线文本跨标记匹配不到时不注入链接，保持消息原样', async () => {
     const message: Message = { role: 'assistant', content: '包含 **加粗标记** 的句子' }
     const wrapper = mount(ChatMessage, {
       props: {
@@ -128,11 +166,12 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '标记 的句子' }],
       },
     })
+    await nextTick()
     expect(wrapper.html()).not.toContain('zhizhi-mark')
     expect(wrapper.html()).toContain('<strong>加粗标记</strong>')
   })
 
-  it('无划线文本的旧引用不注入链接', () => {
+  it('无划线文本的旧引用不注入链接', async () => {
     const message: Message = { role: 'assistant', content: '普通内容' }
     const wrapper = mount(ChatMessage, {
       props: {
@@ -140,6 +179,7 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note' }],
       },
     })
+    await nextTick()
     expect(wrapper.html()).not.toContain('zhizhi-mark')
   })
 
@@ -151,6 +191,7 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '笔记划线处' }],
       },
     })
+    await nextTick()
     await wrapper.find('a.zhizhi-mark[data-zhizhi-kind="note"]').trigger('click')
     expect(wrapper.emitted('navigate-link')?.[0]).toEqual([{ kind: 'note', id: 'notes/a.md' }])
   })
@@ -163,6 +204,7 @@ describe('ChatMessage', () => {
         marks: [{ path: 'branch_9', title: '分支', messageIndex: 0, kind: 'branch', highlight: '分支划线处' }],
       },
     })
+    await nextTick()
     await wrapper.find('a.zhizhi-mark[data-zhizhi-kind="branch"]').trigger('click')
     expect(wrapper.emitted('navigate-link')?.[0]).toEqual([{ kind: 'branch', id: 'branch_9' }])
   })
