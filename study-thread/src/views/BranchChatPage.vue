@@ -529,13 +529,18 @@ function handleNavigate(target: string) {
   font-weight: 650;
 }
 
-/* 划线内容以特殊颜色标明 */
+/* 划线内容以特殊颜色明显凸显，划线处下方渲染虚线 */
 .fork-context__content :deep(mark.fork-highlight) {
-  background: var(--brand-soft);
-  color: var(--brand-strong);
-  padding: 0 2px;
+  background: var(--brand);
+  color: #fff;
+  padding: 1px 3px;
   border-radius: 3px;
   font-weight: 650;
+  /* 划线处下方的虚线（跟随文字，白点在品牌色底上清晰可见） */
+  text-decoration: underline dotted;
+  text-decoration-color: #fff;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .fork-context__content :deep(blockquote) {
