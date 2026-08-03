@@ -39,6 +39,7 @@ import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
+import { wrapHighlightInDOM, unwrapHighlight } from '../../utils/highlight-dom'
 import ThinkingBlock from './ThinkingBlock.vue'
 
 const props = defineProps<{
@@ -67,45 +68,26 @@ const renderedContent = computed(() => {
  *
  * 不能直接在 markdown 源中插入标签：当划线文本位于 `**加粗**` / `*斜体*` 等
  * 行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏
- * （`**` 变成字面文本）。因此先由 marked 渲染出完整 HTML，再用 TreeWalker 遍历
- * 文本节点，把包含划线文本的片段拆出并包进 `<a class="zhizhi-mark">`。
- * 划线文本跨多个文本节点（如跨 `</strong>`）时单节点内匹配不到，跳过该标记。
+ * （`**` 变成字面文本）。因此先由 marked 渲染出完整 HTML，再借助
+ * `wrapHighlightInDOM`（拼接全部文本节点定位起止区间，跨节点切分合并）把划线
+ * 文本包进 `<a class="zhizhi-mark">`——划线文本位于单个文本节点内、或跨加粗/斜体
+ * 边界（如用户划选了 `名字——**"富贵虾"**` 的视觉范围）都能正确显示虚线。
  */
 function applyMarkLinks() {
   const body = bodyRef.value
   if (!body) return
   // 先清除上一次的标记（unwrap），保证幂等
-  body.querySelectorAll('a.zhizhi-mark').forEach((anchor) => {
-    const parent = anchor.parentNode
-    if (!parent) return
-    while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor)
-    anchor.remove()
-  })
+  unwrapHighlight(body, 'a', 'zhizhi-mark')
 
   for (const mark of props.marks || []) {
     if (!mark.highlight) continue
     const highlight = mark.highlight.replace(/\s+/g, ' ')
     if (!highlight) continue
-    // 每条标记重新收集文本节点，避免命中已被前一条标记包裹的文本
-    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
-    const nodes: Text[] = []
-    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
-    for (const node of nodes) {
-      const text = node.nodeValue || ''
-      const index = text.indexOf(highlight)
-      if (index === -1) continue
-      // splitText(n) 会把节点在 n 处切开并返回后半段：
-      //   after = 划线文本 + 后缀，再把 after 切开一次得到 after = 划线文本、mid = 后缀
-      const after = node.splitText(index)
-      after.splitText(highlight.length)
-      const anchor = document.createElement('a')
-      anchor.className = 'zhizhi-mark'
-      anchor.dataset.zhizhiKind = mark.kind === 'branch' ? 'branch' : 'note'
-      anchor.dataset.zhizhiId = mark.kind === 'branch' ? mark.path : encodeURIComponent(mark.path)
-      after.parentNode?.insertBefore(anchor, after)
-      anchor.appendChild(after)
-      break
-    }
+    const kind = mark.kind === 'branch' ? 'branch' : 'note'
+    const wrapper = wrapHighlightInDOM(body, highlight, 'a', 'zhizhi-mark')
+    if (!wrapper) continue
+    wrapper.dataset.zhizhiKind = kind
+    wrapper.dataset.zhizhiId = kind === 'branch' ? mark.path : encodeURIComponent(mark.path)
   }
 }
 

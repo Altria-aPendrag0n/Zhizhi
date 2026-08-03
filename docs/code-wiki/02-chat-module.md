@@ -56,8 +56,9 @@
 **面包屑**：`主会话 / 分支追问` 两级（`BranchBreadcrumb`），点击返回主会话。
 
 **分叉点上下文（页面顶部区域）**：
-- 内容 = 划线内容所在消息中**划线文本上下各三句话**（`aroundHighlight`，按句末标点或换行切分句子），前一条消息只取最后三句；划线文本用 `<mark class="fork-highlight">` 包裹，markdown 渲染后以品牌色实底白字明显凸显，并在划线处下方渲染虚线。
+- 内容 = 划线内容所在消息中**划线文本上下各三句话**（`aroundHighlight`，按句末标点或换行切分句子），前一条消息只取最后三句；划线文本以品牌色实底白字明显凸显，并在划线处下方渲染虚线。
 - 划线文本来自 DOM（渲染后），可能跨 markdown 标记（如 `**加粗**`）导致源文本匹配不到——先原文匹配、失败后用移除标记的宽松匹配（`normalizeForMatch`）定位划线所在句；定位不到时退化为消息开头若干句、不加高亮。
+- 高亮实现：**不在源文本中预插 `<mark>`（跨标记时会被 marked 破坏语法）**。创建分支时把划线文本持久化到分支文件 frontmatter `fork_highlight`（JSON 字符串保证 YAML 安全）；页面渲染分叉点上下文后，用 `wrapHighlightInDOM` 在 DOM 上把划线文本包裹为 `<mark class="fork-highlight">`（先 unwrap 旧标记保证幂等）。
 - 创建分支时由 `createBranchInVault` 用 `buildForkContextPreview(父会话消息, forkMessageIndex, highlightedText)` 生成，随分支文件持久化。
 
 **分支会话文件格式**（`sessions/branch-*.md`）：
@@ -67,13 +68,14 @@
 session_id: branch_xxx
 parent_session: <主会话 id>
 fork_point: <分叉消息索引>
+fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 ---
 
 <!-- fork-context -->
 （前一条 · 知枝）
 …最后三句…
 （划线内容 · 知枝）
-…划线文本上下各三句（划线文本含 <mark class="fork-highlight">）…
+…划线文本上下各三句（原文可匹配时划线文本含 <mark class="fork-highlight">，跨标记时不插标签，由 DOM 高亮兜底）…
 <!-- /fork-context -->
 
 ## 用户 · …
@@ -113,7 +115,7 @@ fork_point: <分叉消息索引>
 - props：`message: Message`、`noteCount?`、`marks?: NoteReference[]`（该消息的划线标记）。
 - 按角色区分样式；assistant 用 `marked(content, {breaks:true, gfm:true})` 渲染 Markdown。
 - 正文容器标记 `data-highlightable="true"` 供划线识别；`thinking` 非空时渲染 `ThinkingBlock`。
-- **划线标记**：先由 `marked` 渲染出完整 HTML，再用 `document.createTreeWalker` 遍历正文文本节点，`splitText` 拆分并把包含划线文本的片段包裹为 `<a class="zhizhi-mark" data-zhizhi-kind="note|branch" data-zhizhi-id="…">`（**渲染后 DOM 包裹**，不在 markdown 源中插入标签——当划线文本位于 `**加粗**` / `*斜体*` 等行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏成字面 `**`）。以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。执行时机：`onMounted` 兜底 + watch `[renderedContent, marks]`，`nextTick` 后调用，且每轮先 unwrap 旧标记保证幂等。划线文本跨多个文本节点（如跨 `</strong>`）时单节点内匹配不到，跳过该标记。
+- **划线标记**：先由 `marked` 渲染出完整 HTML，再用 `wrapHighlightInDOM`（`src/utils/highlight-dom.ts`）把划线文本包裹为 `<a class="zhizhi-mark" data-zhizhi-kind="note|branch" data-zhizhi-id="…">`（**渲染后 DOM 包裹**，不在 markdown 源中插入标签——当划线文本位于 `**加粗**` / `*斜体*` 等行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏成字面 `**`）。该工具拼接全部文本节点定位划线起止区间并跨节点切分合并，因此划线文本位于单个文本节点内、或跨加粗/斜体边界（如划选 `名字——**"富贵虾"**` 的视觉范围）时都能正确显示虚线。以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。执行时机：`onMounted` 兜底 + watch `[renderedContent, marks]`，`nextTick` 后调用，且每轮先 `unwrapHighlight` 旧标记保证幂等。
 
 ### 3.3 `StreamText.vue` — 流式文本
 

@@ -45,6 +45,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
   if (session.fork_point) {
     lines.push(`fork_point: ${session.fork_point}`)
   }
+  if (session.fork_highlight) {
+    // 划线文本可能含引号/特殊字符，用 JSON 字符串保证 YAML 解析安全
+    lines.push(`fork_highlight: ${JSON.stringify(session.fork_highlight)}`)
+  }
   lines.push('---')
   lines.push('')
 

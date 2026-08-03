@@ -152,6 +152,8 @@ export const useSessionStore = defineStore('session', () => {
       // 分叉点上下文（划线内容上下各三句话）随分支文件持久化，供前端识别渲染
       const forkContextText = buildForkContextPreview(parentSession.messages, forkMessageIndex, highlightedText)
       if (forkContextText) branchSession.fork_context = forkContextText
+      // 划线文本持久化到 frontmatter，供分叉点上下文渲染后 DOM 高亮定位
+      if (highlightedText) branchSession.fork_highlight = highlightedText
 
       const branchFile = await saveSessionToVault(vaultPath, branchSession, true)
       addBranchToSessionTree(parentSession.id, branchId, branchTitle, branchFile)

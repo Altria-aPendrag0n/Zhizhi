@@ -176,12 +176,30 @@ function findHighlightSentence(sentences: string[], highlightedText: string): nu
 }
 
 /**
+ * 在句子源文本中定位划线文本并包裹 `<mark class="fork-highlight">`。
+ *
+ * 划线文本来自 DOM（渲染后），源文本中可能被 markdown 内联标记（如 `**`）打断，
+ * 原文直接匹配不到（如源为 `——**"富贵虾"**`、DOM 划线文本为 `——"富贵虾"`）。
+ * 这种情况返回 null：分叉点上下文渲染后会由前端按 frontmatter 的 `fork_highlight`
+ * 在 DOM 上跨节点包裹高亮（见 BranchChatPage），源文本里不插脏标签。
+ */
+function wrapHighlight(source: string, highlightedText: string): string | null {
+  const direct = source.indexOf(highlightedText)
+  if (direct === -1) return null
+  return (
+    source.slice(0, direct)
+    + `<mark class="fork-highlight">${highlightedText}</mark>`
+    + source.slice(direct + highlightedText.length)
+  )
+}
+
+/**
  * 围绕划线文本展示其所在句子的上下各 count 句
  *
  * 划线文本缺失或无法定位（渲染后文本与 markdown 源不一致）时，
  * 退化为展示消息开头的若干句子。
- * 原文可直接匹配时用 `<mark class="fork-highlight">` 包裹划线文本，
- * 前端以 markdown 渲染并高亮标明；仅宽松匹配（划线跨标记）时整句展示不加高亮。
+ * 用 `wrapHighlight` 把划线文本包裹为 `<mark class="fork-highlight">`（原文匹配，
+ * 或划线文本被标记打断时的宽松匹配），前端以 markdown 渲染并高亮标明。
  */
 function aroundHighlight(content: string, highlightedText: string | undefined, count = 3): string {
   const sentences = splitSentences(content)
@@ -197,12 +215,9 @@ function aroundHighlight(content: string, highlightedText: string | undefined, c
   const picked = sentences.slice(start, end)
   if (targetIndex !== -1 && targetIndex >= start && targetIndex < end) {
     const withinIndex = targetIndex - start
-    const sentence = picked[withinIndex]
-    if (sentence.includes(highlightedText as string)) {
-      picked[withinIndex] = sentence.replace(
-        highlightedText as string,
-        (match) => `<mark class="fork-highlight">${match}</mark>`,
-      )
+    const wrapped = wrapHighlight(picked[withinIndex], highlightedText as string)
+    if (wrapped !== null) {
+      picked[withinIndex] = wrapped
     }
   }
   return picked.join('\n')

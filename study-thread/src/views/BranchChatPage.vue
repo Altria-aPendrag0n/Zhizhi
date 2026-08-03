@@ -9,7 +9,7 @@
       <div class="fork-context__header">
         <span class="fork-context__label">分叉点上下文</span>
       </div>
-      <div class="fork-context__content" v-html="renderedForkContext" />
+      <div ref="forkContextRef" class="fork-context__content" v-html="renderedForkContext" />
     </div>
 
     <div class="branch-chat__body">
@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, reactive } from 'vue'
+import { ref, computed, onMounted, watch, reactive, nextTick } from 'vue'
 import { marked } from 'marked'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '../stores/settings'
@@ -80,6 +80,7 @@ import { resolveMessageIndex } from '../utils/message-locator'
 import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
+import { wrapHighlightInDOM, unwrapHighlight } from '../utils/highlight-dom'
 import { useToast } from '../composables/useToast'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
@@ -103,6 +104,9 @@ const streamingText = ref('')
 const streamingThinking = ref('')
 const error = ref<string | null>(null)
 const forkContext = ref<string>('')
+const forkContextRef = ref<HTMLElement | null>(null)
+/** 划线文本（frontmatter fork_highlight），用于分叉点上下文渲染后 DOM 高亮定位 */
+const forkHighlight = ref<string>('')
 
 /** 分叉点上下文用 markdown 渲染（划线内容本身可能含 markdown 标记） */
 const renderedForkContext = computed(() => {
@@ -111,6 +115,15 @@ const renderedForkContext = computed(() => {
     breaks: true,
     gfm: true,
   }) as string
+})
+
+/** v-html 更新后在 DOM 上把划线文本高亮（跨标记/跨节点均可定位，先 unwrap 旧标记保证幂等） */
+watch(renderedForkContext, async () => {
+  await nextTick()
+  const body = forkContextRef.value
+  if (!body || !forkHighlight.value) return
+  unwrapHighlight(body, 'mark', 'fork-highlight')
+  wrapHighlightInDOM(body, forkHighlight.value, 'mark', 'fork-highlight')
 })
 
 /** 摘录为笔记弹窗状态 */
@@ -173,6 +186,7 @@ async function loadContext() {
     if (meta.fork_point && !Number.isNaN(storedForkIndex)) {
       forkIndex.value = storedForkIndex
     }
+    forkHighlight.value = typeof meta.fork_highlight === 'string' ? meta.fork_highlight : ''
     forkContextFromFile = extractForkContext(body)
     savedMessages = parseMessages(body, Number.MAX_SAFE_INTEGER)
   } catch {
@@ -208,6 +222,7 @@ function getCurrentSession(): Session {
     messages: messages.value.map((message) => ({ ...message })),
     // 分叉点上下文随分支文件持久化，重新进入分支会话时前端识别渲染
     fork_context: forkContext.value || undefined,
+    fork_highlight: forkHighlight.value || undefined,
   }
 }
 

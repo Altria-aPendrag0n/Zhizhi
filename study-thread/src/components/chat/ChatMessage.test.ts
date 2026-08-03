@@ -158,7 +158,21 @@ describe('ChatMessage', () => {
     expect(wrapper.text()).not.toContain('*')
   })
 
-  it('划线文本跨标记匹配不到时不注入链接，保持消息原样', async () => {
+  it('划线文本跨加粗边界时仍正确包裹（如划选 ——**"富贵虾"** 的视觉范围）', async () => {
+    const message: Message = { role: 'assistant', content: '取了个讨喜的名字——**"富贵虾"**，听起来不错' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'branch_2', title: '分支追问', messageIndex: 0, kind: 'branch', highlight: '——"富贵虾"' }],
+      },
+    })
+    await nextTick()
+    const mark = wrapper.find('a.zhizhi-mark')
+    expect(mark.exists()).toBe(true)
+    expect(mark.text()).toBe('——"富贵虾"')
+  })
+
+  it('划线文本跨标记（如加粗边界）时也能匹配并包裹', async () => {
     const message: Message = { role: 'assistant', content: '包含 **加粗标记** 的句子' }
     const wrapper = mount(ChatMessage, {
       props: {
@@ -167,8 +181,9 @@ describe('ChatMessage', () => {
       },
     })
     await nextTick()
-    expect(wrapper.html()).not.toContain('zhizhi-mark')
-    expect(wrapper.html()).toContain('<strong>加粗标记</strong>')
+    const mark = wrapper.find('a.zhizhi-mark')
+    expect(mark.exists()).toBe(true)
+    expect(mark.text()).toBe('标记 的句子')
   })
 
   it('无划线文本的旧引用不注入链接', async () => {

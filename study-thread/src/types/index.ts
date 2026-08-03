@@ -23,6 +23,8 @@ export interface Session {
   messages: Message[]
   /** 分叉点上下文预览（划线内容及附近文本），仅分支会话持久化到文件正文开头 */
   fork_context?: string
+  /** 划线文本（DOM 选择），供分叉点上下文渲染后高亮定位；仅分支会话持久化到 frontmatter */
+  fork_highlight?: string
 }
 
 export interface Message {
