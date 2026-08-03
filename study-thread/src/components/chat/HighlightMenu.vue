@@ -8,6 +8,10 @@
       @click.stop
     >
       <div class="highlight-menu__arrow" />
+      <button v-if="showAddToNote" class="highlight-menu__item" @click="handleAddToNote">
+        <BookmarkPlus :size="15" />
+        <span>加入笔记</span>
+      </button>
       <button class="highlight-menu__item" @click="handleExtractNote">
         <FileText :size="15" />
         <span>摘录为笔记</span>
@@ -26,19 +30,24 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { FileText, GitBranch, Copy } from '@lucide/vue'
+import { BookmarkPlus, FileText, GitBranch, Copy } from '@lucide/vue'
 
 const props = defineProps<{
   visible: boolean
   x: number
   y: number
   highlightedText: string
+  /** 划线所在的消息索引（DOM 定位，避免文本匹配失败）；无则为 null */
+  messageIndex?: number | null
+  /** 是否显示"加入笔记"选项（仅会话划线菜单启用） */
+  showAddToNote?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  'extract-note': [text: string]
-  'create-branch': [text: string]
+  'extract-note': [text: string, messageIndex: number | null]
+  'add-to-note': [text: string]
+  'create-branch': [text: string, messageIndex: number | null]
   copy: [text: string]
 }>()
 
@@ -49,13 +58,18 @@ const menuStyle = computed(() => ({
   top: `${props.y}px`,
 }))
 
+function handleAddToNote() {
+  if (props.highlightedText) emit('add-to-note', props.highlightedText)
+  emit('close')
+}
+
 function handleExtractNote() {
-  if (props.highlightedText) emit('extract-note', props.highlightedText)
+  if (props.highlightedText) emit('extract-note', props.highlightedText, props.messageIndex ?? null)
   emit('close')
 }
 
 function handleCreateBranch() {
-  if (props.highlightedText) emit('create-branch', props.highlightedText)
+  if (props.highlightedText) emit('create-branch', props.highlightedText, props.messageIndex ?? null)
   emit('close')
 }
 

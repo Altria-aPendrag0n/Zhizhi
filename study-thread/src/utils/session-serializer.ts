@@ -6,6 +6,7 @@
 import type { Session, Message } from '../types'
 import type { NoteReference } from './session-linker'
 import { writeFile, createDir } from './vault-fs'
+import { serializeForkContext } from './branch-context'
 
 /**
  * 生成会话标题（取首条用户消息前 30 字）
@@ -46,6 +47,12 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
   }
   lines.push('---')
   lines.push('')
+
+  // 分叉点上下文（分支会话）：持久化到正文开头，前端识别后渲染
+  if (session.fork_context) {
+    lines.push(serializeForkContext(session.fork_context))
+    lines.push('')
+  }
 
   // 消息内容
   for (const [messageIndex, msg] of session.messages.entries()) {

@@ -1,28 +1,40 @@
-﻿<template>
+<template>
   <div class="main-chat-page">
     <ChatView
       :messages="messages"
       :is-streaming="isStreaming"
       :streaming-text="streamingText"
+      :streaming-thinking="streamingThinking"
+      :streaming-tool-status="toolStatus"
       :error="error"
       :note-refs="noteRefs"
       @retry="handleRetry"
       @extract-note="handleExtractNote"
+      @add-to-note="handleAddToNote"
       @create-branch="handleCreateBranch"
       @navigate-note="handleNavigateNote"
     />
     <Composer
       :is-streaming="isStreaming"
-      :disabled="false"
+      :disabled="isStreaming"
       placeholder="继续追问，或粘贴一段想要拆解的概念…"
       @send="handleSend"
       @stop="handleStop"
+    />
+    <AddToNoteDialog
+      :visible="addToNoteDialog.visible"
+      :highlighted-text="addToNoteDialog.highlightedText"
+      :notes="noteStore.notes"
+      :saving="addToNoteDialog.saving"
+      :error="addToNoteDialog.error"
+      @close="closeAddToNote"
+      @confirm="confirmAddToNote"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, inject, computed } from 'vue'
+import { ref, watch, inject, computed, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { Message, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
@@ -31,14 +43,20 @@ import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
 import { createProvider } from '../api/provider-factory'
 import { extractNote } from '../api/skills/extract-note'
+import { chatWithTools } from '../api/chat-loop'
+import { CLIENT_TOOLS } from '../api/tools'
 import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession } from '../utils/session-linker'
+import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { useToast } from '../composables/useToast'
 import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
+import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
 import { loadStoredValue, saveStoredValue } from '../utils/local-storage'
+import { resolveMessageIndex } from '../utils/message-locator'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
+import AddToNoteDialog from '../components/notes/AddToNoteDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -51,8 +69,18 @@ const updateThreadTitle = inject<(id: string, title: string) => void>('updateThr
 const messages = ref<Message[]>([])
 const isStreaming = ref(false)
 const streamingText = ref('')
+const streamingThinking = ref('')
+/** 工具调用状态提示（如"正在查阅参考资料"） */
+const toolStatus = ref('')
 const error = ref<string | null>(null)
 const extractedNotes = ref<NoteReference[]>([])
+/** 加入笔记弹窗状态 */
+const addToNoteDialog = reactive({
+  visible: false,
+  highlightedText: '',
+  saving: false,
+  error: '',
+})
 let abortController: AbortController | null = null
 const LOCAL_THREAD_MESSAGES_KEY = 'study-thread-messages'
 
@@ -294,6 +322,7 @@ async function handleSend(content: string) {
   messages.value.push(aiMessage)
   isStreaming.value = true
   streamingText.value = ''
+  streamingThinking.value = ''
 
   const finalizeResponse = async () => {
     if (responseFinalized) return
@@ -303,12 +332,15 @@ async function handleSend(content: string) {
 
     if (streamingText.value) {
       aiMessage.content = streamingText.value
+      aiMessage.thinking = streamingThinking.value || undefined
     } else if (messages.value[messages.value.length - 1] === aiMessage) {
       messages.value.pop()
     }
 
     saveThreadMessages(threadId)
     streamingText.value = ''
+    streamingThinking.value = ''
+    toolStatus.value = ''
     await saveCurrentSession(threadId)
   }
 
@@ -318,19 +350,40 @@ async function handleSend(content: string) {
     abortController = controller
 
     // 构建消息列表（system prompt + 历史消息，不包括空的 AI 占位）
-    const chatMessages = [
-      { role: 'system' as const, content: SYSTEM_PROMPT },
-      ...messages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
-    ]
+    // 检索知识库内容注入系统提示（失败不影响聊天）
+    let knowledgeContext = ''
+    try {
+      knowledgeContext = await retrieveKnowledgeContext(content)
+    } catch {
+      knowledgeContext = ''
+    }
+    const systemPrompt = knowledgeContext ? `${SYSTEM_PROMPT}\n\n${knowledgeContext}` : SYSTEM_PROMPT
 
-    for await (const chunk of provider.chat(chatMessages, {
+    // 构建历史消息（不含 system；systemPrompt 单独传给 provider）
+    const chatMessages: Message[] = messages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
+
+    for await (const chunk of chatWithTools({
+      provider,
+      messages: chatMessages,
+      systemPrompt,
+      tools: CLIENT_TOOLS,
+      toolContext: { vaultPath: vaultStore.vaultPath || '' },
       model: config.model,
       signal: controller.signal,
+      enableWebSearch: config.enableWebSearch,
     })) {
       switch (chunk.type) {
         case 'text':
-        case 'thinking':
           streamingText.value += chunk.content
+          break
+        case 'thinking':
+          streamingThinking.value += chunk.content
+          break
+        case 'tool_call':
+          toolStatus.value = '正在查阅参考资料…'
+          break
+        case 'tool_result':
+          toolStatus.value = '正在整理答案…'
           break
         case 'stop':
           await finalizeResponse()
@@ -340,6 +393,8 @@ async function handleSend(content: string) {
           messages.value.pop()
           isStreaming.value = false
           streamingText.value = ''
+          streamingThinking.value = ''
+          toolStatus.value = ''
           break
       }
     }
@@ -354,6 +409,7 @@ async function handleSend(content: string) {
       messages.value.pop()
       isStreaming.value = false
       streamingText.value = ''
+      streamingThinking.value = ''
     }
   } finally {
     abortController = null
@@ -374,7 +430,7 @@ async function saveCurrentSession(threadId: string): Promise<string | null> {
   return vaultStore.saveCurrentSession(session, false, extractedNotes.value)
 }
 
-async function handleExtractNote(highlightedText: string) {
+async function handleExtractNote(highlightedText: string, domMessageIndex: number | null = null) {
   const config = settingsStore.getProviderConfig()
   if (!config.apiKey) {
     toast.error('请先在设置页面配置 API Key')
@@ -394,14 +450,8 @@ async function handleExtractNote(highlightedText: string) {
     const path = await noteStore.saveNote(vaultStore.vaultPath, note, sourceSession, highlightedText)
     if (!path) throw new Error('笔记保存失败')
 
-    let messageIndex = -1
-    for (let index = messages.value.length - 1; index >= 0; index--) {
-      const message = messages.value[index]
-      if (message.role === 'assistant' && message.content.includes(highlightedText)) {
-        messageIndex = index
-        break
-      }
-    }
+    // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退（渲染文本与 markdown 源可能不一致）
+    const messageIndex = resolveMessageIndex(highlightedText, messages.value, domMessageIndex, 'assistant')
     extractedNotes.value.push({ path, title: note.title, messageIndex })
     if (threadId) await saveCurrentSession(threadId)
     toast.success('已提炼并保存为原子笔记')
@@ -409,20 +459,57 @@ async function handleExtractNote(highlightedText: string) {
     toast.error(e instanceof Error ? e.message : '笔记提炼失败')
   }
 }
-async function handleCreateBranch(highlightedText: string) {
+async function handleAddToNote(highlightedText: string) {
+  if (!vaultStore.vaultPath) {
+    toast.error('请先在设置中选择本地 Vault')
+    return
+  }
+  if (noteStore.notes.length === 0) {
+    await noteStore.loadAllNotes(vaultStore.vaultPath)
+  }
+  if (noteStore.notes.length === 0) {
+    toast.error('还没有笔记，请先在会话中摘录一条笔记')
+    return
+  }
+  addToNoteDialog.highlightedText = highlightedText
+  addToNoteDialog.error = ''
+  addToNoteDialog.visible = true
+}
+
+function closeAddToNote() {
+  if (addToNoteDialog.saving) return
+  addToNoteDialog.visible = false
+}
+
+async function confirmAddToNote(target: AddToNoteTarget) {
+  addToNoteDialog.saving = true
+  addToNoteDialog.error = ''
+  try {
+    const note = await noteStore.loadNote(target.notePath)
+    if (!note) throw new Error('笔记不存在或无法读取')
+    const newBody = target.headingLine === null
+      ? insertHighlightAtEnd(target.body, addToNoteDialog.highlightedText)
+      : insertHighlightAt(target.body, target.headingLine, addToNoteDialog.highlightedText)
+    const saved = await noteStore.updateNote({ ...note, content: newBody })
+    if (!saved) throw new Error('写入笔记失败')
+    addToNoteDialog.visible = false
+    toast.success('已加入笔记')
+  } catch (e) {
+    addToNoteDialog.error = e instanceof Error ? e.message : '加入笔记失败'
+  } finally {
+    addToNoteDialog.saving = false
+  }
+}
+
+async function handleCreateBranch(highlightedText: string, domMessageIndex: number | null = null) {
   const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
   if (!threadId || !vaultStore.vaultPath) {
     toast.error('请先选择 Vault 并打开一个会话')
     return
   }
 
-  let forkMessageIndex = -1
-  for (let index = messages.value.length - 1; index >= 0; index--) {
-    if (messages.value[index].content.includes(highlightedText)) {
-      forkMessageIndex = index
-      break
-    }
-  }
+  // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退
+  const forkMessageIndex = resolveMessageIndex(highlightedText, messages.value, domMessageIndex)
   if (forkMessageIndex === -1) {
     toast.error('未找到划线内容所在的消息')
     return
@@ -443,6 +530,8 @@ async function handleCreateBranch(highlightedText: string) {
     parentSession,
     forkMessageIndex,
     branchTitle,
+    undefined,
+    highlightedText,
   )
 
   if (!branchId) {

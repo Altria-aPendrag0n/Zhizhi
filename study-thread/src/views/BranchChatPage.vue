@@ -9,9 +9,7 @@
       <div class="fork-context__header">
         <span class="fork-context__label">分叉点上下文</span>
       </div>
-      <div class="fork-context__content">
-        {{ forkContext }}
-      </div>
+      <div class="fork-context__content" v-html="renderedForkContext" />
     </div>
 
     <div class="branch-chat__body">
@@ -19,10 +17,12 @@
         :messages="messages"
         :is-streaming="isStreaming"
         :streaming-text="streamingText"
+        :streaming-thinking="streamingThinking"
         :error="error"
         :note-refs="noteRefs"
         @retry="handleRetry"
         @extract-note="handleExtractNote"
+        @add-to-note="handleAddToNote"
         @create-branch="handleCreateBranch"
         @navigate-note="handleNavigateNote"
       />
@@ -45,11 +45,22 @@
       @close="cancelExtract"
       @confirm="confirmExtract"
     />
+
+    <AddToNoteDialog
+      :visible="addToNoteDialog.visible"
+      :highlighted-text="addToNoteDialog.highlightedText"
+      :notes="noteStore.notes"
+      :saving="addToNoteDialog.saving"
+      :error="addToNoteDialog.error"
+      @close="closeAddToNote"
+      @confirm="confirmAddToNote"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, reactive } from 'vue'
+import { marked } from 'marked'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
@@ -59,16 +70,21 @@ import { createProvider } from '../api/provider-factory'
 import { branchFollowupStream } from '../api/skills/branch-followup'
 import { extractNote } from '../api/skills/extract-note'
 import type { Message, Session, ExtractedNote } from '../types'
-import { loadBranchContext } from '../utils/branch-context'
+import { loadBranchContext, buildForkContextPreview, stripInheritedContext, extractForkContext, parseMessages } from '../utils/branch-context'
+import { parseFrontmatter } from '../parser/frontmatter'
 import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession } from '../utils/session-linker'
+import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
+import { resolveMessageIndex } from '../utils/message-locator'
 import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
+import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
 import { useToast } from '../composables/useToast'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 import BranchBreadcrumb, { type BreadcrumbItem } from '../components/chat/BranchBreadcrumb.vue'
 import ExtractNoteDialog from '../components/notes/ExtractNoteDialog.vue'
+import AddToNoteDialog from '../components/notes/AddToNoteDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,8 +99,18 @@ const forkMessages = ref<Message[]>([])
 const extractedNotes = ref<NoteReference[]>([])
 const isStreaming = ref(false)
 const streamingText = ref('')
+const streamingThinking = ref('')
 const error = ref<string | null>(null)
 const forkContext = ref<string>('')
+
+/** 分叉点上下文用 markdown 渲染（划线内容本身可能含 markdown 标记） */
+const renderedForkContext = computed(() => {
+  if (!forkContext.value) return ''
+  return marked.parse(forkContext.value, {
+    breaks: true,
+    gfm: true,
+  }) as string
+})
 
 /** 摘录为笔记弹窗状态 */
 const extractDialog = reactive({
@@ -93,15 +119,26 @@ const extractDialog = reactive({
   saving: false,
   title: '',
   highlightedText: '',
+  /** 划线时 DOM 定位的消息索引（渲染文本与 markdown 源不一致时仍可靠） */
+  messageIndex: null as number | null,
   error: '',
   draft: null as ExtractedNote | null,
+})
+
+/** 加入笔记弹窗状态 */
+const addToNoteDialog = reactive({
+  visible: false,
+  highlightedText: '',
+  saving: false,
+  error: '',
 })
 
 const noteRefs = computed(() => extractedNotes.value)
 
 const sessionId = computed(() => route.params.sessionId as string)
 const branchId = computed(() => route.params.branchId as string)
-const forkIndex = computed(() => Number(route.query.fork_index || 0))
+/** 分叉点消息索引：以分支文件 frontmatter 的 fork_point 为准（左侧目录进入时路由无该参数） */
+const forkIndex = ref(0)
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
   { id: sessionId.value, title: '主会话' },
@@ -121,26 +158,41 @@ async function loadContext() {
   }
 
   const parentFile = getSessionFilePath(vaultStore.vaultPath, sessionId.value, isBranchSession(sessionId.value))
+  const currentFile = getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
+
+  // 分叉点索引与上下文优先来自分支文件本身：
+  // 划线创建分支时路由带 fork_index，但左侧目录/深链接进入时没有，只能依赖文件持久化内容
+  let currentRaw = ''
+  let savedMessages: Message[] = []
+  let forkContextFromFile = ''
+  try {
+    currentRaw = await readFile(currentFile)
+    const { meta, body } = parseFrontmatter(currentRaw)
+    const storedForkIndex = Number(meta.fork_point)
+    if (meta.fork_point && !Number.isNaN(storedForkIndex)) {
+      forkIndex.value = storedForkIndex
+    }
+    forkContextFromFile = extractForkContext(body)
+    savedMessages = parseMessages(body, Number.MAX_SAFE_INTEGER)
+  } catch {
+    // 新分支：下方为干净的新对话界面，不显示主会话历史
+    currentRaw = ''
+    savedMessages = []
+  }
+
   const context = await loadBranchContext(parentFile, forkIndex.value)
   forkMessages.value = context
-  forkContext.value = context.length > 0
-    ? `${context[context.length - 1].content.slice(0, 200)}${context[context.length - 1].content.length > 200 ? '...' : ''}`
-    : ''
+  // 分叉点上下文：优先展示分支文件持久化的区块（划线内容及附近文本）；旧文件回退到实时构建
+  forkContext.value = forkContextFromFile || buildForkContextPreview(context, forkIndex.value)
 
-  const currentFile = getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
-  try {
-    const savedMessages = await loadBranchContext(currentFile, Number.MAX_SAFE_INTEGER)
-    messages.value = savedMessages.length > 0 ? savedMessages : context
-    extractedNotes.value = extractNoteRefsFromSession(await readFile(currentFile))
-  } catch {
-    messages.value = context
-    extractedNotes.value = []
-  }
+  // 剥离旧版本分支文件内嵌的继承上下文副本，只保留分支自身对话
+  messages.value = stripInheritedContext(savedMessages, forkMessages.value)
+  extractedNotes.value = currentRaw ? extractNoteRefsFromSession(currentRaw) : []
 }
 
 onMounted(loadContext)
 watch(
-  () => [vaultStore.vaultPath, sessionId.value, branchId.value, forkIndex.value],
+  () => [vaultStore.vaultPath, sessionId.value, branchId.value, route.query.fork_index],
   () => { void loadContext() },
 )
 
@@ -153,6 +205,8 @@ function getCurrentSession(): Session {
     fork_point: String(forkIndex.value),
     tags: [],
     messages: messages.value.map((message) => ({ ...message })),
+    // 分叉点上下文随分支文件持久化，重新进入分支会话时前端识别渲染
+    fork_context: forkContext.value || undefined,
   }
 }
 
@@ -179,6 +233,7 @@ async function handleSend(content: string) {
   let responseFinalized = false
   isStreaming.value = true
   streamingText.value = ''
+  streamingThinking.value = ''
 
   const finalizeResponse = async () => {
     if (responseFinalized) return
@@ -187,24 +242,46 @@ async function handleSend(content: string) {
 
     if (streamingText.value) {
       aiMessage.content = streamingText.value
+      aiMessage.thinking = streamingThinking.value || undefined
       messages.value.push(aiMessage)
     }
 
     streamingText.value = ''
+    streamingThinking.value = ''
     await saveCurrentSession()
   }
 
   try {
     const provider = createProvider(providerConfig)
-    for await (const chunk of branchFollowupStream(content, forkMessages.value, [], provider)) {
-      if (chunk.type === 'text' || chunk.type === 'thinking') {
+    // 检索知识库内容注入分支追问（失败不影响聊天）
+    let knowledgeContext = ''
+    try {
+      knowledgeContext = await retrieveKnowledgeContext(content)
+    } catch {
+      knowledgeContext = ''
+    }
+    // 分支会话自身的对话历史（不含当前问题）：messages 只含分支自身多轮对话
+    const branchHistory = messages.value.slice(0, -1)
+    for await (const chunk of branchFollowupStream(
+      content,
+      forkMessages.value,
+      branchHistory,
+      [],
+      provider,
+      knowledgeContext,
+      { vaultPath: vaultStore.vaultPath || '' },
+    )) {
+      if (chunk.type === 'text') {
         streamingText.value += chunk.content
+      } else if (chunk.type === 'thinking') {
+        streamingThinking.value += chunk.content
       } else if (chunk.type === 'stop') {
         await finalizeResponse()
       } else if (chunk.type === 'error') {
         error.value = chunk.content
         isStreaming.value = false
         streamingText.value = ''
+        streamingThinking.value = ''
       }
     }
     await finalizeResponse()
@@ -212,11 +289,54 @@ async function handleSend(content: string) {
     error.value = `发送失败: ${e instanceof Error ? e.message : String(e)}`
     isStreaming.value = false
     streamingText.value = ''
+    streamingThinking.value = ''
   }
 }
 
 function handleStop() {
   isStreaming.value = false
+}
+
+async function handleAddToNote(highlightedText: string) {
+  if (!vaultStore.vaultPath) {
+    toast.error('请先在设置中选择本地 Vault')
+    return
+  }
+  if (noteStore.notes.length === 0) {
+    await noteStore.loadAllNotes(vaultStore.vaultPath)
+  }
+  if (noteStore.notes.length === 0) {
+    toast.error('还没有笔记，请先在会话中摘录一条笔记')
+    return
+  }
+  addToNoteDialog.highlightedText = highlightedText
+  addToNoteDialog.error = ''
+  addToNoteDialog.visible = true
+}
+
+function closeAddToNote() {
+  if (addToNoteDialog.saving) return
+  addToNoteDialog.visible = false
+}
+
+async function confirmAddToNote(target: AddToNoteTarget) {
+  addToNoteDialog.saving = true
+  addToNoteDialog.error = ''
+  try {
+    const note = await noteStore.loadNote(target.notePath)
+    if (!note) throw new Error('笔记不存在或无法读取')
+    const newBody = target.headingLine === null
+      ? insertHighlightAtEnd(target.body, addToNoteDialog.highlightedText)
+      : insertHighlightAt(target.body, target.headingLine, addToNoteDialog.highlightedText)
+    const saved = await noteStore.updateNote({ ...note, content: newBody })
+    if (!saved) throw new Error('写入笔记失败')
+    addToNoteDialog.visible = false
+    toast.success('已加入笔记')
+  } catch (e) {
+    addToNoteDialog.error = e instanceof Error ? e.message : '加入笔记失败'
+  } finally {
+    addToNoteDialog.saving = false
+  }
 }
 
 function handleRetry() {
@@ -225,7 +345,7 @@ function handleRetry() {
   if (lastUserMessage) void handleSend(lastUserMessage.content)
 }
 
-async function handleExtractNote(highlightedText: string) {
+async function handleExtractNote(highlightedText: string, domMessageIndex: number | null = null) {
   const config = settingsStore.getProviderConfig()
   if (!config.apiKey) {
     toast.error('请先在设置页面配置 API Key')
@@ -238,6 +358,7 @@ async function handleExtractNote(highlightedText: string) {
   }
 
   extractDialog.highlightedText = highlightedText
+  extractDialog.messageIndex = domMessageIndex
   extractDialog.error = ''
   extractDialog.draft = null
   extractDialog.visible = true
@@ -286,7 +407,8 @@ async function confirmExtract(title: string) {
     const path = await noteStore.saveNote(vaultStore.vaultPath, note, sourceSession, highlightedText)
     if (!path) throw new Error('笔记保存失败')
 
-    const messageIndex = messages.value.map((message) => message.role === 'assistant' && message.content.includes(highlightedText)).lastIndexOf(true)
+    // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退
+    const messageIndex = resolveMessageIndex(highlightedText, messages.value, extractDialog.messageIndex, 'assistant')
     extractedNotes.value.push({ path, title: note.title, messageIndex })
     await saveCurrentSession()
     extractDialog.visible = false
@@ -304,13 +426,20 @@ function cancelExtract() {
   extractDialog.draft = null
 }
 
-async function handleCreateBranch(highlightedText: string) {
+async function handleCreateBranch(highlightedText: string, domMessageIndex: number | null = null) {
   if (!vaultStore.vaultPath) {
     toast.error('请先选择 Vault 并打开一个会话')
     return
   }
 
-  const forkMessageIndex = messages.value.map((message) => message.content.includes(highlightedText)).lastIndexOf(true)
+  // 嵌套分支最多三层（主会话 → 第 1/2/3 层分支）
+  if (sessionStore.getNodeBranchDepth(branchId.value) >= sessionStore.MAX_BRANCH_DEPTH) {
+    toast.error(`分支最多支持 ${sessionStore.MAX_BRANCH_DEPTH} 层嵌套`)
+    return
+  }
+
+  // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退
+  const forkMessageIndex = resolveMessageIndex(highlightedText, messages.value, domMessageIndex)
   if (forkMessageIndex === -1) {
     toast.error('未找到划线内容所在的消息')
     return
@@ -322,6 +451,8 @@ async function handleCreateBranch(highlightedText: string) {
     getCurrentSession(),
     forkMessageIndex,
     branchTitle,
+    undefined,
+    highlightedText,
   )
   if (!nestedBranchId) {
     toast.error('创建分支失败')
@@ -380,6 +511,48 @@ function handleNavigate(target: string) {
   font-size: 12px;
   line-height: 1.65;
   border-radius: 0 8px 8px 0;
+  /* 划线内容可能较长，限制高度并支持滚动 */
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.fork-context__content :deep(p) {
+  margin: 0 0 8px;
+}
+
+.fork-context__content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.fork-context__content :deep(strong) {
+  color: var(--brand-strong);
+  font-weight: 650;
+}
+
+/* 划线内容以特殊颜色标明 */
+.fork-context__content :deep(mark.fork-highlight) {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  padding: 0 2px;
+  border-radius: 3px;
+  font-weight: 650;
+}
+
+.fork-context__content :deep(blockquote) {
+  margin: 8px 0;
+  padding: 4px 0 4px 10px;
+  border-left: 2px solid var(--brand);
+  color: var(--brand-strong);
+}
+
+.fork-context__content :deep(ul),
+.fork-context__content :deep(ol) {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.fork-context__content :deep(li) {
+  margin: 2px 0;
 }
 
 .branch-chat__body {

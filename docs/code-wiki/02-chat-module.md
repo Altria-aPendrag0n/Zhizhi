@@ -1,0 +1,162 @@
+# 02 · 学习对话模块
+
+> 本模块覆盖：主会话聊天页、分支会话页、会话 UI 组件（消息渲染 / 流式文本 / 输入框 / 划线菜单 / 会话树）。
+> 相关代码：`study-thread/src/components/chat/`、`study-thread/src/views/MainChatPage.vue`、`study-thread/src/views/BranchChatPage.vue`。
+
+---
+
+## 1. 模块职责
+
+- 承载 AI 伴读的核心交互：**流式问答 → 划线摘录 → 生成原子笔记 → 加入已有笔记 → 创建深度追问分支**。
+- 主会话（`/chat`）与分支会话（`/chat/branch/:sessionId/:branchId`）两套页面共用 `ChatView` / `Composer`。
+- 在发送前注入知识库 RAG 上下文，并支持模型按需调用 `read_reference` 工具分页读取参考资料全文。
+
+## 2. 页面层
+
+### 2.1 `MainChatPage.vue`（路由 `/chat`）
+
+**职责**：主会话聊天的编排核心。
+
+**组合的子组件**：`ChatView`、`Composer`、`AddToNoteDialog`。
+
+**使用的 store / api / utils**：
+- stores：`useSettingsStore`、`useVaultStore`、`useSessionStore`、`useNoteStore`
+- api：`createProvider`（provider-factory）、`extractNote`（skills/extract-note）、`chatWithTools`（chat-loop）、`CLIENT_TOOLS`（tools）
+- utils：`extractNoteRefsFromSession`、`insertHighlightAt` / `insertHighlightAtEnd`、`generateSessionTitle`、`getSessionFilePath`、`readFile`、`retrieveKnowledgeContext`、`loadStoredValue` / `saveStoredValue`
+- 注入：`inject('updateThreadTitle')`；`useToast`
+
+**关键函数**：
+
+| 函数 | 说明 |
+|------|------|
+| `handleSend(content)` | 校验 API Key（无则跳 `/settings`）→ `retrieveKnowledgeContext` 检索知识库 → 组装 system prompt → `chatWithTools` 流式消费 6 类 chunk（`text/thinking/tool_call/tool_result/stop/error`），`AbortController` 支持停止 |
+| `handleExtractNote(text, domMessageIndex)` | 调 `extractNote` skill 生成笔记草稿 → `noteStore.saveNote` 写入 vault → 记录 `NoteReference{path, title, messageIndex}` 并写回会话文件；`messageIndex` 优先用划线时 DOM 定位的索引 |
+| `handleAddToNote(text)` / `confirmAddToNote(target)` | 弹窗选笔记与标题位置，`insertHighlightAt(End)` 把划线原文插入指定小节末尾或文件末尾 |
+| `handleCreateBranch(text, domMessageIndex)` | 用 `resolveMessageIndex` 定位划线消息（DOM 索引优先、文本匹配兜底）→ `sessionStore.createBranchInVault` 创建分支（携带划线文本用于分叉点上下文）→ 跳转 `branch-chat` |
+| `handleRetry()` | 移除失败的 AI 消息后重发最后一条用户消息 |
+| `handleStop()` | 仅 abort 流式请求，不清空状态 |
+
+**会话消息持久化**：内置 6 个演示会话 + `dynamicThreadMessages`（localStorage `study-thread-messages`），watch `route.query.thread` 加载/保存。
+
+### 2.2 `BranchChatPage.vue`（路由 `/chat/branch/:sessionId/:branchId`）
+
+**职责**：分支（深度追问）会话。
+
+**组合的子组件**：`BranchBreadcrumb`、`ChatView`、`Composer`、`ExtractNoteDialog`、`AddToNoteDialog`。
+
+**关键逻辑**：
+
+| 函数 | 说明 |
+|------|------|
+| `loadContext()` | 分叉点索引以分支文件 frontmatter `fork_point` 为权威（路由 `fork_index` 仅兜底）；分叉点上下文优先读取分支文件正文开头的 `<!-- fork-context -->` 区块（`extractForkContext`），旧文件回退到 `loadBranchContext(父会话文件, forkIndex)` 实时构建 |
+| `handleSend(content)` | `branchFollowupStream(content, forkMessages, branchHistory, [], provider, knowledgeContext, toolContext)` 流式输出；`branchHistory = messages.slice(forkMessages.length, -1)` |
+| `handleCreateBranch(text, domMessageIndex)` | 嵌套深度限制：`getNodeBranchDepth >= MAX_BRANCH_DEPTH(3)` 时拒绝；否则 `resolveMessageIndex` 定位后 `createBranchInVault` 创建嵌套分支（携带划线文本） |
+| `handleExtractNote()` / `confirmExtract()` | LLM 生成草稿预填 `ExtractNoteDialog`；用户改了标题则用新标题重新生成 |
+
+**面包屑**：`主会话 / 分支追问` 两级（`BranchBreadcrumb`），点击返回主会话。
+
+**分叉点上下文（页面顶部区域）**：
+- 内容 = 划线内容所在消息中**划线文本上下各三句话**（`aroundHighlight`，按句末标点切句），前一条消息只取最后三句；划线文本用 `<mark class="fork-highlight">` 包裹，markdown 渲染后以品牌色高亮标明。
+- 创建分支时由 `createBranchInVault` 用 `buildForkContextPreview(父会话消息, forkMessageIndex, highlightedText)` 生成，随分支文件持久化；划线文本定位不到时退化为消息开头若干句、不加高亮。
+
+**分支会话文件格式**（`sessions/branch-*.md`）：
+
+```markdown
+---
+session_id: branch_xxx
+parent_session: <主会话 id>
+fork_point: <分叉消息索引>
+---
+
+<!-- fork-context -->
+（前一条 · 知枝）
+…最后三句…
+（划线内容 · 知枝）
+…划线文本上下各三句（划线文本含 <mark class="fork-highlight">）…
+<!-- /fork-context -->
+
+## 用户 · …
+```
+
+## 3. 组件层（`src/components/chat/`）
+
+### 3.1 `ChatView.vue` — 对话区核心容器
+
+| props | 说明 |
+|-------|------|
+| `messages: Message[]` | 历史消息 |
+| `isStreaming: boolean` | 是否流式中 |
+| `streamingText` / `streamingThinking` / `streamingToolStatus` | 流式内容、思考过程、工具状态 |
+| `error: string \| null` | 错误条内容 |
+| `noteRefs?: NoteReference[]` | 消息 → 笔记引用 |
+
+| emits | 说明 |
+|-------|------|
+| `retry` | 错误条重试 |
+| `extract-note(text, messageIndex)` / `add-to-note(text)` / `create-branch(text, messageIndex)` | 划线菜单动作；`messageIndex` 为划线时 DOM 定位的消息索引（`data-message-index`），避免渲染文本与 markdown 源不一致导致的定位失败 |
+| `navigate-note(path)` | 跳转笔记详情 |
+
+逻辑要点：
+- 消息容器带 `data-message-index`；流式期间隐藏末尾空的 assistant 占位消息，由流式区域展示。
+- `handleMouseUp` 校验选区在 `[data-highlightable="true"]` 元素内才弹出 `HighlightMenu`；同时通过选区祖先的 `closest('[data-message-index]')` 读取消息索引随事件透传。
+- 按 `messageIndex` 过滤 noteRefs，渲染 `[[标题]]` 跳转按钮。
+- watch 消息长度/流式文本变化 → `nextTick` 自动滚动到底部。
+
+### 3.2 `ChatMessage.vue` — 单条消息
+
+- props：`message: Message`、`noteCount?`。
+- 按角色区分样式；assistant 用 `marked(content, {breaks:true, gfm:true})` 渲染 Markdown。
+- 正文容器标记 `data-highlightable="true"` 供划线识别；`thinking` 非空时渲染 `ThinkingBlock`。
+
+### 3.3 `StreamText.vue` — 流式文本
+
+- 对不完整 Markdown 做容错粗渲染（仅加粗/斜体/行内代码/换行），避免流式期花屏。
+- props：`text`、`isStreaming`；流式中末尾显示闪烁光标 `|`。
+
+### 3.4 `ThinkingBlock.vue` — 思考过程
+
+- props：`text`、`startExpanded?`（流式中默认展开、结束后默认折叠）。
+- 折叠式展示 AI 的 `thinking` 内容（Anthropic `thinking_delta` / OpenAI `reasoning_content`）。
+
+### 3.5 `Composer.vue` — 底部输入框
+
+- props：`isStreaming`、`disabled`、`placeholder?`；emits：`send(content)`、`stop`。
+- Enter 发送 / Shift+Enter 换行；textarea 自动增高（max 200px）；流式中切换为停止按钮。
+
+### 3.6 `HighlightMenu.vue` — 划线浮动菜单
+
+- Teleport 到 body；fixed 定位 `translate(-50%,-120%)`。
+- props：`visible`、`x`、`y`、`highlightedText`、`messageIndex?`（划线消息的 DOM 索引）、`showAddToNote?`。
+- emits：`close`、`extract-note(text, messageIndex)`、`add-to-note(text)`、`create-branch(text, messageIndex)`、`copy(text)`（剪贴板）。
+- 点击外部 / ESC 关闭（document 级监听，卸载时移除）。
+
+### 3.7 分支树展示（学习总览使用）
+
+| 组件 | 说明 |
+|------|------|
+| `BranchTree.vue` | 会话树容器；props `tree: SessionTreeNode \| null`；emits `select-node`；显示节点总数（`countNodes`） |
+| `TreeNode.vue` | 递归节点；按 `node.type` 区分消息/分支图标，缩进随 depth；emits `select` |
+| `BranchBreadcrumb.vue` | 分支页面包屑；props `breadcrumbs: BreadcrumbItem[]`；emits `navigate(target)`；含"← 返回主对话" |
+
+## 4. 与其他模块的协作
+
+```
+MainChatPage / BranchChatPage
+   ├─ settingsStore.getProviderConfig() → createProvider()   [08 LLM API 适配层]
+   ├─ retrieveKnowledgeContext(query) → RAG 注入             [10 Embedding]
+   ├─ chatWithTools / branchFollowupStream                  [08 / 09 Skill]
+   ├─ sessionStore.createBranchInVault / loadBranchContext   [12 Stores / 11 utils]
+   ├─ noteStore.saveNote / extractNote                      [03 笔记 / 09 Skill]
+   └─ vaultStore.saveCurrentSession → sessions/*.md          [07 Vault]
+```
+
+## 5. 相关测试
+
+- `src/components/chat/ChatMessage.test.ts`、`ThinkingBlock.test.ts`
+- `src/views/MainChatPage.test.ts`
+- `src/api/chat-loop.test.ts`、`src/api/skills/branch-followup.test.ts`
+
+---
+
+> 上一模块 → [01 应用外壳与路由](./01-application-shell.md)  
+> 下一模块 → [03 笔记模块](./03-notes-module.md)

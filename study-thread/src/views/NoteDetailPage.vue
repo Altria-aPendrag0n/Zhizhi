@@ -56,6 +56,7 @@ import { useToast } from '../composables/useToast'
 import type { Note, Session, ExtractedNote } from '../types'
 import { getSessionFilePath } from '../utils/session-serializer'
 import { loadBranchContext, parseMessages } from '../utils/branch-context'
+import { resolveMessageIndex } from '../utils/message-locator'
 import { readFile } from '../utils/vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import { parseWikiLinks, resolveWikiLinkTarget } from '../parser/wikilink'
@@ -268,12 +269,10 @@ async function handleCreateBranch(highlightedText: string) {
       const sessionId = typeof meta.session_id === 'string' ? meta.session_id : ''
       if (!sessionId || sourceMessages.length === 0) throw new Error('无效来源会话')
 
-      forkMessageIndex = sourceMessages.length - 1
-      for (let index = sourceMessages.length - 1; index >= 0; index--) {
-        if (sourceMessages[index].content.includes(highlightedText)) {
-          forkMessageIndex = index
-          break
-        }
+      forkMessageIndex = resolveMessageIndex(highlightedText, sourceMessages, null)
+      // 文本匹配失败时沿用旧行为：定位到来源会话最后一条消息
+      if (forkMessageIndex === -1) {
+        forkMessageIndex = sourceMessages.length - 1
       }
       parentSessionFile = sourceSession
       parentSession = {
@@ -312,6 +311,7 @@ async function handleCreateBranch(highlightedText: string) {
     forkMessageIndex,
     branchTitle,
     parentSessionFile,
+    highlightedText,
   )
   if (!branchId) {
     toast.error('创建分支失败')

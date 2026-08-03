@@ -21,11 +21,15 @@ export interface Session {
   fork_point: string | null
   tags: string[]
   messages: Message[]
+  /** 分叉点上下文预览（划线内容及附近文本），仅分支会话持久化到文件正文开头 */
+  fork_context?: string
 }
 
 export interface Message {
   role: 'system' | 'user' | 'assistant'
   content: string
+  /** AI 回答前的思考过程（独立存储，界面以浅色可折叠块展示） */
+  thinking?: string
   timestamp?: string
 }
 
@@ -74,6 +78,8 @@ export interface ProviderConfig {
   apiKey: string
   baseUrl: string
   model: string
+  /** 请求体附带 web_search 工具，由模型/服务端决定是否联网搜索 */
+  enableWebSearch?: boolean
 }
 
 // Stream 相关类型
@@ -106,4 +112,25 @@ export interface ExtractedNote {
   type: 'concept' | 'method' | 'fact' | 'question'
   tags: string[]
   confidence: number
+}
+
+// 参考资料相关类型
+export type ReferenceType = 'md' | 'pdf' | 'png'
+
+export interface ReferenceMeta {
+  id: string            // 唯一 id（uuid），用于文件命名
+  path: string          // 元数据 JSON 文件路径，形如 {vault}/references/{id}.json
+  title: string
+  description?: string
+  tags: string[]
+  fileType: ReferenceType
+  fileName: string      // 原始上传文件名
+  filePath: string      // 实际文件路径，形如 {vault}/references/{id}.{ext}
+  created: string       // ISO 时间
+  updated: string       // ISO 时间
+}
+
+export interface Reference extends ReferenceMeta {
+  /** 预览用：md 为正文文本；png 为 base64 data URL；pdf 无 */
+  previewText?: string
 }

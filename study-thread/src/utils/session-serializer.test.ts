@@ -124,4 +124,40 @@ describe('serializeSession', () => {
     const result = serializeSession(session)
     expect(result).toContain('## 系统')
   })
+
+  it('分支会话的 fork_context 持久化到正文开头的区块', () => {
+    const session: Session = {
+      id: 'branch-2',
+      title: '分支会话',
+      created: '2024-01-01',
+      parent_session: 'sess-1',
+      fork_point: '3',
+      tags: [],
+      messages: [{ role: 'user', content: '分支提问' }],
+      fork_context: '（划线内容 · 知枝）\n划线文本',
+    }
+    const result = serializeSession(session)
+    expect(result).toContain('<!-- fork-context -->')
+    expect(result).toContain('<!-- /fork-context -->')
+    expect(result).toContain('（划线内容 · 知枝）')
+    // 区块位于正文开头（frontmatter 之后、消息之前）
+    const blockIndex = result.indexOf('<!-- fork-context -->')
+    const messageIndex = result.indexOf('## 用户')
+    expect(blockIndex).toBeGreaterThan(-1)
+    expect(blockIndex).toBeLessThan(messageIndex)
+  })
+
+  it('无 fork_context 时不写入区块', () => {
+    const session: Session = {
+      id: 'sess-4',
+      title: '普通会话',
+      created: '2024-01-01',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [{ role: 'user', content: '你好' }],
+    }
+    const result = serializeSession(session)
+    expect(result).not.toContain('<!-- fork-context -->')
+  })
 })

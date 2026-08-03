@@ -8,6 +8,47 @@ import { readFile } from '../utils/vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import type { Message } from '../types'
 
+/** 分叉点上下文区块标记（写入分支会话 md 正文开头，前端识别后渲染） */
+export const FORK_CONTEXT_START = '<!-- fork-context -->'
+export const FORK_CONTEXT_END = '<!-- /fork-context -->'
+
+/**
+ * 序列化分叉点上下文为可写入分支文件的区块文本
+ *
+ * 区块以 HTML 注释包裹，不参与 markdown 渲染；内容中的 `-->` 转义为 `--&gt;`，
+ * 避免提前闭合标记。
+ */
+export function serializeForkContext(text: string): string {
+  if (!text) return ''
+  const escaped = text.split('-->').join('--&gt;')
+  return `${FORK_CONTEXT_START}\n${escaped}\n${FORK_CONTEXT_END}`
+}
+
+/**
+ * 从会话 Markdown 正文提取分叉点上下文区块内容（反转义）
+ * 无区块时返回空串。
+ */
+export function extractForkContext(body: string): string {
+  const start = body.indexOf(FORK_CONTEXT_START)
+  if (start === -1) return ''
+  const end = body.indexOf(FORK_CONTEXT_END, start)
+  if (end === -1) return ''
+  return body
+    .slice(start + FORK_CONTEXT_START.length, end)
+    .trim()
+    .split('--&gt;')
+    .join('-->')
+}
+
+/** 移除正文中的分叉点上下文区块（解析消息前调用，避免区块内容被当作消息） */
+function removeForkContextBlock(body: string): string {
+  const start = body.indexOf(FORK_CONTEXT_START)
+  if (start === -1) return body
+  const end = body.indexOf(FORK_CONTEXT_END, start)
+  if (end === -1) return body
+  return body.slice(0, start) + body.slice(end + FORK_CONTEXT_END.length)
+}
+
 /**
  * 从会话文件加载分支上下文
  *
@@ -40,7 +81,8 @@ export async function loadBranchContext(
  */
 export function parseMessages(body: string, upToIndex: number): Message[] {
   const messages: Message[] = []
-  const lines = body.split('\n')
+  // 移除正文开头的分叉点上下文区块，避免其内容被解析为消息
+  const lines = removeForkContextBlock(body).split('\n')
   let i = 0
   let currentRole: Message['role'] | null = null
   let currentContent: string[] = []
@@ -83,4 +125,102 @@ export function parseMessages(body: string, upToIndex: number): Message[] {
   }
 
   return messages
+}
+
+/** 附近文本的最大展示长度 */
+const MAX_PREVIEW_LENGTH = 120
+
+/** 按句末标点切分句子 */
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[。！？!?])\s*/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+}
+
+/** 取文本最后 count 句；超长时截断到 MAX_PREVIEW_LENGTH */
+function lastSentences(text: string, count: number): string {
+  const picked = splitSentences(text).slice(-count).join('\n')
+  if (picked.length <= MAX_PREVIEW_LENGTH) return picked
+  return `${picked.slice(0, MAX_PREVIEW_LENGTH)}…`
+}
+
+/**
+ * 围绕划线文本展示其所在句子的上下各 count 句
+ *
+ * 划线文本缺失或无法定位（渲染后文本与 markdown 源不一致）时，
+ * 退化为展示消息开头的若干句子。
+ * 定位成功时用 `<mark class="fork-highlight">` 包裹划线文本，
+ * 前端以 markdown 渲染并高亮标明。
+ */
+function aroundHighlight(content: string, highlightedText: string | undefined, count = 3): string {
+  const sentences = splitSentences(content)
+  if (sentences.length === 0) return content
+  let targetIndex = -1
+  if (highlightedText) {
+    targetIndex = sentences.findIndex((sentence) => sentence.includes(highlightedText))
+  }
+  const start = targetIndex === -1 ? 0 : Math.max(0, targetIndex - count)
+  const end = targetIndex === -1
+    ? Math.min(sentences.length, count * 2 + 1)
+    : targetIndex + count + 1
+  const picked = sentences.slice(start, end)
+  if (targetIndex !== -1 && targetIndex >= start && targetIndex < end) {
+    const withinIndex = targetIndex - start
+    picked[withinIndex] = picked[withinIndex].replace(
+      highlightedText as string,
+      (match) => `<mark class="fork-highlight">${match}</mark>`,
+    )
+  }
+  return picked.join('\n')
+}
+
+/**
+ * 构建分叉点上下文预览
+ *
+ * 展示划线内容上下各三句话（划线所在消息内），以及前一条消息的最后三句附近文本，
+ * 用于分支对话页顶部的"分叉点上下文"区域。
+ *
+ * @param context - 分叉点前的会话消息（loadBranchContext 的返回值）
+ * @param forkIndex - 划线所在消息的索引（分叉点）
+ * @param highlightedText - 划线文本（用于在消息内定位划线内容）；缺失时退化为展示消息开头
+ * @returns 预览文本；context 为空时返回空串
+ */
+export function buildForkContextPreview(
+  context: Message[],
+  forkIndex: number,
+  highlightedText?: string,
+): string {
+  if (context.length === 0) return ''
+  const targetIndex = Math.min(forkIndex, context.length - 1)
+  const target = context[targetIndex]
+  const prev = targetIndex > 0 ? context[targetIndex - 1] : null
+
+  const roleLabel = (message: Message) => (message.role === 'user' ? '用户' : '知枝')
+  const parts: string[] = []
+  if (prev) {
+    const prevText = lastSentences(prev.content, 3)
+    if (prevText) parts.push(`（前一条 · ${roleLabel(prev)}）\n${prevText}`)
+  }
+  parts.push(`（划线内容 · ${roleLabel(target)}）\n${aroundHighlight(target.content, highlightedText)}`)
+  return parts.join('\n\n')
+}
+
+/**
+ * 剥离旧版本分支文件中内嵌的继承上下文副本
+ *
+ * 早期版本会把继承的分叉上下文一并保存进分支文件；新版本分支文件只保存
+ * 分支自身的对话。加载时若发现 saved 开头与 inherited 完全一致，则剔除前缀，
+ * 避免与注入 systemPrompt 的 fork_context 重复。
+ *
+ * @param saved - 分支文件中保存的消息
+ * @param inherited - 继承的分叉点前上下文（forkMessages）
+ * @returns 分支自身的对话消息
+ */
+export function stripInheritedContext(saved: Message[], inherited: Message[]): Message[] {
+  if (inherited.length === 0 || saved.length < inherited.length) return saved
+  const samePrefix = inherited.every(
+    (message, index) => message.role === saved[index].role && message.content === saved[index].content,
+  )
+  return samePrefix ? saved.slice(inherited.length) : saved
 }

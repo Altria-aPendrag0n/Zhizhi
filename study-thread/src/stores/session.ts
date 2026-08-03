@@ -7,11 +7,18 @@ import {
   createBranchNode,
   addBranchToTree,
   findNode,
+  getNodeDepth,
+  collectSubtreeIds,
+  removeNodeFromTree,
   serializeTree,
   deserializeTree,
 } from '../utils/session-tree'
-import { readFile, writeFile, createDir, fileExists } from '../utils/vault-fs'
+import { readFile, writeFile, createDir, fileExists, deleteFile } from '../utils/vault-fs'
 import { getSessionFilePath, saveSessionToVault } from '../utils/session-serializer'
+import { buildForkContextPreview } from '../utils/branch-context'
+
+/** 分支嵌套的最大层数（主会话为第 0 层，最多到第 3 层分支） */
+export const MAX_BRANCH_DEPTH = 3
 
 export const useSessionStore = defineStore('session', () => {
   const sessions = ref<Session[]>([])
@@ -113,10 +120,24 @@ export const useSessionStore = defineStore('session', () => {
     forkMessageIndex: number,
     branchTitle: string,
     parentSessionFile?: string,
+    highlightedText?: string,
   ): Promise<string | null> {
     try {
-      const parentFile = parentSessionFile || getSessionFilePath(vaultPath, parentSession.id)
-      if (!(await fileExists(parentFile))) await saveSessionToVault(vaultPath, parentSession)
+      await initSessionTree(vaultPath)
+
+      // 深度限制：父节点深度达到上限时不再允许创建更深的分支
+      if (sessionTree.value && findNode(sessionTree.value, parentSession.id)) {
+        const depth = getNodeDepth(sessionTree.value, parentSession.id)
+        if (depth >= MAX_BRANCH_DEPTH) {
+          console.warn(`分支深度已达上限（${MAX_BRANCH_DEPTH} 层），拒绝创建更深分支`)
+          return null
+        }
+      }
+
+      // 父会话可能是分支（嵌套分支），需按对应文件命名规则定位/保存
+      const isParentBranch = parentSession.id.startsWith('branch_')
+      const parentFile = parentSessionFile || getSessionFilePath(vaultPath, parentSession.id, isParentBranch)
+      if (!(await fileExists(parentFile))) await saveSessionToVault(vaultPath, parentSession, isParentBranch)
       await initSessionTree(vaultPath)
 
       if (!sessionTree.value || !findNode(sessionTree.value, parentSession.id)) {
@@ -126,6 +147,10 @@ export const useSessionStore = defineStore('session', () => {
       const branchId = createBranch(parentSession.id, String(forkMessageIndex), branchTitle)
       const branchSession = sessions.value.find((session) => session.id === branchId)
       if (!branchSession) return null
+
+      // 分叉点上下文（划线内容上下各三句话）随分支文件持久化，供前端识别渲染
+      const forkContextText = buildForkContextPreview(parentSession.messages, forkMessageIndex, highlightedText)
+      if (forkContextText) branchSession.fork_context = forkContextText
 
       const branchFile = await saveSessionToVault(vaultPath, branchSession, true)
       addBranchToSessionTree(parentSession.id, branchId, branchTitle, branchFile)
@@ -141,6 +166,47 @@ export const useSessionStore = defineStore('session', () => {
     return sessionTree.value ? findNode(sessionTree.value, nodeId)?.children || [] : []
   }
 
+  /** 获取节点分支深度（主会话为 0） */
+  function getNodeBranchDepth(nodeId: string): number {
+    return sessionTree.value ? getNodeDepth(sessionTree.value, nodeId) : 0
+  }
+
+  /**
+   * 删除会话节点及其所有子分支
+   *
+   * 会话在管理上相互独立：删除一个会话时级联删除其下所有分支（含嵌套），
+   * 不影响同级与上级会话。无 vault 时视为本地会话，直接放行。
+   *
+   * @param vaultPath - vault 根目录（可为 null）
+   * @param nodeId - 要删除的会话/分支 id
+   * @returns 是否删除成功
+   */
+  async function deleteSessionNodeFromVault(
+    vaultPath: string | null,
+    nodeId: string,
+  ): Promise<boolean> {
+    if (!vaultPath) return true
+    try {
+      await initSessionTree(vaultPath)
+      if (!sessionTree.value || !findNode(sessionTree.value, nodeId)) return false
+
+      // 级联删除该会话及其所有子分支的会话文件
+      const ids = collectSubtreeIds(sessionTree.value, nodeId)
+      for (const id of ids) {
+        const isBranch = id.startsWith('branch_')
+        const filePath = getSessionFilePath(vaultPath, id, isBranch)
+        if (await fileExists(filePath)) await deleteFile(filePath)
+      }
+
+      sessionTree.value = removeNodeFromTree(sessionTree.value, nodeId)
+      await saveSessionTree(vaultPath)
+      return true
+    } catch (error) {
+      console.error('删除会话失败:', error)
+      return false
+    }
+  }
+
   return {
     sessions,
     currentSessionId,
@@ -148,6 +214,7 @@ export const useSessionStore = defineStore('session', () => {
     isStreaming,
     currentSession,
     sessionTree,
+    MAX_BRANCH_DEPTH,
     createSession,
     switchSession,
     addMessage,
@@ -158,5 +225,7 @@ export const useSessionStore = defineStore('session', () => {
     saveSessionTree,
     createBranchInVault,
     getBranches,
+    getNodeBranchDepth,
+    deleteSessionNodeFromVault,
   }
 })

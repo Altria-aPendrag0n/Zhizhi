@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="chat-view" ref="containerRef" @mouseup="handleMouseUp">
     <!-- 空状态 -->
     <div v-if="!messages.length && !isStreaming" class="chat-view__empty">
@@ -12,7 +12,7 @@
     <!-- 对话区域 -->
     <div v-else class="chat-view__conversation">
       <div class="chat-view__eyebrow">Conceptual study</div>
-      <div v-for="(msg, index) in displayMessages" :key="index">
+      <div v-for="(msg, index) in displayMessages" :key="index" :data-message-index="index">
         <ChatMessage
           :message="msg"
           :note-count="getNoteCountForMessage(index)"
@@ -33,6 +33,11 @@
       <!-- 流式文本 -->
       <div v-if="isStreaming" class="chat-view__streaming">
         <div class="chat-view__streaming-answer">
+          <div v-if="streamingToolStatus" class="chat-view__tool-status">
+            <span class="tool-status__dot"></span>
+            {{ streamingToolStatus }}
+          </div>
+          <ThinkingBlock v-if="streamingThinking" :text="streamingThinking" start-expanded />
           <StreamText :text="streamingText" :is-streaming="isStreaming" />
         </div>
       </div>
@@ -51,8 +56,11 @@
       :x="highlightMenu.x"
       :y="highlightMenu.y"
       :highlighted-text="highlightMenu.text"
+      :message-index="highlightMenu.messageIndex"
+      show-add-to-note
       @close="closeHighlightMenu"
       @extract-note="handleExtractNote"
+      @add-to-note="handleAddToNote"
       @create-branch="handleCreateBranch"
       @copy="handleCopy"
     />
@@ -66,20 +74,26 @@ import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
 import ChatMessage from './ChatMessage.vue'
 import StreamText from './StreamText.vue'
+import ThinkingBlock from './ThinkingBlock.vue'
 import HighlightMenu from './HighlightMenu.vue'
 
 const props = defineProps<{
   messages: Message[]
   isStreaming: boolean
   streamingText: string
+  /** 流式期间的思考过程文本 */
+  streamingThinking?: string
+  /** 流式期间的工具调用状态提示（如"正在查阅参考资料"） */
+  streamingToolStatus?: string
   error: string | null
   noteRefs?: NoteReference[]
 }>()
 
 const emit = defineEmits<{
   retry: []
-  'extract-note': [text: string]
-  'create-branch': [text: string]
+  'extract-note': [text: string, messageIndex: number | null]
+  'add-to-note': [text: string]
+  'create-branch': [text: string, messageIndex: number | null]
   'navigate-note': [path: string]
 }>()
 
@@ -100,7 +114,22 @@ const highlightMenu = reactive({
   x: 0,
   y: 0,
   text: '',
+  /** 划线所在的消息索引（DOM 定位）；无则为 null */
+  messageIndex: null as number | null,
 })
+
+/** 从选区祖先节点向上查找最近的消息容器，读取 data-message-index */
+function findHighlightMessageIndex(ancestor: Node): number | null {
+  const el = ancestor.nodeType === Node.ELEMENT_NODE
+    ? (ancestor as Element)
+    : ancestor.parentElement
+  const messageEl = el?.closest('[data-message-index]')
+  if (!messageEl) return null
+  const raw = messageEl.getAttribute('data-message-index')
+  if (raw === null) return null
+  const value = Number(raw)
+  return Number.isNaN(value) ? null : value
+}
 
 function handleMouseUp() {
   const selection = window.getSelection()
@@ -129,20 +158,26 @@ function handleMouseUp() {
   highlightMenu.x = rect.left + rect.width / 2
   highlightMenu.y = rect.top
   highlightMenu.text = text
+  highlightMenu.messageIndex = findHighlightMessageIndex(ancestor)
   highlightMenu.visible = true
 }
 function closeHighlightMenu() {
   highlightMenu.visible = false
   highlightMenu.text = ''
+  highlightMenu.messageIndex = null
   window.getSelection()?.removeAllRanges()
 }
 
-function handleExtractNote(text: string) {
-  emit('extract-note', text)
+function handleExtractNote(text: string, messageIndex: number | null) {
+  emit('extract-note', text, messageIndex)
 }
 
-function handleCreateBranch(text: string) {
-  emit('create-branch', text)
+function handleAddToNote(text: string) {
+  emit('add-to-note', text)
+}
+
+function handleCreateBranch(text: string, messageIndex: number | null) {
+  emit('create-branch', text, messageIndex)
 }
 
 function handleCopy(_text: string) {}
@@ -234,6 +269,33 @@ watch(
 .chat-view__streaming-answer {
   padding: 4px 0 0 40px;
   border-left: 1px solid var(--line);
+}
+
+/* 工具调用状态 */
+.chat-view__tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 590;
+}
+
+.tool-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: tool-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tool-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 /* 错误 */
