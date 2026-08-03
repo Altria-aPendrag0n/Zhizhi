@@ -4,7 +4,7 @@
  * 管理笔记与来源会话之间的双向链接关系。
  */
 
-import { readFile } from './vault-fs'
+import { readFile, listDir, writeFile } from './vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import type { NoteMeta } from '../types'
 
@@ -96,4 +96,46 @@ export async function findNotesBySession(
   allNotes: NoteMeta[],
 ): Promise<NoteMeta[]> {
   return allNotes.filter((note) => note.source?.session === sessionPath)
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * 从 vault 的所有会话文件中移除指定目标（笔记路径或分支 id）的引用行
+ *
+ * 删除笔记/分支后调用，清理原会话消息中残留的划线虚线标记
+ * （`> 已生成笔记/分支: [[target|...]] 划线「…」`），避免引用悬空。
+ * 单个会话文件处理失败不影响其余文件。
+ */
+export async function removeSessionReferences(
+  vaultPath: string,
+  targets: string[],
+  kind: 'note' | 'branch',
+): Promise<void> {
+  if (targets.length === 0) return
+  const sessionsDir = `${vaultPath}/sessions`
+  let entries
+  try {
+    entries = await listDir(sessionsDir)
+  } catch {
+    return
+  }
+
+  const kindLabel = kind === 'branch' ? '分支' : '笔记'
+  const escapedTargets = targets.map(escapeRegExp)
+  const pattern = new RegExp(`^> 已生成${kindLabel}: \\[\\[(?:${escapedTargets.join('|')})\\|`)
+
+  for (const entry of entries) {
+    if (entry.is_dir || !entry.name.toLowerCase().endsWith('.md')) continue
+    try {
+      const filePath = `${sessionsDir}/${entry.name}`
+      const raw = await readFile(filePath)
+      const newRaw = raw.split('\n').filter((line) => !pattern.test(line)).join('\n')
+      if (newRaw !== raw) await writeFile(filePath, newRaw)
+    } catch {
+      // 忽略单个文件处理失败
+    }
+  }
 }

@@ -6,6 +6,7 @@ import { createDir, listDir, readFile, writeFile, deleteFile } from '../utils/va
 import { getNoteIndexer } from '../embedding/indexer'
 import { parseFrontmatter } from '../parser/frontmatter'
 import { serializeNote, generateNoteFileName } from '../utils/note-serializer'
+import { removeSessionReferences } from '../utils/session-linker'
 import { loadStoredValue, saveStoredValue } from '../utils/local-storage'
 
 const LOCAL_NOTES_KEY = 'study-thread-extracted-notes'
@@ -201,6 +202,14 @@ export const useNoteStore = defineStore('notes', () => {
       notes.value = notes.value.filter((note) => note.path !== path)
       noteIndex.value.delete(path)
       getNoteIndexer().removeNote(path)
+      // 清理会话文件中对被删笔记的引用行（划线虚线标记）
+      if (vaultPath) {
+        try {
+          await removeSessionReferences(vaultPath, [path], 'note')
+        } catch {
+          // 引用清理失败不影响删除结果
+        }
+      }
       return true
     } catch (error) {
       console.error('删除笔记失败:', error)

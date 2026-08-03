@@ -16,6 +16,7 @@ import {
 import { readFile, writeFile, createDir, fileExists, deleteFile } from '../utils/vault-fs'
 import { getSessionFilePath, saveSessionToVault } from '../utils/session-serializer'
 import { buildForkContextPreview } from '../utils/branch-context'
+import { removeSessionReferences } from '../utils/session-linker'
 
 /** 分支嵌套的最大层数（主会话为第 0 层，最多到第 3 层分支） */
 export const MAX_BRANCH_DEPTH = 3
@@ -196,6 +197,12 @@ export const useSessionStore = defineStore('session', () => {
         const isBranch = id.startsWith('branch_')
         const filePath = getSessionFilePath(vaultPath, id, isBranch)
         if (await fileExists(filePath)) await deleteFile(filePath)
+      }
+
+      // 清理其他会话文件中对被删分支的引用行（划线虚线标记）
+      const removedBranchIds = ids.filter((id) => id.startsWith('branch_'))
+      if (removedBranchIds.length > 0) {
+        await removeSessionReferences(vaultPath, removedBranchIds, 'branch')
       }
 
       sessionTree.value = removeNodeFromTree(sessionTree.value, nodeId)

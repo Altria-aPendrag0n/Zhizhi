@@ -82,7 +82,7 @@ fork_point: <分叉消息索引>
 > 已生成分支: [[branch_1|分支追问]] 划线「划线文本」
 ```
 
-消息后方的 `> 已生成笔记/分支` 引用行持久化划线文本（`划线「…」`），加载时由 `extractNoteRefsFromSession` 解析（`NoteReference` 增加 `kind`/`highlight` 字段）；渲染时在原消息中把划线文本转为虚线链接，点击跳转对应笔记或分支会话。旧格式（无划线文本）仍兼容。
+消息后方的 `> 已生成笔记/分支` 引用行持久化划线文本（`划线「…」`），加载时由 `extractNoteRefsFromSession` 解析（`NoteReference` 增加 `kind`/`highlight` 字段）；渲染时在原消息中把划线文本转为虚线链接，点击跳转对应笔记或分支会话。旧格式（无划线文本）仍兼容。删除笔记/分支时由 `removeSessionReferences` 扫描所有会话文件并移除对应引用行，避免虚线标记残留。
 
 ## 3. 组件层（`src/components/chat/`）
 
