@@ -41,9 +41,6 @@ import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
 import ThinkingBlock from './ThinkingBlock.vue'
 
-/** 划线标记链接的伪协议：zhizhi://note/<path> 或 zhizhi://branch/<branchId> */
-const MARK_SCHEME = 'zhizhi://'
-
 const props = defineProps<{
   message: Message
   noteCount?: number
@@ -57,11 +54,17 @@ const emit = defineEmits<{
 
 const noteCount = computed(() => props.noteCount ?? 0)
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 /**
- * 将划线文本替换为可跳转的 markdown 链接（虚线标记）。
+ * 将划线文本替换为自创 HTML 标签 `<a class="zhizhi-mark">`（虚线标记）。
  *
- * 划线文本可能跨 markdown 标记（如 **加粗**）导致源中匹配不到完整子串，
- * 此时跳过该标记（保持消息原样）。
+ * 使用原始 HTML 标签而非 markdown 链接语法（`[text](url)`），避免划线文本含
+ * markdown 特殊字符（* [ ] | 等）或位于表格/链接内部时破坏语法导致标记消失；
+ * marked 对 inline HTML 原样透传。划线文本跨 markdown 标记（如 **加粗**）导致
+ * 源中匹配不到完整子串时跳过该标记（保持消息原样）。
  */
 function injectMarkLinks(content: string, marks: NoteReference[]): string {
   let result = content
@@ -69,9 +72,11 @@ function injectMarkLinks(content: string, marks: NoteReference[]): string {
     if (!mark.highlight) continue
     const highlight = mark.highlight.replace(/\s+/g, ' ')
     if (!highlight || !result.includes(highlight)) continue
-    const id = mark.kind === 'branch' ? mark.path : encodeURIComponent(mark.path)
-    const href = `${MARK_SCHEME}${mark.kind === 'branch' ? 'branch' : 'note'}/${id}`
-    result = result.replace(highlight, (match) => `[${match}](${href})`)
+    const kind = mark.kind === 'branch' ? 'branch' : 'note'
+    const id = kind === 'branch' ? mark.path : encodeURIComponent(mark.path)
+    result = result.replace(highlight, (match) =>
+      `<a class="zhizhi-mark" data-zhizhi-kind="${kind}" data-zhizhi-id="${id}">${escapeHtml(match)}</a>`,
+    )
   }
   return result
 }
@@ -85,13 +90,11 @@ const renderedContent = computed(() => {
 })
 
 function handleBodyClick(event: MouseEvent) {
-  const anchor = (event.target as Element).closest?.<HTMLAnchorElement>('a[href^="zhizhi://"]')
+  const anchor = (event.target as Element).closest?.<HTMLAnchorElement>('a.zhizhi-mark')
   if (!anchor) return
   event.preventDefault()
-  const payload = (anchor.getAttribute('href') || '').slice(MARK_SCHEME.length)
-  const slashIndex = payload.indexOf('/')
-  const kind = slashIndex >= 0 ? payload.slice(0, slashIndex) : ''
-  let id = slashIndex >= 0 ? payload.slice(slashIndex + 1) : ''
+  const kind = anchor.dataset.zhizhiKind
+  let id = anchor.dataset.zhizhiId || ''
   try {
     id = decodeURIComponent(id)
   } catch {
@@ -275,7 +278,7 @@ function handleBodyClick(event: MouseEvent) {
 }
 
 /* 划线标记链接：虚线标明原会话中的划线位置 */
-.chat-message__body :deep(a[href^="zhizhi://"]) {
+.chat-message__body :deep(a.zhizhi-mark) {
   color: var(--brand-strong);
   font-weight: 650;
   text-decoration: underline dotted;
@@ -285,7 +288,7 @@ function handleBodyClick(event: MouseEvent) {
   cursor: pointer;
 }
 
-.chat-message__body :deep(a[href^="zhizhi://"]:hover) {
+.chat-message__body :deep(a.zhizhi-mark:hover) {
   color: var(--brand);
 }
 

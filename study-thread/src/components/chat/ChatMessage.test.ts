@@ -88,8 +88,10 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/测试.md', title: '测试笔记', messageIndex: 0, kind: 'note', highlight: '划线词' }],
       },
     })
-    expect(wrapper.html()).toContain('zhizhi://note/')
-    expect(wrapper.find('a[href^="zhizhi://note/"]').text()).toBe('划线词')
+    const mark = wrapper.find('a.zhizhi-mark[data-zhizhi-kind="note"]')
+    expect(mark.exists()).toBe(true)
+    expect(mark.attributes('data-zhizhi-id')).toBe(encodeURIComponent('notes/测试.md'))
+    expect(mark.text()).toBe('划线词')
   })
 
   it('划线标记（分支）在原消息中渲染为分支跳转链接', () => {
@@ -100,7 +102,22 @@ describe('ChatMessage', () => {
         marks: [{ path: 'branch_123', title: '分支追问', messageIndex: 0, kind: 'branch', highlight: '这个机制' }],
       },
     })
-    expect(wrapper.find('a[href="zhizhi://branch/branch_123"]').text()).toBe('这个机制')
+    const mark = wrapper.find('a.zhizhi-mark[data-zhizhi-kind="branch"][data-zhizhi-id="branch_123"]')
+    expect(mark.exists()).toBe(true)
+    expect(mark.text()).toBe('这个机制')
+  })
+
+  it('划线文本含 markdown 特殊字符时标记仍渲染不消失', () => {
+    const message: Message = { role: 'assistant', content: '计算 a*b 与 [x] 的结果' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: 'a*b' }],
+      },
+    })
+    const mark = wrapper.find('a.zhizhi-mark')
+    expect(mark.exists()).toBe(true)
+    expect(mark.text()).toBe('a*b')
   })
 
   it('划线文本跨标记匹配不到时不注入链接，保持消息原样', () => {
@@ -111,7 +128,7 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '标记 的句子' }],
       },
     })
-    expect(wrapper.html()).not.toContain('zhizhi://')
+    expect(wrapper.html()).not.toContain('zhizhi-mark')
     expect(wrapper.html()).toContain('<strong>加粗标记</strong>')
   })
 
@@ -123,7 +140,7 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note' }],
       },
     })
-    expect(wrapper.html()).not.toContain('zhizhi://')
+    expect(wrapper.html()).not.toContain('zhizhi-mark')
   })
 
   it('点击划线链接时发出 navigate-link 事件（笔记）', async () => {
@@ -134,7 +151,7 @@ describe('ChatMessage', () => {
         marks: [{ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: '笔记划线处' }],
       },
     })
-    await wrapper.find('a[href^="zhizhi://note/"]').trigger('click')
+    await wrapper.find('a.zhizhi-mark[data-zhizhi-kind="note"]').trigger('click')
     expect(wrapper.emitted('navigate-link')?.[0]).toEqual([{ kind: 'note', id: 'notes/a.md' }])
   })
 
@@ -146,7 +163,7 @@ describe('ChatMessage', () => {
         marks: [{ path: 'branch_9', title: '分支', messageIndex: 0, kind: 'branch', highlight: '分支划线处' }],
       },
     })
-    await wrapper.find('a[href="zhizhi://branch/branch_9"]').trigger('click')
+    await wrapper.find('a.zhizhi-mark[data-zhizhi-kind="branch"]').trigger('click')
     expect(wrapper.emitted('navigate-link')?.[0]).toEqual([{ kind: 'branch', id: 'branch_9' }])
   })
 })
