@@ -102,6 +102,29 @@ describe('buildForkContextPreview', () => {
     expect(preview).not.toContain('甲。')
   })
 
+  it('markdown 多行消息按行切分，以划线行为中心上下各三句', () => {
+    const context: Message[] = [
+      { role: 'assistant', content: '行一\n行二\n行三\n行四\n行五\n行六\n行七\n行八\n行九' },
+    ]
+    const preview = buildForkContextPreview(context, 0, '行五')
+    expect(preview).toContain('行二')
+    expect(preview).toContain('行八')
+    expect(preview).not.toContain('行一')
+    expect(preview).not.toContain('行九')
+  })
+
+  it('划线文本跨加粗标记时仍能定位划线所在句（以划线为中心）', () => {
+    const context: Message[] = [
+      { role: 'assistant', content: '句一。句二。句三。句四。这是 **加粗标记** 的句子。句五。句六。句七。句八。' },
+    ]
+    // 视觉上划选「标记 的句子」：源文本中是「标记** 的句子」（被加粗闭合符打断）
+    const preview = buildForkContextPreview(context, 0, '标记 的句子')
+    expect(preview).toContain('句二。')
+    expect(preview).toContain('句四。')
+    expect(preview).toContain('句五。')
+    expect(preview).not.toContain('句一。')
+  })
+
   it('划线文本定位不到时不加高亮标记', () => {
     const context: Message[] = [
       { role: 'assistant', content: '句一。句二。句三。句四。句五。句六。句七。句八。句九。' },

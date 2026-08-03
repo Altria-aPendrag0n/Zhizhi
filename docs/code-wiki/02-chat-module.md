@@ -56,8 +56,9 @@
 **面包屑**：`主会话 / 分支追问` 两级（`BranchBreadcrumb`），点击返回主会话。
 
 **分叉点上下文（页面顶部区域）**：
-- 内容 = 划线内容所在消息中**划线文本上下各三句话**（`aroundHighlight`，按句末标点切句），前一条消息只取最后三句；划线文本用 `<mark class="fork-highlight">` 包裹，markdown 渲染后以品牌色高亮标明。
-- 创建分支时由 `createBranchInVault` 用 `buildForkContextPreview(父会话消息, forkMessageIndex, highlightedText)` 生成，随分支文件持久化；划线文本定位不到时退化为消息开头若干句、不加高亮。
+- 内容 = 划线内容所在消息中**划线文本上下各三句话**（`aroundHighlight`，按句末标点或换行切分句子），前一条消息只取最后三句；划线文本用 `<mark class="fork-highlight">` 包裹，markdown 渲染后以品牌色高亮标明。
+- 划线文本来自 DOM（渲染后），可能跨 markdown 标记（如 `**加粗**`）导致源文本匹配不到——先原文匹配、失败后用移除标记的宽松匹配（`normalizeForMatch`）定位划线所在句；定位不到时退化为消息开头若干句、不加高亮。
+- 创建分支时由 `createBranchInVault` 用 `buildForkContextPreview(父会话消息, forkMessageIndex, highlightedText)` 生成，随分支文件持久化。
 
 **分支会话文件格式**（`sessions/branch-*.md`）：
 

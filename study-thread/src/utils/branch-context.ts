@@ -130,10 +130,15 @@ export function parseMessages(body: string, upToIndex: number): Message[] {
 /** 附近文本的最大展示长度 */
 const MAX_PREVIEW_LENGTH = 120
 
-/** 按句末标点切分句子 */
+/**
+ * 切分句子：以句末标点（。！？!?）或换行切分。
+ *
+ * markdown 消息中一行通常是一个语义单元（段落/列表项/标题），若只按句号切分，
+ * 无标点的多行内容会被当成一整句，"以划线处为中心"定位会失效。
+ */
 function splitSentences(text: string): string[] {
   return text
-    .split(/(?<=[。！？!?])\s*/)
+    .split(/(?<=[。！？!?])\s*|\n+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean)
 }
@@ -145,20 +150,45 @@ function lastSentences(text: string, count: number): string {
   return `${picked.slice(0, MAX_PREVIEW_LENGTH)}…`
 }
 
+/** 移除常见 markdown 内联标记，用于渲染后文本与源文本的宽松匹配 */
+function normalizeForMatch(text: string): string {
+  return text
+    .replace(/\*\*|\*|__|_|`|~~/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * 定位包含划线文本的句子索引
+ *
+ * 划线文本来自 DOM（渲染后），可能跨 markdown 标记（如 **加粗**）导致源文本中
+ * 找不到完整子串。先尝试原文匹配，失败后用移除标记后的宽松匹配兜底。
+ */
+function findHighlightSentence(sentences: string[], highlightedText: string): number {
+  const normalized = normalizeForMatch(highlightedText)
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i]
+    if (sentence.includes(highlightedText)) return i
+    if (normalized && normalizeForMatch(sentence).includes(normalized)) return i
+  }
+  return -1
+}
+
 /**
  * 围绕划线文本展示其所在句子的上下各 count 句
  *
  * 划线文本缺失或无法定位（渲染后文本与 markdown 源不一致）时，
  * 退化为展示消息开头的若干句子。
- * 定位成功时用 `<mark class="fork-highlight">` 包裹划线文本，
- * 前端以 markdown 渲染并高亮标明。
+ * 原文可直接匹配时用 `<mark class="fork-highlight">` 包裹划线文本，
+ * 前端以 markdown 渲染并高亮标明；仅宽松匹配（划线跨标记）时整句展示不加高亮。
  */
 function aroundHighlight(content: string, highlightedText: string | undefined, count = 3): string {
   const sentences = splitSentences(content)
   if (sentences.length === 0) return content
   let targetIndex = -1
   if (highlightedText) {
-    targetIndex = sentences.findIndex((sentence) => sentence.includes(highlightedText))
+    targetIndex = findHighlightSentence(sentences, highlightedText)
   }
   const start = targetIndex === -1 ? 0 : Math.max(0, targetIndex - count)
   const end = targetIndex === -1
@@ -167,10 +197,13 @@ function aroundHighlight(content: string, highlightedText: string | undefined, c
   const picked = sentences.slice(start, end)
   if (targetIndex !== -1 && targetIndex >= start && targetIndex < end) {
     const withinIndex = targetIndex - start
-    picked[withinIndex] = picked[withinIndex].replace(
-      highlightedText as string,
-      (match) => `<mark class="fork-highlight">${match}</mark>`,
-    )
+    const sentence = picked[withinIndex]
+    if (sentence.includes(highlightedText as string)) {
+      picked[withinIndex] = sentence.replace(
+        highlightedText as string,
+        (match) => `<mark class="fork-highlight">${match}</mark>`,
+      )
+    }
   }
   return picked.join('\n')
 }
