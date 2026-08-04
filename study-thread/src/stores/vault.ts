@@ -1,11 +1,14 @@
-﻿import { defineStore } from 'pinia'
+import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DirEntry, NoteMeta } from '../types'
 import { listDir, startWatching, stopWatching, readFile, deleteFile, fileExists } from '../utils/vault-fs'
 import { getSessionFilePath, saveSessionToVault } from '../utils/session-serializer'
 import type { NoteReference } from '../utils/session-linker'
 import type { Session } from '../types'
-import { getNoteIndexer } from '../embedding/indexer'
+import { getNoteIndexer, type NoteIndexer } from '../embedding/indexer'
+import { getEmbeddingEngine } from '../embedding/engine'
+import { getReferencesDir, parseReferenceMeta } from '../utils/reference-serializer'
+import { parseNoteDate } from '../utils/date'
 
 const LAST_VAULT_KEY = 'study-thread-last-vault'
 
@@ -15,6 +18,8 @@ export const useVaultStore = defineStore('vault', () => {
   const isOpen = ref(false)
   const isIndexing = ref(false)
   const indexProgress = ref(0)
+  /** 启动时 vault 恢复尝试是否已结束（无论成功/失败/无记录）；用于界面避免显示"未打开 vault"的闪烁 */
+  const vaultReady = ref(false)
 
   const noteCount = computed(() => {
     // 简单实现：计数 notes 目录下的 .md 文件
@@ -28,6 +33,7 @@ export const useVaultStore = defineStore('vault', () => {
   async function openVault(path: string) {
     vaultPath.value = path
     isOpen.value = true
+    vaultReady.value = true
     localStorage.setItem(LAST_VAULT_KEY, path)
     // 启动文件监听
     startWatching(path, (event) => {
@@ -48,71 +54,124 @@ export const useVaultStore = defineStore('vault', () => {
   }
 
   /**
-   * 初始化笔记向量索引
+   * 初始化笔记 + 参考资料向量索引
+   *
+   * 笔记索引仅在无缓存时全量构建；参考资料无论是否有缓存都会增量同步，
+   * 因为上传/编辑可能发生在缓存建立之后。引擎未就绪时跳过，由 App 在引擎就绪后重新触发。
    */
   async function initIndex() {
     if (!vaultPath.value) return
 
     const indexer = getNoteIndexer()
 
-    // 从 localStorage 加载已有索引
+    // 引擎未就绪时跳过：App.vue 会在引擎初始化完成后重新调用 initIndex
+    if (!getEmbeddingEngine().isReady()) return
+
     const loaded = indexer.loadFromStorage()
     if (loaded) {
       console.log(`已加载索引缓存 (${indexer.size} 条)`)
-      return
+    } else {
+      // 首次构建（无缓存）：全量索引 notes 目录下的笔记
+      const notesDir = fileTree.value.find((e) => e.name === 'notes' && e.is_dir)
+      if (notesDir && notesDir.children) {
+        const noteMetas: NoteMeta[] = (notesDir.children || [])
+          .filter((e) => e.name.endsWith('.md'))
+          .map((e) => ({
+            path: e.path,
+            title: e.name.replace('.md', ''),
+            type: 'concept' as const,
+            tags: [],
+            created: '',
+            updated: '',
+          }))
+
+        if (noteMetas.length > 0) {
+          isIndexing.value = true
+          indexProgress.value = 0
+          try {
+            await indexer.buildIndex(
+              noteMetas,
+              async (path) => {
+                try {
+                  return await readFile(path)
+                } catch {
+                  return ''
+                }
+              },
+              (current, total) => {
+                indexProgress.value = current / total
+              },
+            )
+            console.log(`索引完成: ${indexer.size} 条笔记`)
+          } finally {
+            isIndexing.value = false
+            indexProgress.value = 0
+          }
+        }
+      }
     }
 
-    // 需要全量索引（首次或缓存失效）
-    // 收集 notes 目录下的笔记
-    const notesDir = fileTree.value.find((e) => e.name === 'notes' && e.is_dir)
-    if (!notesDir || !notesDir.children) return
+    // 参考资料：无论是否有缓存都增量同步（上传/编辑可能发生在缓存之后）
+    await syncReferencesIndex(indexer)
+  }
 
-    const noteMetas: NoteMeta[] = (notesDir.children || [])
-      .filter((e) => e.name.endsWith('.md'))
-      .map((e) => ({
-        path: e.path,
-        title: e.name.replace('.md', ''),
-        type: 'concept' as const,
-        tags: [],
-        created: '',
-        updated: '',
-      }))
+  /**
+   * 增量同步参考资料索引
+   *
+   * md 类型全文嵌入，其余类型仅嵌入元数据（标题/描述/标签）。
+   * 与 buildIndex 的跳过策略一致：已索引且 updated 未变时跳过，避免重复嵌入。
+   */
+  async function syncReferencesIndex(indexer: NoteIndexer) {
+    if (!vaultPath.value) return
 
-    if (noteMetas.length === 0) return
+    const referencesDir = getReferencesDir(vaultPath.value)
+    const refEntries = await listDir(referencesDir).catch(() => [] as DirEntry[])
+    const refMetaEntries = refEntries.filter((e) => e.name.endsWith('.json'))
+    if (refMetaEntries.length === 0) return
 
-    isIndexing.value = true
-    indexProgress.value = 0
+    // 已索引条目的 indexedAt，用于跳过未变更的参考资料
+    const indexedAtByPath = new Map(indexer.getAllEntries().map((e) => [e.path, e.indexedAt]))
 
-    try {
-      await indexer.buildIndex(
-        noteMetas,
-        async (path) => {
-          try {
-            return await readFile(path)
-          } catch {
-            return ''
-          }
-        },
-        (current, total) => {
-          indexProgress.value = current / total
-        },
-      )
-      console.log(`索引完成: ${indexer.size} 条笔记`)
-    } finally {
-      isIndexing.value = false
-      indexProgress.value = 0
+    let synced = 0
+    for (const entry of refMetaEntries) {
+      try {
+        const meta = parseReferenceMeta(await readFile(entry.path))
+        const updatedTime = parseNoteDate(meta.updated)?.getTime() ?? Number.POSITIVE_INFINITY
+        const prevIndexedAt = indexedAtByPath.get(meta.path)
+        if (prevIndexedAt !== undefined && updatedTime <= prevIndexedAt) continue
+
+        const indexText = [
+          meta.title,
+          meta.description,
+          meta.tags.join(' '),
+          meta.fileType === 'md' ? await readFile(meta.filePath) : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+        await indexer.updateNote(meta.path, indexText)
+        synced++
+      } catch (e) {
+        console.warn(`索引参考资料失败: ${entry.path}`, e)
+      }
+    }
+    if (synced > 0) {
+      console.log(`参考资料索引完成: 新增/更新 ${synced} 条`)
     }
   }
 
   async function restoreLastVault(): Promise<boolean> {
     const path = localStorage.getItem(LAST_VAULT_KEY)
-    if (!path) return false
+    if (!path) {
+      vaultReady.value = true
+      return false
+    }
 
     try {
       await openVault(path)
       return true
     } catch {
       localStorage.removeItem(LAST_VAULT_KEY)
+      vaultReady.value = true
       return false
     }
   }
@@ -121,6 +180,7 @@ export const useVaultStore = defineStore('vault', () => {
     vaultPath.value = null
     fileTree.value = []
     isOpen.value = false
+    vaultReady.value = true
     localStorage.removeItem(LAST_VAULT_KEY)
     // 停止文件监听
     stopWatching().catch(console.error)
@@ -174,6 +234,7 @@ export const useVaultStore = defineStore('vault', () => {
     isOpen,
     isIndexing,
     indexProgress,
+    vaultReady,
     noteCount,
     sessionCount,    openVault,
     restoreLastVault,

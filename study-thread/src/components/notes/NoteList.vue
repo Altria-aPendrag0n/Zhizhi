@@ -27,7 +27,12 @@
       />
     </div>
 
-    <div v-if="filteredNotes.length > 0" class="note-stack">
+    <div v-if="loading" class="notes-loading">
+      <span class="notes-loading__dot" />
+      <p>正在加载笔记…</p>
+    </div>
+
+    <div v-else-if="filteredNotes.length > 0" class="note-stack">
       <NoteCard
         v-for="note in filteredNotes"
         :key="note.path"
@@ -69,6 +74,8 @@ import NoteCard from './NoteCard.vue'
 const props = defineProps<{
   notes: NoteMeta[]
   selectedPath?: string
+  /** 笔记异步加载中：显示加载占位，避免"还没有笔记"空状态闪现 */
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -209,6 +216,36 @@ onUnmounted(() => {
 .note-stack {
   display: grid;
   gap: 12px;
+}
+
+.notes-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 64px 24px;
+  color: var(--ink-2, #52635d);
+  font-size: 13px;
+}
+
+.notes-loading__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: notes-loading-pulse 1s ease-in-out infinite;
+}
+
+@keyframes notes-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
 }
 
 .empty-state {

@@ -1,0 +1,302 @@
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
+import NotesPage from './NotesPage.vue'
+import type { ReferenceMeta } from '../types'
+
+/**
+ * mock 工厂在模块加载早期执行（早于本文件顶层变量初始化），
+ * 因此共享状态分两部分：
+ * - vi.fn 等工具函数放在 vi.hoisted 中；
+ * - 响应式状态（route / vaultPath / references）在工厂内部创建并挂到 globalThis 上供测试读写。
+ */
+const state = vi.hoisted(() => ({
+  routerPush: vi.fn(),
+  loadAllNotes: vi.fn().mockResolvedValue(undefined),
+  loadAllReferences: vi.fn().mockResolvedValue(undefined),
+  uploadReference: vi.fn().mockResolvedValue({ id: 'ref-1', path: '/vault/references/ref-1.json' }),
+  deleteReference: vi.fn().mockResolvedValue(true),
+  updateReference: vi.fn().mockImplementation((meta: unknown) => Promise.resolve(meta)),
+  loadReferencePreview: vi.fn().mockResolvedValue(''),
+}))
+
+interface NotesPageTestGlobals {
+  __notesPageRoute?: { query: Record<string, string> }
+  __notesPageVaultPath?: { value: string | null }
+  __notesPageVaultReady?: { value: boolean }
+  __notesPageReferences?: { value: unknown[] }
+}
+
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  const route = reactive<{ query: Record<string, string> }>({ query: {} })
+  ;(globalThis as unknown as NotesPageTestGlobals).__notesPageRoute = route
+  return {
+    useRoute: () => route,
+    useRouter: () => ({ push: state.routerPush }),
+  }
+})
+
+vi.mock('../stores/notes', async () => {
+  const { ref } = await import('vue')
+  const notes = ref<unknown[]>([])
+  return {
+    useNoteStore: () => ({
+      get notes() {
+        return notes.value
+      },
+      loadAllNotes: state.loadAllNotes,
+      deleteNote: vi.fn().mockResolvedValue(true),
+    }),
+  }
+})
+
+vi.mock('../stores/references', async () => {
+  const { ref } = await import('vue')
+  const references = ref<unknown[]>([])
+  ;(globalThis as unknown as NotesPageTestGlobals).__notesPageReferences = references
+  return {
+    useReferenceStore: () => ({
+      get references() {
+        return references.value
+      },
+      loadAllReferences: state.loadAllReferences,
+      uploadReference: state.uploadReference,
+      deleteReference: state.deleteReference,
+      updateReference: state.updateReference,
+      loadReferencePreview: state.loadReferencePreview,
+    }),
+  }
+})
+
+vi.mock('../stores/vault', async () => {
+  const { ref } = await import('vue')
+  const vaultPath = ref<string | null>(null)
+  const vaultReady = ref(false)
+  ;(globalThis as unknown as NotesPageTestGlobals).__notesPageVaultPath = vaultPath
+  ;(globalThis as unknown as NotesPageTestGlobals).__notesPageVaultReady = vaultReady
+  return {
+    useVaultStore: () => ({
+      get vaultPath() {
+        return vaultPath.value
+      },
+      get vaultReady() {
+        return vaultReady.value
+      },
+    }),
+  }
+})
+
+vi.mock('../composables/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+}))
+
+function testGlobals() {
+  return globalThis as unknown as NotesPageTestGlobals
+}
+
+function createWrapper() {
+  return mount(NotesPage, {
+    global: {
+      stubs: {
+        NoteList: { name: 'NoteList', template: '<div class="note-list-stub" />' },
+        ReferenceList: { name: 'ReferenceList', template: '<div class="ref-list-stub" />' },
+      },
+    },
+  })
+}
+
+const referenceMeta: ReferenceMeta = {
+  id: 'ref-1',
+  path: '/vault/references/ref-1.json',
+  title: '认知科学导论',
+  description: '关于认知科学的一篇综述论文',
+  tags: ['认知科学'],
+  fileType: 'md',
+  fileName: '认知科学导论.md',
+  filePath: '/vault/references/ref-1.md',
+  created: '2026-01-01T00:00:00.000Z',
+  updated: '2026-01-01T00:00:00.000Z',
+}
+
+describe('NotesPage', () => {
+  beforeEach(() => {
+    state.routerPush.mockClear()
+    state.loadAllNotes.mockClear()
+    state.loadAllReferences.mockClear()
+    state.uploadReference.mockClear()
+    state.deleteReference.mockClear()
+    state.updateReference.mockClear()
+    state.loadReferencePreview.mockClear()
+    const globals = testGlobals()
+    if (globals.__notesPageRoute) globals.__notesPageRoute.query = {}
+    if (globals.__notesPageVaultPath) globals.__notesPageVaultPath.value = null
+    if (globals.__notesPageVaultReady) globals.__notesPageVaultReady.value = false
+    if (globals.__notesPageReferences) globals.__notesPageReferences.value = []
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    document.body.innerHTML = ''
+  })
+
+  it('默认显示笔记 tab', () => {
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+    expect(wrapper.findComponent({ name: 'NoteList' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ReferenceList' }).exists()).toBe(false)
+    expect(state.loadAllNotes).toHaveBeenCalledWith('/vault')
+    wrapper.unmount()
+  })
+
+  it('vault 恢复完成前显示加载占位，不闪未打开 vault 的提示', () => {
+    const wrapper = createWrapper()
+    expect(wrapper.find('.vault-loading-state').exists()).toBe(true)
+    expect(wrapper.text()).toContain('正在打开资料库')
+    expect(wrapper.find('.vault-empty-state').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('vault 恢复完成但未打开 vault 时显示引导界面', () => {
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+    expect(wrapper.find('.vault-empty-state').exists()).toBe(true)
+    expect(wrapper.find('.vault-loading-state').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('点击「参考资料」携带 tab query 并切换内容区', async () => {
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+
+    const referencesButton = wrapper.findAll('.sidebar-item').find((b) => b.text() === '参考资料')!
+    await referencesButton.trigger('click')
+    expect(state.routerPush).toHaveBeenCalledWith({ query: { tab: 'references' } })
+
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    await nextTick()
+
+    expect(wrapper.findComponent({ name: 'ReferenceList' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'NoteList' }).exists()).toBe(false)
+    expect(state.loadAllReferences).toHaveBeenCalledWith('/vault')
+    wrapper.unmount()
+  })
+
+  it('点击「笔记」移除 tab query', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+
+    const notesButton = wrapper.findAll('.sidebar-item').find((b) => b.text() === '笔记')!
+    await notesButton.trigger('click')
+    expect(state.routerPush).toHaveBeenCalledWith({ query: {} })
+    wrapper.unmount()
+  })
+
+  it('references tab 下 vaultPath 变化触发 loadAllReferences', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    // vaultPath 初始为 null：不加载任何数据，仅显示空态引导
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+    await nextTick()
+    expect(state.loadAllReferences).not.toHaveBeenCalled()
+    expect(state.loadAllNotes).not.toHaveBeenCalled()
+
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    await nextTick()
+
+    expect(state.loadAllReferences).toHaveBeenCalledWith('/vault')
+    expect(state.loadAllNotes).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('参考资料上传事件调用 referenceStore.uploadReference', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    const file = new File(['# 内容'], 'test.md', { type: 'text/markdown' })
+    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('upload', file)
+    await flushPromises()
+
+    expect(state.uploadReference).toHaveBeenCalledWith('/vault', file)
+    wrapper.unmount()
+  })
+
+  it('点击 ReferenceList select 事件后弹出编辑弹窗', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    testGlobals().__notesPageReferences!.value = [referenceMeta]
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('select', referenceMeta.path)
+    await flushPromises()
+
+    // 弹窗已渲染到 body（Teleport），标题回填自 meta
+    const dialog = document.body.querySelector('.ref-edit')
+    expect(dialog).toBeTruthy()
+    expect((dialog!.querySelector('#ref-edit-title') as HTMLInputElement).value).toBe('认知科学导论')
+    // 弹窗打开时异步加载预览
+    expect(state.loadReferencePreview).toHaveBeenCalledWith(referenceMeta)
+    wrapper.unmount()
+  })
+
+  it('弹窗 save 事件调用 store.updateReference 并关闭', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    testGlobals().__notesPageReferences!.value = [referenceMeta]
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('select', referenceMeta.path)
+    await flushPromises()
+
+    const titleInput = document.body.querySelector<HTMLInputElement>('#ref-edit-title')!
+    titleInput.value = '新的标题'
+    titleInput.dispatchEvent(new Event('input'))
+    await nextTick()
+
+    const saveButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ref-edit__btn')).find(
+      (b) => b.textContent?.trim() === '保存',
+    )!
+    saveButton.click()
+    await flushPromises()
+
+    expect(state.updateReference).toHaveBeenCalledWith(
+      expect.objectContaining({ path: referenceMeta.path, title: '新的标题' }),
+    )
+    expect(document.body.querySelector('.ref-edit')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('弹窗 delete 事件调用 store.deleteReference 并关闭、清空选中', async () => {
+    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    testGlobals().__notesPageReferences!.value = [referenceMeta]
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('select', referenceMeta.path)
+    await flushPromises()
+
+    const deleteButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ref-edit__btn')).find(
+      (b) => b.textContent?.trim() === '删除',
+    )!
+    deleteButton.click()
+    await flushPromises()
+
+    expect(state.deleteReference).toHaveBeenCalledWith(referenceMeta.path)
+    expect(document.body.querySelector('.ref-edit')).toBeNull()
+    wrapper.unmount()
+  })
+})

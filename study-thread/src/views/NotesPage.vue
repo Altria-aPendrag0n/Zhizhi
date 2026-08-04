@@ -1,55 +1,152 @@
 <template>
   <div class="notes-page">
-    <div class="content">
-      <section v-if="!vaultStore.vaultPath" class="vault-empty-state">
-        <p>请先打开 Vault，资料库会显示其 notes 目录中的笔记。</p>
-        <button @click="router.push('/settings')">前往设置</button>
-      </section>
+    <div class="notes-layout">
+      <aside class="sidebar">
+        <nav class="sidebar-nav" aria-label="资料库分类">
+          <button
+            class="sidebar-item"
+            :class="{ active: activeTab === 'notes' }"
+            type="button"
+            @click="goNotes"
+          >
+            笔记
+          </button>
+          <button
+            class="sidebar-item"
+            :class="{ active: activeTab === 'references' }"
+            type="button"
+            @click="goReferences"
+          >
+            参考资料
+          </button>
+        </nav>
+      </aside>
 
-      <template v-else>
-        <section class="intro">
-          <div>
-            <div class="eyebrow">Source-linked knowledge</div>
-            <h2>让每个判断都能回到来处</h2>
-          </div>
-          <p>
-            原子笔记只保留一个能够独立成立的观点；它同时保留来源、原文划线与对话中的追问。
-          </p>
+      <div class="content">
+        <section v-if="!vaultStore.vaultReady" class="vault-loading-state">
+          <span class="vault-loading-state__dot" />
+          <p>正在打开资料库…</p>
         </section>
 
-        <NoteList
-          :notes="noteStore.notes"
-          :selected-path="selectedNotePath"
-          @select="handleSelectNote"
-          @open-source="handleOpenSource"
-          @delete="handleDeleteNote"
-        />
-      </template>
+        <section v-else-if="!vaultStore.vaultPath" class="vault-empty-state">
+          <p>请先打开 Vault，资料库会显示其 notes 目录中的笔记。</p>
+          <button @click="router.push('/settings')">前往设置</button>
+        </section>
+
+        <template v-else-if="activeTab === 'notes'">
+          <section class="intro">
+            <div>
+              <div class="eyebrow">Source-linked knowledge</div>
+              <h2>让每个判断都能回到来处</h2>
+            </div>
+            <p>
+              原子笔记只保留一个能够独立成立的观点；它同时保留来源、原文划线与对话中的追问。
+            </p>
+          </section>
+
+          <NoteList
+            :notes="noteStore.notes"
+            :selected-path="selectedNotePath"
+            :loading="noteStore.isLoading"
+            @select="handleSelectNote"
+            @open-source="handleOpenSource"
+            @delete="handleDeleteNote"
+          />
+        </template>
+
+        <template v-else>
+          <section class="intro">
+            <div>
+              <div class="eyebrow">Reference library</div>
+              <h2>让每个依据都有处可查</h2>
+            </div>
+            <p>
+              上传 md / pdf / png 文件作为参考资料，作为学习判断的原始依据。
+            </p>
+          </section>
+
+          <ReferenceList
+            :references="referenceStore.references"
+            :selected-path="selectedReferencePath"
+            @select="handleSelectReference"
+            @upload="handleUploadReference"
+            @delete="handleDeleteReference"
+          />
+
+          <ReferenceEditDialog
+            :visible="editVisible"
+            :reference="selectedReference"
+            @close="handleEditClose"
+            @save="handleEditSave"
+            @delete="handleEditDelete"
+          />
+        </template>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '../stores/notes'
+import { useReferenceStore } from '../stores/references'
 import { useVaultStore } from '../stores/vault'
 import { useToast } from '../composables/useToast'
 import NoteList from '../components/notes/NoteList.vue'
+import ReferenceList from '../components/references/ReferenceList.vue'
+import ReferenceEditDialog from '../components/references/ReferenceEditDialog.vue'
+import type { ReferenceMeta } from '../types'
 
+const route = useRoute()
 const router = useRouter()
 const noteStore = useNoteStore()
+const referenceStore = useReferenceStore()
 const vaultStore = useVaultStore()
 const toast = useToast()
 const selectedNotePath = ref<string>()
+const selectedReferencePath = ref<string>()
+const editVisible = ref(false)
+
+const selectedReference = computed<ReferenceMeta | null>(
+  () => referenceStore.references.find((item) => item.path === selectedReferencePath.value) ?? null,
+)
+
+const activeTab = computed(() => (route.query.tab === 'references' ? 'references' : 'notes'))
+
+function loadCurrentTabData() {
+  const vaultPath = vaultStore.vaultPath
+  if (!vaultPath) return
+  if (activeTab.value === 'references') {
+    referenceStore.loadAllReferences(vaultPath)
+  } else {
+    noteStore.loadAllNotes(vaultPath)
+  }
+}
 
 watch(
   () => vaultStore.vaultPath,
   (vaultPath) => {
-    if (vaultPath) noteStore.loadAllNotes(vaultPath)
+    if (vaultPath) loadCurrentTabData()
   },
   { immediate: true },
 )
+
+// 响应外部跳转（query.tab 变化时切换并加载对应 tab 数据）
+watch(
+  () => route.query.tab,
+  () => {
+    loadCurrentTabData()
+  },
+)
+
+function goNotes() {
+  router.push({ query: {} })
+}
+
+function goReferences() {
+  router.push({ query: { tab: 'references' } })
+}
 
 function handleSelectNote(path: string) {
   selectedNotePath.value = path
@@ -72,19 +169,161 @@ async function handleDeleteNote(path: string) {
 function handleOpenSource(source: { session: string; highlight: string }) {
   console.log('Open source session:', source.session)
 }
+
+function handleSelectReference(path: string) {
+  selectedReferencePath.value = path
+  editVisible.value = true
+}
+
+async function handleUploadReference(file: File) {
+  const vaultPath = vaultStore.vaultPath
+  if (!vaultPath) return
+  const meta = await referenceStore.uploadReference(vaultPath, file)
+  if (meta) {
+    toast.success('已上传参考资料')
+  } else {
+    toast.error('上传参考资料失败')
+  }
+}
+
+async function handleDeleteReference(path: string) {
+  const reference = referenceStore.references.find((item) => item.path === path)
+  if (!reference || !window.confirm(`确定要删除“${reference.title}”吗？此操作无法撤销。`)) return
+
+  if (!(await referenceStore.deleteReference(path))) {
+    toast.error('删除参考资料文件失败')
+    return
+  }
+
+  if (selectedReferencePath.value === path) selectedReferencePath.value = undefined
+  toast.success('已删除参考资料')
+}
+
+function handleEditClose() {
+  editVisible.value = false
+}
+
+async function handleEditSave(meta: ReferenceMeta) {
+  const saved = await referenceStore.updateReference(meta)
+  if (!saved) {
+    toast.error('保存参考资料失败')
+    return
+  }
+  toast.success('已保存')
+  editVisible.value = false
+}
+
+async function handleEditDelete(path: string) {
+  const deleted = await referenceStore.deleteReference(path)
+  if (!deleted) {
+    toast.error('删除参考资料文件失败')
+    return
+  }
+  if (selectedReferencePath.value === path) selectedReferencePath.value = undefined
+  toast.success('已删除')
+  editVisible.value = false
+}
 </script>
 
 <style scoped>
 .notes-page {
+  box-sizing: border-box;
+  min-height: 100%;
   padding: 34px 48px 64px;
   background: var(--surface);
-  min-height: 100%;
   overflow-y: auto;
+}
+
+.notes-layout {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  max-width: 1078px;
+  margin: 0 auto;
+}
+
+.sidebar {
+  width: 168px;
+  flex-shrink: 0;
+}
+
+.sidebar-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2, #52635d);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-item:hover {
+  background: var(--surface-2, #f0eee7);
+  color: var(--ink);
+}
+
+.sidebar-item.active {
+  background: var(--brand-soft, #dce9e1);
+  color: var(--brand-strong, #174438);
+  font-weight: 700;
+}
+
+.sidebar-item.active::before {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--brand);
+  content: '';
 }
 
 .content {
   max-width: 830px;
-  margin: 0 auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.vault-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 80px 24px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.vault-loading-state__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: vault-loading-pulse 1s ease-in-out infinite;
+}
+
+@keyframes vault-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
 }
 
 .vault-empty-state {
