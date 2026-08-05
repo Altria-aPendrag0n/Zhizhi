@@ -25,6 +25,7 @@ interface NotesPageTestGlobals {
   __notesPageVaultPath?: { value: string | null }
   __notesPageVaultReady?: { value: boolean }
   __notesPageReferences?: { value: unknown[] }
+  __notesPageNotes?: { value: unknown[] }
 }
 
 vi.mock('vue-router', async () => {
@@ -40,6 +41,7 @@ vi.mock('vue-router', async () => {
 vi.mock('../stores/notes', async () => {
   const { ref } = await import('vue')
   const notes = ref<unknown[]>([])
+  ;(globalThis as unknown as NotesPageTestGlobals).__notesPageNotes = notes
   return {
     useNoteStore: () => ({
       get notes() {
@@ -133,6 +135,7 @@ describe('NotesPage', () => {
     if (globals.__notesPageVaultPath) globals.__notesPageVaultPath.value = null
     if (globals.__notesPageVaultReady) globals.__notesPageVaultReady.value = false
     if (globals.__notesPageReferences) globals.__notesPageReferences.value = []
+    if (globals.__notesPageNotes) globals.__notesPageNotes.value = []
   })
 
   afterEach(() => {
@@ -158,11 +161,25 @@ describe('NotesPage', () => {
     wrapper.unmount()
   })
 
-  it('vault 恢复完成但未打开 vault 时显示引导界面', () => {
+  it('vault 恢复完成但未打开 vault 时显示缓存笔记与打开提示横幅', () => {
+    testGlobals().__notesPageVaultReady!.value = true
+    testGlobals().__notesPageNotes!.value = [{ path: '/cache/1.md', title: '缓存笔记' }]
+    const wrapper = createWrapper()
+    expect(wrapper.find('.vault-loading-state').exists()).toBe(false)
+    // 不再显示旧版“请先打开 Vault”死胡同页，而是展示本地缓存笔记
+    expect(wrapper.find('.vault-empty-state').exists()).toBe(false)
+    expect(wrapper.find('.vault-offline-banner').exists()).toBe(true)
+    expect(wrapper.text()).toContain('未连接 Vault')
+    expect(wrapper.findComponent({ name: 'NoteList' }).exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('vault 恢复完成但未打开 vault 时仍展示笔记 tab 内容区', () => {
     testGlobals().__notesPageVaultReady!.value = true
     const wrapper = createWrapper()
-    expect(wrapper.find('.vault-empty-state').exists()).toBe(true)
-    expect(wrapper.find('.vault-loading-state').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'NoteList' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ReferenceList' }).exists()).toBe(false)
+    expect(state.loadAllNotes).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

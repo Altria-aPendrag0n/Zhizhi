@@ -39,7 +39,7 @@ interface Note {
 - 组合组件：`NoteList`、`ReferenceList`、`ReferenceEditDialog`。
 - 逻辑：
   - watch `vaultPath` 与 `query.tab` 按需 `loadAllNotes` / `loadAllReferences`。
-  - **防闪烁**：启动时 vault 恢复未完成（`vaultStore.vaultReady === false`）先显示"正在打开资料库"加载占位，恢复完成才显示内容或引导；确认无 vault 时才展示空状态引导去 `/settings`；笔记异步加载中 `NoteList` 显示加载占位（`isLoading`），不闪"还没有笔记"空状态。
+  - **防闪烁**：启动时 vault 恢复未完成（`vaultStore.vaultReady === false`）先显示"正在打开资料库"加载占位；恢复完成后无论是否打开 vault 都直接渲染内容——vault 未打开时展示**本地缓存笔记**（`noteStore.notes` 初值来自 localStorage `study-thread-extracted-notes`）并附"未连接 Vault"提示横幅（去 `/settings` 打开），不再显示旧版"请先打开 Vault"死胡同页。
   - 删除笔记/参考资料均先 `window.confirm` 再调 store。
   - 参考资料上传走隐藏 file input → `referenceStore.uploadReference`。
 
@@ -57,8 +57,9 @@ interface Note {
 
 ### 4.1 `NoteList.vue` — 笔记列表容器
 
-- props：`notes: NoteMeta[]`、`selectedPath?`；emits：`select(path)`、`openSource(source)`、`delete(path)`。
+- props：`notes: NoteMeta[]`、`selectedPath?`、`loading?`；emits：`select(path)`、`openSource(source)`、`delete(path)`。
 - 链式过滤：排序（updated/created/title）+ 类型过滤 + 关键词搜索（标题/标签）→ `filteredNotes`。
+- **加载占位仅在 `loading && notes.length === 0` 时显示**：已有缓存笔记时立即渲染列表（后台静默刷新），避免每次进入资料库都闪现"正在加载笔记…"中间态。
 - 右键菜单 Teleport 定位（边缘 clamp）；document 级 pointerdown / Escape 关闭。
 
 ### 4.2 `NoteCard.vue` — 笔记卡片

@@ -28,58 +28,60 @@
           <p>正在打开资料库…</p>
         </section>
 
-        <section v-else-if="!vaultStore.vaultPath" class="vault-empty-state">
-          <p>请先打开 Vault，资料库会显示其 notes 目录中的笔记。</p>
-          <button @click="router.push('/settings')">前往设置</button>
-        </section>
-
-        <template v-else-if="activeTab === 'notes'">
-          <section class="intro">
-            <div>
-              <div class="eyebrow">Source-linked knowledge</div>
-              <h2>让每个判断都能回到来处</h2>
-            </div>
-            <p>
-              原子笔记只保留一个能够独立成立的观点；它同时保留来源、原文划线与对话中的追问。
-            </p>
-          </section>
-
-          <NoteList
-            :notes="noteStore.notes"
-            :selected-path="selectedNotePath"
-            :loading="noteStore.isLoading"
-            @select="handleSelectNote"
-            @open-source="handleOpenSource"
-            @delete="handleDeleteNote"
-          />
-        </template>
-
         <template v-else>
-          <section class="intro">
-            <div>
-              <div class="eyebrow">Reference library</div>
-              <h2>让每个依据都有处可查</h2>
-            </div>
-            <p>
-              上传 md / pdf / png 文件作为参考资料，作为学习判断的原始依据。
-            </p>
-          </section>
+          <div v-if="!vaultStore.vaultPath" class="vault-offline-banner">
+            <span>未连接 Vault，当前展示本地缓存的笔记；打开 Vault 后可编辑与同步。</span>
+            <button type="button" @click="router.push('/settings')">打开 Vault</button>
+          </div>
 
-          <ReferenceList
-            :references="referenceStore.references"
-            :selected-path="selectedReferencePath"
-            @select="handleSelectReference"
-            @upload="handleUploadReference"
-            @delete="handleDeleteReference"
-          />
+          <template v-if="activeTab === 'notes'">
+            <section class="intro">
+              <div>
+                <div class="eyebrow">Source-linked knowledge</div>
+                <h2>让每个判断都能回到来处</h2>
+              </div>
+              <p>
+                原子笔记只保留一个能够独立成立的观点；它同时保留来源、原文划线与对话中的追问。
+              </p>
+            </section>
 
-          <ReferenceEditDialog
-            :visible="editVisible"
-            :reference="selectedReference"
-            @close="handleEditClose"
-            @save="handleEditSave"
-            @delete="handleEditDelete"
-          />
+            <NoteList
+              :notes="noteStore.notes"
+              :selected-path="selectedNotePath"
+              :loading="noteStore.isLoading"
+              @select="handleSelectNote"
+              @open-source="handleOpenSource"
+              @delete="handleDeleteNote"
+            />
+          </template>
+
+          <template v-else>
+            <section class="intro">
+              <div>
+                <div class="eyebrow">Reference library</div>
+                <h2>让每个依据都有处可查</h2>
+              </div>
+              <p>
+                上传 md / pdf / png 文件作为参考资料，作为学习判断的原始依据。
+              </p>
+            </section>
+
+            <ReferenceList
+              :references="referenceStore.references"
+              :selected-path="selectedReferencePath"
+              @select="handleSelectReference"
+              @upload="handleUploadReference"
+              @delete="handleDeleteReference"
+            />
+
+            <ReferenceEditDialog
+              :visible="editVisible"
+              :reference="selectedReference"
+              @close="handleEditClose"
+              @save="handleEditSave"
+              @delete="handleEditDelete"
+            />
+          </template>
         </template>
       </div>
     </div>
@@ -326,23 +328,36 @@ async function handleEditDelete(path: string) {
   }
 }
 
-.vault-empty-state {
-  display: grid;
-  justify-items: center;
+.vault-offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  padding: 80px 24px;
+  margin-bottom: 22px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2, #f0eee7);
   color: var(--ink-2);
-  text-align: center;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.vault-empty-state button {
-  padding: 8px 14px;
+.vault-offline-banner button {
+  flex-shrink: 0;
+  padding: 7px 14px;
   border: 1px solid var(--brand);
   border-radius: 8px;
   background: var(--brand);
   color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 590;
   cursor: pointer;
+}
+
+.vault-offline-banner button:hover {
+  background: var(--brand-strong);
 }
 
 .eyebrow {

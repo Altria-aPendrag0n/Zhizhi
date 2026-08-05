@@ -27,7 +27,9 @@
       />
     </div>
 
-    <div v-if="loading" class="notes-loading">
+    <!-- 仅当没有任何可展示笔记时才显示加载占位：已有缓存笔记时立即渲染，
+         避免每次进入资料库都闪现“正在加载笔记…”的中间态 -->
+    <div v-if="loading && notes.length === 0" class="notes-loading">
       <span class="notes-loading__dot" />
       <p>正在加载笔记…</p>
     </div>
