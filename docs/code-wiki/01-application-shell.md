@@ -65,6 +65,12 @@ function getProjectRoute(projectId, threadId) {
 }
 ```
 
+`handleProjectSelect(id)` 的导航要点：
+
+- 切到新项目时，更新 `activeProjectId` / `threads` 后 `push(getProjectRoute(...))`。
+- 再次点击**已激活**项目时视为"回到该项目首页"：若当前 path 偏离目标路由则修正；资料库（项目 `2`）还会检查是否残留 `tab=references` 等 query——资料库页内切换 tab 会把 tab 写入 query（`NotesPage` 里 `router.push({ query: { tab } })`），残留 query 会让再次点击资料库时仍停留在旧视图（表现为"老版本废弃页面"），因此有残留 query 时强制 `push({ path: '/notes' })` 回默认笔记视图。
+- vue-router 4 中 `push({ path })`（不含 query 的对象形式）会**清除**现有 query，因此该写法即可完成重置。
+
 ### 4.3 全局快捷键（`handleKeydown`）
 
 | 快捷键 | 动作 |

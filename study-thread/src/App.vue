@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppShell :hide-threads="isNotesRoute">
     <template #rail>
       <ProjectRail
@@ -15,10 +15,14 @@
         :active-id="activeThreadId"
         :thread-count="threadCount"
         :note-count="noteCount"
+        :branches="branchesByThread"
+        :active-branch-id="activeBranchId"
         @select="handleThreadSelect"
         @rename="handleThreadRename"
         @delete="handleThreadDelete"
         @new-thread="handleNewThread"
+        @open-branch="handleOpenBranch"
+        @delete-branch="handleDeleteBranch"
       />
     </template>
     <template #toolbar>
@@ -49,11 +53,14 @@ import type { Project } from './components/shell/ProjectRail.vue'
 import type { Thread } from './components/shell/ThreadList.vue'
 import { getEmbeddingEngine } from './embedding/engine'
 import { useVaultStore } from './stores/vault'
+import { useSessionStore } from './stores/session'
+import type { SessionTreeNode } from './utils/session-tree'
 
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
 const vaultStore = useVaultStore()
+const sessionStore = useSessionStore()
 const LOCAL_SESSION_LIST_KEY = 'study-thread-session-list'
 const LOCAL_THREAD_MESSAGES_KEY = 'study-thread-messages'
 
@@ -172,6 +179,21 @@ const activeProject = computed(() => projects.value.find((project) => project.id
 const threadCount = computed(() => threads.value.length)
 const noteCount = computed(() => (activeProjectId.value === '1' ? 2 : 0))
 
+/** 每个主会话 → 其顶层分支列表（来自 vault 会话树） */
+const branchesByThread = computed<Record<string, SessionTreeNode[]>>(() => {
+  const map: Record<string, SessionTreeNode[]> = {}
+  for (const thread of threads.value) {
+    const branches = sessionStore.getBranches(thread.id)
+    if (branches.length > 0) map[thread.id] = branches
+  }
+  return map
+})
+
+/** 当前激活的分支 id（位于分支会话页时） */
+const activeBranchId = computed(() =>
+  route.name === 'branch-chat' ? (route.params.branchId as string) : null,
+)
+
 function updateThreadTitle(threadId: string, title: string) {
   const normalizedTitle = title.trim()
   const projectList = projectThreads[activeProjectId.value]
@@ -217,7 +239,10 @@ function handleProjectSelect(id: string) {
   const targetRoute = getProjectRoute(id, nextThreadId)
 
   if (activeProjectId.value === id) {
-    if (route.path !== targetRoute.path) {
+    // 已在此项目：路由偏离目标时修正；资料库（项目2）若残留 tab=references 等 query，
+    // 也修正回默认笔记视图，避免点击资料库仍停留在旧视图
+    const needsQueryReset = id === '2' && Object.keys(route.query).length > 0
+    if (route.path !== targetRoute.path || needsQueryReset) {
       router.push(targetRoute)
     }
     return
@@ -240,6 +265,24 @@ function handleThreadSelect(id: string) {
   router.push(getProjectRoute(activeProjectId.value, id))
 }
 
+function handleOpenBranch(sessionId: string, branchId: string) {
+  router.push({ name: 'branch-chat', params: { sessionId, branchId } })
+}
+
+async function handleDeleteBranch(sessionId: string, branchId: string) {
+  // 删除分支会级联删除其下所有子分支，不影响上级与同级会话
+  const ok = await sessionStore.deleteSessionNodeFromVault(vaultStore.vaultPath, branchId)
+  if (!ok) {
+    toast.error('删除分支失败')
+    return
+  }
+  // 若当前正打开被删除的分支，回到其主会话
+  if (activeBranchId.value === branchId) {
+    router.replace({ path: '/chat', query: { thread: sessionId } })
+  }
+  toast.success('已删除分支')
+}
+
 function handleThreadRename(id: string, title: string) {
   updateThreadTitle(id, title)
 }
@@ -257,7 +300,8 @@ async function handleThreadDelete(id: string) {
   const deletedIndex = projectList.findIndex((thread) => thread.id === id)
   if (deletedIndex === -1) return
 
-  if (!(await vaultStore.deleteSession(id))) {
+  // 级联删除该会话及其下所有分支的 vault 文件（无 vault 时视为本地会话放行）
+  if (!(await sessionStore.deleteSessionNodeFromVault(vaultStore.vaultPath, id))) {
     toast.error('删除 Vault 会话文件失败，未删除本地会话')
     return
   }
@@ -337,12 +381,33 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => vaultStore.vaultPath,
+  (path) => {
+    // vault 就绪后加载会话树，供左侧会话列表展开分支
+    if (path) void sessionStore.initSessionTree(path)
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   vaultStore.restoreLastVault().catch(() => {})
   const engine = getEmbeddingEngine()
-  engine.initialize().catch((error) => {
-    console.warn('Embedding 引擎初始化失败（非关键功能）:', error)
-  })
+  engine.initialize()
+    .then(() => {
+      // 引擎就绪后再构建/刷新索引：vault 打开早于引擎就绪时，initIndex 会跳过
+      vaultStore.initIndex().catch((e) => {
+        console.warn('索引初始化失败（非关键功能）:', e)
+      })
+    })
+    .catch((error) => {
+      // 网络被拦截时常见表现为“Unexpected token '<'”(模型请求返回了 HTML 拦截页)，
+      // 此时需要开启代理/VPN 后重启应用，成功下载后模型会缓存到本地，之后可离线使用
+      console.warn(
+        'Embedding 模型加载失败（若报错为 Unexpected token "<" 且返回 HTML，说明模型下载被网络拦截，请开启代理/VPN 后重启应用）:',
+        error,
+      )
+    })
   window.addEventListener('keydown', handleKeydown)
 })
 

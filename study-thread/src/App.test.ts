@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import App from './App.vue'
 import { loadStoredValue, saveStoredValue } from './utils/local-storage'
@@ -27,7 +27,19 @@ vi.mock('./embedding/engine', () => ({
 }))
 
 vi.mock('./stores/vault', () => ({
-  useVaultStore: () => ({ restoreLastVault: vi.fn().mockResolvedValue(undefined), deleteSession: vi.fn() }),
+  useVaultStore: () => ({
+    restoreLastVault: vi.fn().mockResolvedValue(undefined),
+    deleteSession: vi.fn(),
+    initIndex: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
+vi.mock('./stores/session', () => ({
+  useSessionStore: () => ({
+    getBranches: vi.fn(() => []),
+    initSessionTree: vi.fn().mockResolvedValue(undefined),
+    deleteSessionNodeFromVault: vi.fn().mockResolvedValue(true),
+  }),
 }))
 
 function createWrapper() {
@@ -95,6 +107,33 @@ describe('App 项目导航', () => {
     await projectRail.vm.$emit('select', '2')
 
     expect(push).toHaveBeenCalledWith({ path: '/notes' })
+  })
+
+  it('资料库残留 tab=references 等 query 时点击资料库会修正回默认笔记视图', async () => {
+    const wrapper = createWrapper()
+    const projectRail = wrapper.findComponent({ name: 'ProjectRail' })
+    await projectRail.vm.$emit('select', '2')
+    push.mockClear()
+
+    // 停留在资料库的参考资料 tab（path 正确但残留 query）
+    route.path = '/notes'
+    route.query = { tab: 'references' }
+    await projectRail.vm.$emit('select', '2')
+
+    expect(push).toHaveBeenCalledWith({ path: '/notes' })
+  })
+
+  it('资料库无残留 query 时再次点击不触发多余导航', async () => {
+    const wrapper = createWrapper()
+    const projectRail = wrapper.findComponent({ name: 'ProjectRail' })
+    await projectRail.vm.$emit('select', '2')
+    push.mockClear()
+
+    route.path = '/notes'
+    route.query = {}
+    await projectRail.vm.$emit('select', '2')
+
+    expect(push).not.toHaveBeenCalled()
   })
 })
 
