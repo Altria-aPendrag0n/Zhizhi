@@ -249,6 +249,14 @@ function handleProjectSelect(id: string) {
   }
 
   activeProjectId.value = id
+  if (targetRoute.path === '/notes') {
+    // 资料库目标路由（/notes）会隐藏会话栏：不提前切换 threads，
+    // 否则会在 /chat 上先闪现一帧资料库项目的会话栏（如 知枝学习/认知科学论文索引/机器学习基础）再跳转
+    router.push(targetRoute)
+    // 会话激活状态与持久化在导航发起后同步（threads 列表保持原样，/notes 隐藏会话栏）
+    syncActiveThread(nextThreadId)
+    return
+  }
   threads.value = [...currentThreads]
   syncActiveThread(nextThreadId)
   router.push(targetRoute)

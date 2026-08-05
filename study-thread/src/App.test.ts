@@ -97,6 +97,19 @@ describe('App 项目导航', () => {
     expect(push).toHaveBeenCalledWith({ path: '/notes' })
   })
 
+  it('切换到资料库时不提前切换会话列表（避免闪现资料库会话栏）', async () => {
+    const wrapper = createWrapper()
+    const projectRail = wrapper.findComponent({ name: 'ProjectRail' })
+
+    // 资料库项目的默认会话列表（知枝学习/认知科学论文索引/机器学习基础）
+    await projectRail.vm.$emit('select', '2')
+
+    // 资料库路由隐藏会话栏：切换时不应把会话列表先换成资料库项目的会话
+    const threadsProp = wrapper.findComponent({ name: 'ThreadList' }).props('threads') as { title: string }[]
+    expect(threadsProp.map((t) => t.title)).not.toContain('认知科学论文索引')
+    expect(threadsProp.map((t) => t.title)).not.toContain('机器学习基础')
+  })
+
   it('再次选择已激活的资料库时会修正错误路由', async () => {
     const wrapper = createWrapper()
     const projectRail = wrapper.findComponent({ name: 'ProjectRail' })

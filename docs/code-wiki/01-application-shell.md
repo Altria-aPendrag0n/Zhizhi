@@ -68,6 +68,7 @@ function getProjectRoute(projectId, threadId) {
 `handleProjectSelect(id)` 的导航要点：
 
 - 切到新项目时，更新 `activeProjectId` / `threads` 后 `push(getProjectRoute(...))`。
+- **资料库（项目 `2`）例外**：目标路由 `/notes` 会隐藏会话栏（`hideThreads`），因此切换时**不提前替换 `threads`**，直接 `push('/notes')`——否则会在 `/chat` 上先闪现一帧资料库项目的会话列表（如"知枝学习/认知科学论文索引/机器学习基础"）再跳转；会话激活状态与持久化（`syncActiveThread`）在导航发起后同步。
 - 再次点击**已激活**项目时视为"回到该项目首页"：若当前 path 偏离目标路由则修正；资料库（项目 `2`）还会检查是否残留 `tab=references` 等 query——资料库页内切换 tab 会把 tab 写入 query（`NotesPage` 里 `router.push({ query: { tab } })`），残留 query 会让再次点击资料库时仍停留在旧视图（表现为"老版本废弃页面"），因此有残留 query 时强制 `push({ path: '/notes' })` 回默认笔记视图。
 - vue-router 4 中 `push({ path })`（不含 query 的对象形式）会**清除**现有 query，因此该写法即可完成重置。
 
