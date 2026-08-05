@@ -3,11 +3,9 @@
     <aside class="app-shell__rail" aria-label="项目">
       <slot name="rail" />
     </aside>
-    <Transition name="threads-collapse">
-      <aside v-if="!hideThreads" class="app-shell__threads" aria-label="会话列表">
-        <slot name="threads" />
-      </aside>
-    </Transition>
+    <aside v-if="!hideThreads" class="app-shell__threads" aria-label="会话列表">
+      <slot name="threads" />
+    </aside>
     <header class="app-shell__toolbar">
       <slot name="toolbar" />
     </header>
@@ -45,20 +43,6 @@ defineProps<{
   background: var(--shell-paper);
   color: var(--shell-ink);
   font-family: Inter, "Noto Sans SC", "PingFang SC", sans-serif;
-  /* 会话列收起/展开时让布局平滑过渡，避免界面跳变闪烁 */
-  transition: grid-template-columns 0.2s ease;
-}
-
-/* 会话列收起/展开过渡动画 */
-.threads-collapse-enter-active,
-.threads-collapse-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.threads-collapse-enter-from,
-.threads-collapse-leave-to {
-  opacity: 0;
-  transform: translateX(-12px);
 }
 
 .app-shell--threads-hidden {

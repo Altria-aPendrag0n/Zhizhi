@@ -111,7 +111,7 @@ CSS Grid 五区布局，全部为具名插槽：
 | `main` | 主内容区 | `<router-view :key="$route.fullPath" />` |
 | `context` | 上下文栏（预留） | — |
 
-`hideThreads` 时通过 `app-shell--threads-hidden` 类将 Grid 变为 3 列；会话列用 `<Transition name="threads-collapse">` 淡出/移入，配合 `grid-template-columns` 过渡，避免 `hideThreads` 切换时布局跳变闪烁（如从聊天页进入资料库页）。
+`hideThreads` 时通过 `app-shell--threads-hidden` 类将 Grid 变为 3 列，会话列用 `v-if` **立即隐藏**（无过渡动画）。曾用 `<Transition name="threads-collapse">` + `grid-template-columns` 过渡平滑收起，但实测会导致会话列元素在过渡期被拉伸到整个内容区宽度（896px）覆盖笔记页，并把主内容区下推 33px（表现为"界面从下往上出现"），且拖慢跳转约 200ms；故移除过渡改为即时切换，进入资料库更干脆快速。
 
 ## 6. 导航组件
 
