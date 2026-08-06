@@ -14,7 +14,7 @@
           class="filter-select tag-filter-input"
           list="note-tags"
           placeholder="按标签筛选..."
-          title="输入标签筛选笔记，多个标签用逗号或空格分隔（需同时包含）"
+          title="输入标签筛选笔记，多个标签用逗号或空格分隔（需同时包含）；支持单字/子串匹配（如'虾'命中'淡水虾'）与拼音匹配（如'xia'、'dsx'）"
         />
         <datalist id="note-tags">
           <option v-for="tag in allTags" :key="tag" :value="tag" />
@@ -76,6 +76,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { NoteMeta } from '../../types'
 import NoteCard from './NoteCard.vue'
+import { tagMatchesQuery } from '../../utils/pinyin-match'
 
 const props = defineProps<{
   notes: NoteMeta[]
@@ -106,27 +107,25 @@ const allTags = computed(() => {
 const filteredNotes = computed(() => {
   let result = [...props.notes]
 
-  // 标签筛选：逗号/空格分隔多个标签，笔记需同时包含全部输入标签（AND）
+  // 标签筛选：逗号/空格分隔多个条件，笔记需同时满足全部（AND）；
+  // 每个条件支持单字/子串匹配（如 '虾' 命中 '淡水虾'）与拼音匹配（全拼/首字母）
   const tagQuery = filterTag.value.trim()
   if (tagQuery) {
-    const tags = tagQuery
+    const queries = tagQuery
       .split(/[,，\s]+/)
-      .map((t) => t.trim().toLowerCase())
+      .map((t) => t.trim())
       .filter(Boolean)
-    if (tags.length > 0) {
-      result = result.filter((note) => {
-        const noteTags = note.tags.map((t) => t.toLowerCase())
-        return tags.every((tag) => noteTags.includes(tag))
-      })
+    if (queries.length > 0) {
+      result = result.filter((note) =>
+        queries.every((q) => note.tags.some((tag) => tagMatchesQuery(tag, q))),
+      )
     }
   }
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase()
+    const q = searchQuery.value.trim()
     result = result.filter(
-      (n) =>
-        n.title.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q)),
+      (n) => tagMatchesQuery(n.title, q) || n.tags.some((tag) => tagMatchesQuery(tag, q)),
     )
   }
 

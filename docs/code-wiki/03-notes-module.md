@@ -59,7 +59,8 @@ interface Note {
 ### 4.1 `NoteList.vue` — 笔记列表容器
 
 - props：`notes: NoteMeta[]`、`selectedPath?`、`loading?`；emits：`select(path)`、`openSource(source)`、`delete(path)`。
-- 链式过滤：排序（updated/created/title）+ 标签筛选（逗号/空格分隔多标签，需同时包含，AND 匹配，输入框带 `datalist` 汇总所有已有标签提示）+ 关键词搜索（标题/标签）→ `filteredNotes`。
+- 链式过滤：排序（updated/created/title）+ 标签筛选（逗号/空格分隔多条件，需同时满足，AND 匹配，输入框带 `datalist` 汇总所有已有标签提示）+ 关键词搜索（标题/标签）→ `filteredNotes`。
+- **单字/拼音匹配**：筛选与搜索统一走 `utils/pinyin-match.ts` 的 `tagMatchesQuery`——中文按子串匹配（输入 `虾` 命中所有含"虾"字的标签），纯字母输入按拼音匹配（全拼 `xia` / 首字母 `dsx`，经 `pinyin-pro` 转换，含 Map 缓存）。
 - **加载占位仅在 `loading && notes.length === 0` 时显示**：已有缓存笔记时立即渲染列表（后台静默刷新），避免每次进入资料库都闪现"正在加载笔记…"中间态。
 - 右键菜单 Teleport 定位（边缘 clamp）；document 级 pointerdown / Escape 关闭。
 
@@ -148,7 +149,7 @@ interface Note {
 
 ## 7. 相关测试
 
-- `src/stores/notes.test.ts`、`src/utils/note-serializer.test.ts`、`src/utils/note-insert.test.ts`、`src/utils/session-linker.test.ts`
+- `src/stores/notes.test.ts`、`src/utils/note-serializer.test.ts`、`src/utils/note-insert.test.ts`、`src/utils/session-linker.test.ts`、`src/utils/pinyin-match.test.ts`
 - `src/parser/frontmatter.test.ts`（含旧版多行 highlight 损坏 frontmatter 的宽松容错用例）
 - `src/components/notes/AddToNoteDialog.test.ts`、`NoteCard.test.ts`、`NoteDetail.test.ts`、`NoteList.test.ts`
 - `src/views/NotesPage.test.ts`

@@ -87,4 +87,57 @@ describe('NoteList', () => {
     expect(values).toContain('学习方法')
     expect(values).toContain('费曼')
   })
+
+  it('标签筛选支持单字匹配：输入"虾"命中所有含"虾"字的标签', async () => {
+    const shrimpNote: NoteMeta = {
+      path: '/vault/notes/虾类.md',
+      title: '虾类知识',
+      type: 'concept',
+      tags: ['淡水虾', '小龙虾'],
+      created: '2026-01-01T00:00:00.000Z',
+      updated: '2026-01-03T00:00:00.000Z',
+    }
+    const wrapper = mount(NoteList, { props: { notes: [shrimpNote, note2] } })
+
+    await wrapper.find('.tag-filter-input').setValue('虾')
+    await nextTick()
+
+    const cards = wrapper.findAll('.note-card')
+    expect(cards).toHaveLength(1)
+    expect(cards[0].text()).toContain('虾类知识')
+  })
+
+  it('标签筛选支持拼音匹配：输入全拼"xia"或首字母"dsx"命中对应标签', async () => {
+    const shrimpNote: NoteMeta = {
+      path: '/vault/notes/虾类.md',
+      title: '虾类知识',
+      type: 'concept',
+      tags: ['淡水虾', '小龙虾'],
+      created: '2026-01-01T00:00:00.000Z',
+      updated: '2026-01-03T00:00:00.000Z',
+    }
+    const wrapper = mount(NoteList, { props: { notes: [shrimpNote, note2] } })
+
+    // 全拼
+    await wrapper.find('.tag-filter-input').setValue('xia')
+    await nextTick()
+    expect(wrapper.findAll('.note-card')).toHaveLength(1)
+
+    // 首字母缩写
+    await wrapper.find('.tag-filter-input').setValue('dsx')
+    await nextTick()
+    expect(wrapper.findAll('.note-card')).toHaveLength(1)
+    expect(wrapper.findAll('.note-card')[0].text()).toContain('虾类知识')
+  })
+
+  it('搜索框支持拼音匹配标题或标签', async () => {
+    const wrapper = mount(NoteList, { props: { notes: [note, note2] } })
+
+    // 'feiman' → 费曼学习法的标签'费曼'
+    await wrapper.find('.search-input').setValue('feiman')
+    await nextTick()
+    const cards = wrapper.findAll('.note-card')
+    expect(cards).toHaveLength(1)
+    expect(cards[0].text()).toContain('另一篇')
+  })
 })
