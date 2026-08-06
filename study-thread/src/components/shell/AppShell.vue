@@ -12,9 +12,6 @@
     <main class="app-shell__main">
       <slot name="main" />
     </main>
-    <aside v-if="$slots.context" class="app-shell__context" aria-label="上下文">
-      <slot name="context" />
-    </aside>
   </div>
 </template>
 
@@ -36,7 +33,8 @@ defineProps<{
   --shell-accent-soft: #e0ebe3;
 
   display: grid;
-  grid-template-columns: 76px 244px minmax(0, 1fr) 292px;
+  /* 三区布局：项目栏 会话列表 主内容区（无预留上下文栏，主内容区撑满剩余空间） */
+  grid-template-columns: 76px 244px minmax(0, 1fr);
   grid-template-rows: 60px minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
@@ -46,7 +44,7 @@ defineProps<{
 }
 
 .app-shell--threads-hidden {
-  grid-template-columns: 76px minmax(0, 1fr) 292px;
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
 .app-shell--threads-hidden .app-shell__toolbar {
@@ -55,10 +53,6 @@ defineProps<{
 
 .app-shell--threads-hidden .app-shell__main {
   grid-column: 2;
-}
-
-.app-shell--threads-hidden .app-shell__context {
-  grid-column: 3;
 }
 
 .app-shell__rail {
@@ -99,21 +93,13 @@ defineProps<{
   background: var(--shell-surface);
 }
 
-.app-shell__context {
-  grid-column: 4;
-  min-width: 0;
-  overflow: auto;
-  background: rgba(242, 239, 232, 0.72);
-  border-left: 1px solid var(--shell-line);
-}
-
 @media (max-width: 1100px) {
   .app-shell {
-    grid-template-columns: 64px 218px minmax(0, 1fr) 270px;
+    grid-template-columns: 64px 218px minmax(0, 1fr);
   }
 
   .app-shell--threads-hidden {
-    grid-template-columns: 64px minmax(0, 1fr) 270px;
+    grid-template-columns: 64px minmax(0, 1fr);
   }
 }
 </style>
