@@ -1,0 +1,26 @@
+# 调试与过程产物（不提交）
+.browser-profile/
+.browser-profile-*/
+.claude/
+.preflight/
+# AI/开发过程文件（spec 设计稿等），任意层级均忽略（含 study-thread/.trae/）
+.trae/
+
+# 开发进度追踪（过程文件，正式文档以 docs/ 下的 md 为准）
+progress.json
+
+# 测试与验证产物
+/test vault/
+study-thread/scripts/
+study-thread.design
+pages/
+partials/
+/generation-tree.json
+/runtime-dispatch-manifest.json
+/runtime-orchestration-summary.json
+/validation-report.json
+
+# 桌面实测截图
+/*.png
+/*.png.jpg
+/*.jpg

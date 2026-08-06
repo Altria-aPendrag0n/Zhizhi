@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# 内置 Embedding 模型与 onnxruntime wasm（二进制资源，不纳入版本库）
+public/models/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
