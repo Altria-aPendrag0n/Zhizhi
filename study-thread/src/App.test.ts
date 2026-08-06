@@ -83,6 +83,13 @@ describe('App 项目导航', () => {
     expect(detailWrapper.findComponent({ name: 'AppShell' }).props('hideThreads')).toBe(true)
   })
 
+  it('在 /settings 隐藏会话栏（保留项目栏）', () => {
+    route.path = '/settings'
+    const wrapper = createWrapper()
+
+    expect(wrapper.findComponent({ name: 'AppShell' }).props('hideThreads')).toBe(true)
+  })
+
   it('在非笔记路由保留会话栏', () => {
     const wrapper = createWrapper()
 

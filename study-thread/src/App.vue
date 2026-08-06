@@ -1,5 +1,5 @@
 <template>
-  <AppShell :hide-threads="isNotesRoute">
+  <AppShell :hide-threads="hideThreads">
     <template #rail>
       <ProjectRail
         :projects="projects"
@@ -169,7 +169,10 @@ function syncActiveThread(id: string | null) {
   saveSessionList()
 }
 
-const isNotesRoute = computed(() => route.path === '/notes' || route.path.startsWith('/notes/'))
+/** 资料库（/notes*）与设置页隐藏会话列：左侧只保留项目栏 */
+const hideThreads = computed(() =>
+  route.path.startsWith('/notes') || route.path === '/settings',
+)
 /** 笔记/会话/设置界面显示顶部返回按钮 */
 const showBack = computed(() =>
   route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings',

@@ -106,7 +106,7 @@ CSS Grid 五区布局，全部为具名插槽：
 | 插槽名 | 内容 | 说明 |
 |--------|------|------|
 | `rail` | 项目栏 | 76px |
-| `threads` | 会话列表 | 248px；`hideThreads` 时隐藏（如资料库页） |
+| `threads` | 会话列表 | 248px；`hideThreads` 时隐藏（资料库页与设置页） |
 | `toolbar` | 顶栏 | 跨主区与上下文栏 |
 | `main` | 主内容区 | `<router-view :key="$route.fullPath" />` |
 | `context` | 上下文栏（预留） | — |
