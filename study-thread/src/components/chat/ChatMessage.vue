@@ -40,6 +40,7 @@ import { marked } from 'marked'
 import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
 import { wrapHighlightInDOM, unwrapHighlight } from '../../utils/highlight-dom'
+import { preprocessMarkdownForRendering } from '../../utils/markdown-preprocess'
 import ThinkingBlock from './ThinkingBlock.vue'
 
 const props = defineProps<{
@@ -57,7 +58,7 @@ const noteCount = computed(() => props.noteCount ?? 0)
 const bodyRef = ref<HTMLElement | null>(null)
 
 const renderedContent = computed(() => {
-  return marked(props.message.content, {
+  return marked(preprocessMarkdownForRendering(props.message.content), {
     breaks: true,
     gfm: true,
   }) as string

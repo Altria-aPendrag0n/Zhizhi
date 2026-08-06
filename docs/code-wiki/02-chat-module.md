@@ -115,6 +115,7 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 
 - props：`message: Message`、`noteCount?`、`marks?: NoteReference[]`（该消息的划线标记）。
 - 按角色区分样式；assistant 用 `marked(content, {breaks:true, gfm:true})` 渲染 Markdown。
+- **CJK 加粗预处理**：渲染前先经 `preprocessMarkdownForRendering`（`src/utils/markdown-preprocess.ts`）把 `**"X"**` 变换为 `"**X**"`（引号/括号移到 `**` 外侧）。GFM flanking 规则下，`**"濑尿虾"**是` 这类"标点紧贴 `**` 且外侧为非标点"的写法会使定界符不满足 left/right-flanking，加粗退化为字面 `**`（AI 回答常见输出）。变换后 `**` 两侧均为非标点，加粗正常；代码块与行内代码先以占位符保护避免被改写。分支页分叉点上下文（`BranchChatPage.renderedForkContext`）同样先预处理再 `marked.parse`。
 - 正文容器标记 `data-highlightable="true"` 供划线识别；`thinking` 非空时渲染 `ThinkingBlock`。
 - **划线标记**：先由 `marked` 渲染出完整 HTML，再用 `wrapHighlightInDOM`（`src/utils/highlight-dom.ts`）把划线文本包裹为 `<a class="zhizhi-mark" data-zhizhi-kind="note|branch" data-zhizhi-id="…">`（**渲染后 DOM 包裹**，不在 markdown 源中插入标签——当划线文本位于 `**加粗**` / `*斜体*` 等行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏成字面 `**`）。该工具拼接全部文本节点定位划线起止区间并跨节点切分合并，因此划线文本位于单个文本节点内、或跨加粗/斜体边界（如划选 `名字——**"富贵虾"**` 的视觉范围）时都能正确显示虚线。以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。执行时机：`onMounted` 兜底 + watch `[renderedContent, marks]`，`nextTick` 后调用，且每轮先 `unwrapHighlight` 旧标记保证幂等。
 

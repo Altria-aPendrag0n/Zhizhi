@@ -20,6 +20,14 @@ describe('ChatMessage', () => {
     expect(wrapper.html()).toContain('<strong>你好</strong>')
   })
 
+  it('加粗文本含引号且后接中文时仍正确渲染为加粗（如 **"濑尿虾"**是…）', async () => {
+    const message: Message = { role: 'assistant', content: '皮皮虾俗称**"濑尿虾"**是口虾蛄。' }
+    const wrapper = mount(ChatMessage, { props: { message } })
+    await nextTick()
+    expect(wrapper.html()).toContain('<strong>濑尿虾</strong>')
+    expect(wrapper.text()).not.toContain('**')
+  })
+
   it('渲染系统消息', () => {
     const message: Message = { role: 'system', content: '系统通知' }
     const wrapper = mount(ChatMessage, { props: { message } })

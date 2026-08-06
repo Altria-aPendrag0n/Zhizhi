@@ -81,6 +81,7 @@ import { generateSessionTitle, getSessionFilePath } from '../utils/session-seria
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
 import { wrapHighlightInDOM, unwrapHighlight } from '../utils/highlight-dom'
+import { preprocessMarkdownForRendering } from '../utils/markdown-preprocess'
 import { useToast } from '../composables/useToast'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
@@ -111,7 +112,7 @@ const forkHighlight = ref<string>('')
 /** 分叉点上下文用 markdown 渲染（划线内容本身可能含 markdown 标记） */
 const renderedForkContext = computed(() => {
   if (!forkContext.value) return ''
-  return marked.parse(forkContext.value, {
+  return marked.parse(preprocessMarkdownForRendering(forkContext.value), {
     breaks: true,
     gfm: true,
   }) as string
