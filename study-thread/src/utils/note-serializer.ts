@@ -40,7 +40,9 @@ export function serializeNote(
   lines.push(`type: ${note.type}`)
   lines.push('tags:')
   for (const tag of note.tags) {
-    lines.push(`  - ${tag}`)
+    // 用 JSON 字符串序列化标签：标签可能含 `:`、`#` 等 YAML 特殊字符，
+    // 裸写会被解析成对象/注释导致字段丢失
+    lines.push(`  - ${JSON.stringify(tag)}`)
   }
   lines.push(`created: ${now}`)
   lines.push(`updated: ${now}`)

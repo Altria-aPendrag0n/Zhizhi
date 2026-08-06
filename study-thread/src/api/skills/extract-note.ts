@@ -142,7 +142,8 @@ export async function extractNote(
     proposition: '',
     explanation: '',
     type: 'concept',
-    tags: parsed.tags,
+    // LLM 未生成标签（返回空数组）时兜底一个，保证笔记始终有可展示/检索的标签
+    tags: parsed.tags.length > 0 ? parsed.tags : ['未分类'],
     confidence: 0.5,
   }
 }

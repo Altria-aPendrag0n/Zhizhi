@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import * as yaml from 'js-yaml'
 import { serializeNote, generateNoteFileName } from './note-serializer'
 import type { ExtractedNote } from '../types'
 
@@ -19,9 +20,22 @@ describe('serializeNote', () => {
     expect(result).toContain('title: 费曼学习法')
     expect(result).toContain('description: "用教别人来检验自己是否真正理解"')
     expect(result).toContain('type: method')
-    expect(result).toContain('  - 学习方法')
-    expect(result).toContain('  - 费曼')
+    expect(result).toContain('  - "学习方法"')
+    expect(result).toContain('  - "费曼"')
     expect(result).toContain('confidence: 0.9')
+  })
+
+  it('标签用 JSON 字符串序列化，含 YAML 特殊字符（冒号/井号）仍可 round-trip 解析', () => {
+    const specialNote: ExtractedNote = { ...note, tags: ['算法: 基础', '#重点', '记忆#1'] }
+    const result = serializeNote(specialNote, 'sessions/test/main.md', '')
+
+    // 特殊字符标签以 JSON 字符串形式写入，避免被解析成对象/注释
+    expect(result).toContain('  - "算法: 基础"')
+
+    // frontmatter 经 YAML 解析后标签完整保留
+    const frontmatter = result.split('---')[1]
+    const parsed = yaml.load(frontmatter) as Record<string, unknown>
+    expect(parsed.tags).toEqual(['算法: 基础', '#重点', '记忆#1'])
   })
 
   it('处理描述中的引号', () => {
