@@ -178,6 +178,7 @@ const showBack = computed(() =>
   route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings',
 )
 const displayedBreadcrumbs = computed(() => {
+  if (route.path === '/settings') return ['设置']
   if (route.path === '/notes') return ['资料库']
   if (route.path.startsWith('/notes/')) {
     return ['资料库', noteDetailTitle.value || decodeURIComponent((route.params?.id as string) || '')]

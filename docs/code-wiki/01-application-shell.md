@@ -85,6 +85,7 @@ function getProjectRoute(projectId, threadId) {
 
 - `provide('updateThreadTitle', updateThreadTitle)`：由聊天页在会话标题变化时调用。
 - `provide('updateNoteBreadcrumbTitle', (title) => …)`：由笔记详情页更新面包屑末级标题。
+- **顶栏面包屑派生（`displayedBreadcrumbs`）**：`/settings` → `['设置']`；`/notes` → `['资料库']`；`/notes/:id` → `['资料库', 笔记标题]`；其余（会话/分支）→ 会话面包屑 `['学习会话', 会话标题]`（支持内联编辑）。
 
 ### 4.5 生命周期初始化（`onMounted`）
 
