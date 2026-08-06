@@ -95,5 +95,66 @@ describe('MarkdownEditor', () => {
 
     expect(wrapper.find('.cm-wikilink--unresolved').text()).toBe('[[不存在的笔记]]')
   })
+
+  it('表格块渲染为 <table> 而非字面 | 段落', async () => {
+    const wrapper = mount(MarkdownEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+      },
+      props: {
+        modelValue: '# 标题\n| 名称 | 说明 |\n| --- | --- |\n| 皮皮虾 | 口虾蛄 |',
+      },
+    })
+
+    await nextTick()
+
+    const tableWidget = wrapper.find('.cm-live-preview-table')
+    expect(tableWidget.exists()).toBe(true)
+    expect(tableWidget.findAll('table thead th')).toHaveLength(2)
+    expect(tableWidget.find('table thead th').text()).toBe('名称')
+    expect(tableWidget.findAll('table tbody td')).toHaveLength(2)
+    expect(tableWidget.find('table tbody td').text()).toBe('皮皮虾')
+    // 不出现字面 | 段落
+    expect(wrapper.findAll('.cm-live-preview-line p')).toHaveLength(0)
+  })
+
+  it('表格单元格内的加粗与行内代码正常渲染', async () => {
+    const wrapper = mount(MarkdownEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+      },
+      props: {
+        modelValue: '开头\n| 俗名 | 学名 |\n| --- | --- |\n| **"濑尿虾"** | `O. oratoria` |',
+      },
+    })
+
+    await nextTick()
+
+    const tableWidget = wrapper.find('.cm-live-preview-table')
+    const cells = tableWidget.findAll('table tbody td')
+    expect(cells[0].find('strong').text()).toBe('"濑尿虾"')
+    expect(cells[1].find('code').text()).toBe('O. oratoria')
+  })
+
+  it('光标落在表格内时整块保持源码可编辑（不渲染预览）', async () => {
+    const wrapper = mount(MarkdownEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+      },
+      props: {
+        modelValue: '| a | b |\n| --- | --- |\n| 1 | 2 |',
+      },
+    })
+
+    await nextTick()
+
+    // 初始光标在第 1 行（表头行，属于表格块）→ 整块不渲染预览
+    expect(wrapper.find('.cm-live-preview-table').exists()).toBe(false)
+    const sourceLines = wrapper.findAll('.cm-line')
+    expect(sourceLines.map((line) => line.text())).toEqual(['| a | b |', '| --- | --- |', '| 1 | 2 |'])
+  })
 })
 

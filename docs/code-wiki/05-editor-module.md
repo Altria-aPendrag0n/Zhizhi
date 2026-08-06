@@ -35,6 +35,7 @@
 |------|------|
 | `EditorState` / `EditorView` | 编辑器核心 |
 | `livePreviewField`（`StateField` + 自定义 `MarkdownLineWidget extends WidgetType`） | 非光标行渲染预览 HTML（标题/引用/列表/代码块/行内格式/wikilink），光标行显示源码 |
+| 表格块渲染（`MarkdownTableWidget`） | 连续表格行且含分隔行时整块合并为一个 widget 渲染 `<table>`（表头/分隔/表体，单元格支持加粗/代码/wikilink）；光标落在表格内时整块保持源码可编辑；`|` 转义（`\|`）与行内代码内的 `|` 不做分隔 |
 | `wikiLinkField` | 源码行内 `[[...]]` 打 `cm-wikilink--resolved / cm-wikilink--unresolved` 装饰 |
 | `autocompletion.override = createWikiLinkCompletionSource(notes, currentNotePath)` | `[[` 补全 |
 | `editableCompartment` | 控制 `readonly` |

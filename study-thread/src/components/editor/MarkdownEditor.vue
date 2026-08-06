@@ -152,6 +152,62 @@ function renderMarkdownLine(line: string) {
   return `<p>${renderInline(line)}</p>`
 }
 
+// ---------- Markdown 表格渲染（多行块，单 widget 渲染整表） ----------
+
+/** 表格行：以 | 开头并以 | 结尾 */
+function isTableRow(line: string): boolean {
+  return /^\s*\|.*\|\s*$/.test(line)
+}
+
+/** 按 | 拆分表格单元格（处理 \| 转义与行内代码内的 |） */
+function splitTableRow(line: string): string[] {
+  const cells: string[] = []
+  let current = ''
+  let inCode = false
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    if (char === '\\' && line[i + 1] === '|') {
+      current += '|'
+      i++
+      continue
+    }
+    if (char === '`') inCode = !inCode
+    if (char === '|' && !inCode) {
+      cells.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  cells.push(current.trim())
+  // 剔除行首行尾定界 | 产生的空壳单元格
+  while (cells.length > 0 && cells[0] === '') cells.shift()
+  while (cells.length > 0 && cells[cells.length - 1] === '') cells.pop()
+  return cells
+}
+
+/** 分隔行：单元格为 `-`/`:` 组合（如 | --- | :---: |） */
+function isTableSeparatorRow(line: string): boolean {
+  const cells = splitTableRow(line)
+  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell.trim()))
+}
+
+/** 表格块（表头 + 分隔行 + 表体）→ <table> HTML */
+function renderTableLines(lines: string[]): string {
+  const rows = lines.map(splitTableRow)
+  const header = rows[0] ?? []
+  const body = rows.slice(2)
+  const cols = header.length
+  const renderRow = (cells: string[], tag: 'th' | 'td') => {
+    const padded = [...cells]
+    while (padded.length < cols) padded.push('')
+    return `<tr>${padded.slice(0, cols).map((cell) => `<${tag}>${renderInline(cell)}</${tag}>`).join('')}</tr>`
+  }
+  return `<table><thead>${renderRow(header, 'th')}</thead><tbody>${
+    body.map((row) => renderRow(row, 'td')).join('')
+  }</tbody></table>`
+}
+
 class MarkdownLineWidget extends WidgetType {
   constructor(
     private readonly line: string,
@@ -178,14 +234,71 @@ class MarkdownLineWidget extends WidgetType {
   }
 }
 
+/** 表格块预览 widget：整块（表头 + 分隔行 + 表体）渲染为一个 <table> */
+class MarkdownTableWidget extends WidgetType {
+  constructor(
+    private readonly lines: string[],
+    private readonly position: number,
+  ) {
+    super()
+  }
+
+  eq(other: MarkdownTableWidget) {
+    return this.position === other.position
+      && this.lines.length === other.lines.length
+      && this.lines.every((line, index) => line === other.lines[index])
+  }
+
+  ignoreEvent() {
+    return false
+  }
+
+  toDOM() {
+    const element = document.createElement('div')
+    element.className = 'cm-live-preview-line cm-live-preview-table'
+    element.dataset.position = String(this.position)
+    element.dataset.highlightable = 'true'
+    element.innerHTML = renderTableLines(this.lines)
+    return element
+  }
+}
+
 function buildPreviewDecorations(state: EditorState) {
   const activeLine = state.doc.lineAt(state.selection.main.head).number
   const decorations: Range<Decoration>[] = []
 
-  for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
-    if (lineNumber === activeLine) continue
+  let lineNumber = 1
+  while (lineNumber <= state.doc.lines) {
     const line = state.doc.line(lineNumber)
-    decorations.push(Decoration.replace({ widget: new MarkdownLineWidget(line.text, line.from), block: true }).range(line.from, line.to))
+
+    // 表格块：连续表格行且含分隔行 → 整块渲染为一个 <table>；
+    // 光标落在表格内时整块保持源码（可编辑），不渲染预览
+    if (isTableRow(line.text)) {
+      const blockLines = [line.text]
+      let end = lineNumber
+      while (end < state.doc.lines && isTableRow(state.doc.line(end + 1).text)) {
+        end += 1
+        blockLines.push(state.doc.line(end).text)
+      }
+      const isValidTable = blockLines.length >= 2 && isTableSeparatorRow(blockLines[1])
+      const cursorInside = lineNumber <= activeLine && activeLine <= end
+      if (isValidTable) {
+        if (!cursorInside) {
+          decorations.push(Decoration.replace({
+            widget: new MarkdownTableWidget(blockLines, line.from),
+            block: true,
+          }).range(line.from, state.doc.line(end).to))
+        }
+        lineNumber = end + 1
+        continue
+      }
+      // 无分隔行、不构成合法表格：逐行按普通行渲染（保持字面 |）
+    }
+
+    if (lineNumber !== activeLine) {
+      decorations.push(Decoration.replace({ widget: new MarkdownLineWidget(line.text, line.from), block: true }).range(line.from, line.to))
+    }
+    lineNumber += 1
   }
 
   return Decoration.set(decorations, true)
@@ -492,6 +605,28 @@ onBeforeUnmount(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 :deep(.markdown-list-item) { display: flex; gap: 8px; }
+:deep(.cm-live-preview-table) { padding: 6px 0; }
+:deep(.cm-live-preview-table table) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+:deep(.cm-live-preview-table th),
+:deep(.cm-live-preview-table td) {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  text-align: left;
+  vertical-align: top;
+}
+:deep(.cm-live-preview-table th) {
+  background: var(--surface-2);
+  font-weight: 650;
+  white-space: nowrap;
+}
 :deep(.wikilink--resolved) { color: var(--brand); font-weight: 650; text-decoration: none; cursor: pointer; }
 :deep(.wikilink--unresolved) { color: var(--ink-3); border-bottom: 1px dashed currentColor; }
 :deep(.cm-wikilink) { font-weight: 650; }
