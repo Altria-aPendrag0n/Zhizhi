@@ -146,10 +146,10 @@ function handleBodyClick(event: MouseEvent) {
   padding: 15px 17px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  background: #f6f4ed;
-  color: var(--ink-2);
-  font-size: 14px;
-  line-height: 1.65;
+  background: #eae4d6;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.7;
 }
 
 .chat-message__prompt b {
@@ -170,8 +170,8 @@ function handleBodyClick(event: MouseEvent) {
 }
 
 .chat-message__text {
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 15px;
+  line-height: 1.7;
   white-space: pre-wrap;
 }
 
