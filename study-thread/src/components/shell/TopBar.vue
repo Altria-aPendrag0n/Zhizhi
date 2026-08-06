@@ -1,7 +1,16 @@
 <template>
   <div class="top-bar">
     <div class="top-bar__crumbs">
-      <PanelLeft :size="18" :stroke-width="1.75" class="top-bar__crumb-icon" />
+      <button
+        v-if="showBack"
+        class="top-bar__back-btn"
+        type="button"
+        aria-label="返回"
+        @click="$emit('back')"
+      >
+        <ArrowLeft :size="18" :stroke-width="1.75" />
+      </button>
+      <PanelLeft v-else :size="18" :stroke-width="1.75" class="top-bar__crumb-icon" />
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
         <span v-if="index > 0" aria-hidden="true" class="top-bar__separator">/</span>
         <span
@@ -48,15 +57,18 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { PanelLeft, Search, Ellipsis, Pencil } from '@lucide/vue'
+import { ArrowLeft, PanelLeft, Search, Ellipsis, Pencil } from '@lucide/vue'
 
 const props = defineProps<{
   breadcrumbs: string[]
+  /** 是否显示返回按钮（笔记/会话/设置界面） */
+  showBack?: boolean
 }>()
 
 const emit = defineEmits<{
   search: []
   settings: []
+  back: []
   'update-title': [title: string]
 }>()
 
@@ -181,6 +193,26 @@ watch(
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.top-bar__back-btn {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink-2);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.top-bar__back-btn:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
 }
 
 .top-bar__icon-btn {

@@ -53,7 +53,7 @@ function createWrapper() {
         },
         ProjectRail: { name: 'ProjectRail', props: ['projects', 'activeId'], template: '<div />' },
         ThreadList: { name: 'ThreadList', props: ['threads', 'activeId'], template: '<div />' },
-        TopBar: true,
+        TopBar: { name: 'TopBar', props: ['breadcrumbs', 'showBack'], template: '<div />' },
         Toast: true,
         RouterView: true,
       },
@@ -87,6 +87,30 @@ describe('App 项目导航', () => {
     const wrapper = createWrapper()
 
     expect(wrapper.findComponent({ name: 'AppShell' }).props('hideThreads')).toBe(false)
+  })
+
+  it('会话/笔记/设置界面显示返回按钮', () => {
+    route.path = '/chat'
+    expect(createWrapper().findComponent({ name: 'TopBar' }).props('showBack')).toBe(true)
+
+    route.path = '/notes'
+    expect(createWrapper().findComponent({ name: 'TopBar' }).props('showBack')).toBe(true)
+
+    route.path = '/notes/测试笔记'
+    expect(createWrapper().findComponent({ name: 'TopBar' }).props('showBack')).toBe(true)
+
+    route.path = '/settings'
+    expect(createWrapper().findComponent({ name: 'TopBar' }).props('showBack')).toBe(true)
+  })
+
+  it('无站内历史时点击返回回退到会话页', async () => {
+    window.history.replaceState(null, '')
+    route.path = '/settings'
+    const wrapper = createWrapper()
+
+    await wrapper.findComponent({ name: 'TopBar' }).vm.$emit('back')
+
+    expect(push).toHaveBeenCalledWith('/chat')
   })
 
   it('选择项目 ID 2 时导航到资料库', async () => {

@@ -28,8 +28,10 @@
     <template #toolbar>
       <TopBar
         :breadcrumbs="displayedBreadcrumbs"
+        :show-back="showBack"
         @update-title="handleActiveThreadTitleUpdate"
         @settings="handleSettings"
+        @back="handleBack"
       />
     </template>
     <template #main>
@@ -168,6 +170,10 @@ function syncActiveThread(id: string | null) {
 }
 
 const isNotesRoute = computed(() => route.path === '/notes' || route.path.startsWith('/notes/'))
+/** 笔记/会话/设置界面显示顶部返回按钮 */
+const showBack = computed(() =>
+  route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings',
+)
 const displayedBreadcrumbs = computed(() => {
   if (route.path === '/notes') return ['资料库']
   if (route.path.startsWith('/notes/')) {
@@ -346,6 +352,15 @@ function handleNewThread() {
 
 function handleSettings() {
   router.push('/settings')
+}
+
+/** 顶部返回按钮：退回上一界面；无站内历史（如直达 URL）时回退到会话页 */
+function handleBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/chat')
+  }
 }
 
 function handleKeydown(event: KeyboardEvent) {

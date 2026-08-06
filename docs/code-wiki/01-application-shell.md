@@ -140,7 +140,8 @@ CSS Grid 五区布局，全部为具名插槽：
 
 ### 6.4 `TopBar.vue`
 
-- props：`breadcrumbs: string[]`；emits：`search`、`settings`、`update-title(title)`。
+- props：`breadcrumbs: string[]`、`showBack?: boolean`；emits：`search`、`settings`、`back`、`update-title(title)`。
+- `showBack` 为真时（笔记/会话/设置界面）最左侧渲染返回按钮（ArrowLeft），替换装饰性 PanelLeft 图标；点击 emit `back`，由 `App.vue` 的 `handleBack` 执行 `router.back()`（vue-router 4 的 `history.state.back` 非空时），无站内历史（如直达 URL）时回退到 `/chat`。
 - 末级面包屑支持内联编辑（Pencil 图标触发，Enter 保存且仅在标题变化时 emit）。
 - 工具栏含搜索与更多操作按钮（均为 UI 占位）。
 
