@@ -271,6 +271,14 @@ watch(
   () => route.path,
   (path) => {
     if (!path.startsWith('/notes/')) noteDetailTitle.value = ''
+    // 按路由同步左侧项目栏高亮：资料库（/notes*）→ 项目2；学习地图（/hub）→ 项目3
+    // （划线跳转、wikilink、图谱节点等从会话/其他页面直接进入笔记详情时，activeProjectId 需随页面同步，
+    //   否则左侧项目栏仍高亮来源项目，与当前页面不符）
+    if (path.startsWith('/notes') && activeProjectId.value !== '2') {
+      activeProjectId.value = '2'
+    } else if (path === '/hub' && activeProjectId.value !== '3') {
+      activeProjectId.value = '3'
+    }
   },
 )
 

@@ -73,6 +73,7 @@ function getProjectRoute(projectId, threadId) {
 - **学习地图页内跳转（`LearningHubPage`）**：点击"会话树/最近活动"节点时 `handleSelectNode`/`handleActivityClick` 会 `push({ path: '/chat', query: { thread: nodeId } })`——**必须携带 `thread` 参数**，否则进入无会话的空白聊天界面（曾误用 `push('/chat')` 造成"废弃界面"）；顶部"开始新会话"快速入口通过注入的 `createNewThread('1')` 在知枝学习项目下新建会话并跳转，而非直接跳空白 `/chat`。
 - 再次点击**已激活**项目时视为"回到该项目首页"：若当前 path 偏离目标路由则修正；资料库（项目 `2`）还会检查是否残留 `tab=references` 等 query——资料库页内切换 tab 会把 tab 写入 query（`NotesPage` 里 `router.push({ query: { tab } })`），残留 query 会让再次点击资料库时仍停留在旧视图（表现为"老版本废弃页面"），因此有残留 query 时强制 `push({ path: '/notes' })` 回默认笔记视图。
 - vue-router 4 中 `push({ path })`（不含 query 的对象形式）会**清除**现有 query，因此该写法即可完成重置。
+- **路由级项目栏同步**（`watch(route.path)`）：划线跳转、wikilink、图谱节点等从会话/其他页面**直接导航**进入 `/notes*`（笔记详情/资料库）或 `/hub` 时，`activeProjectId` 不会经过 `handleProjectSelect`，若不同步会导致左侧项目栏仍高亮来源项目（如从会话页划线跳笔记详情时仍高亮"知枝学习"）。因此在路由路径变化时按映射同步：`/notes*` → 项目 `2`，`/hub` → 项目 `3`；`/chat*` 由 `watch(route.query.thread)` 恢复。
 
 ### 4.3 全局快捷键（`handleKeydown`）
 

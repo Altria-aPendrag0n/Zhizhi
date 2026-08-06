@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import App from './App.vue'
 import { loadStoredValue, saveStoredValue } from './utils/local-storage'
 
-const { route, push } = vi.hoisted(() => ({
-  route: { path: '/chat', fullPath: '/chat', query: {} as Record<string, string> },
-  push: vi.fn(),
-}))
+const { route, push } = vi.hoisted(() => {
+  // useRoute 返回响应式对象，使 App.vue 的 watch(() => route.path) 在测试中可被路由变化触发
+  const { reactive } = require('vue')
+  return {
+    route: reactive({ path: '/chat', fullPath: '/chat', query: {} as Record<string, string> }),
+    push: vi.fn(),
+  }
+})
 
 vi.mock('vue-router', () => ({
   useRoute: () => route,
@@ -178,6 +182,27 @@ describe('App 项目导航', () => {
     await projectRail.vm.$emit('select', '2')
 
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('划线跳转进入笔记详情时左侧项目栏同步高亮资料库', async () => {
+    const wrapper = createWrapper()
+    expect(wrapper.findComponent({ name: 'ProjectRail' }).props('activeId')).toBe('1')
+
+    route.path = '/notes/测试笔记'
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'ProjectRail' }).props('activeId')).toBe('2')
+  })
+
+  it('路由进入学习地图时左侧项目栏同步高亮学习地图', async () => {
+    const wrapper = createWrapper()
+    await wrapper.findComponent({ name: 'ProjectRail' }).vm.$emit('select', '2')
+    expect(wrapper.findComponent({ name: 'ProjectRail' }).props('activeId')).toBe('2')
+
+    route.path = '/hub'
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'ProjectRail' }).props('activeId')).toBe('3')
   })
 })
 
