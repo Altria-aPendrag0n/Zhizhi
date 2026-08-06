@@ -41,7 +41,7 @@ function cellToMarkdown(cell: HTMLTableCellElement): string {
  */
 export function tableToMarkdown(table: HTMLTableElement): string {
   const rows = Array.from(table.querySelectorAll('tr')).filter(
-    (row) => row.querySelectorAll('th, td').length > 0,
+    (row) => row.querySelectorAll<HTMLTableCellElement>('th, td').length > 0,
   )
   if (rows.length === 0) return ''
 
@@ -49,7 +49,7 @@ export function tableToMarkdown(table: HTMLTableElement): string {
   let headerCols = 0
 
   rows.forEach((row, rowIndex) => {
-    const cells = Array.from(row.querySelectorAll('th, td'))
+    const cells = Array.from(row.querySelectorAll<HTMLTableCellElement>('th, td'))
     lines.push(`| ${cells.map(cellToMarkdown).join(' | ')} |`)
 
     // 表头分隔行：thead 内的行，或全为 th 的首行
