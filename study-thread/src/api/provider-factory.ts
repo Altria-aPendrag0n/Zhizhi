@@ -8,6 +8,11 @@ import type { ProviderConfig } from '../types'
 import { AnthropicProvider } from './anthropic'
 import { OpenAICompatProvider } from './openai-compat'
 
+/** 是否为 DeepSeek 官方 API（其联网搜索仅支持 Anthropic 兼容端点） */
+function isDeepSeekOfficial(baseUrl: string): boolean {
+  return baseUrl.includes('api.deepseek.com')
+}
+
 /**
  * 根据配置创建 LLM 提供商实例
  * @param config 提供商配置（type, apiKey, baseUrl, model）
@@ -20,6 +25,12 @@ export function createProvider(config: ProviderConfig): LLMProvider {
       return new AnthropicProvider(config.apiKey, config.baseUrl)
 
     case 'openai-compat':
+      // DeepSeek 官方 API 的联网搜索（web_search_20250305 工具）仅在 Anthropic 兼容端点提供，
+      // 其 OpenAI Chat Completions 端点不识别 web_search 工具类型
+      if (isDeepSeekOfficial(config.baseUrl)) {
+        const baseUrl = config.baseUrl.replace(/\/+$/, '')
+        return new AnthropicProvider(config.apiKey, `${baseUrl}/anthropic`, config.model)
+      }
       return new OpenAICompatProvider(config.apiKey, config.baseUrl, config.model)
 
     default:
