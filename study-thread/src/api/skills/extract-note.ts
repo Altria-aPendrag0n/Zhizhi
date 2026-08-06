@@ -1,8 +1,8 @@
 /**
- * 划线提炼笔记执行器
+ * 划线摘录笔记执行器
  *
- * 从用户选中的文本中提取结构化原子笔记。
- * 加载 SKILL.md 模板，替换变量，调用 LLM 生成笔记内容。
+ * 为划线摘录的原文补充笔记元信息（标题、描述、标签），不改写原文。
+ * 加载 SKILL.md 模板，替换变量，调用 LLM 生成元信息。
  */
 
 import type { LLMProvider, Message } from '../llm-provider'
@@ -41,32 +41,45 @@ function extractJSON(text: string): string {
   return text.trim()
 }
 
+/** LLM 输出的元信息结构（仅标题/描述/标签） */
+interface ExtractedMeta {
+  title?: string
+  description: string
+  tags: string[]
+}
+
 /**
- * 验证提取的笔记数据是否包含必要字段
+ * 验证 LLM 输出的元信息是否合法（title 可选，description/tags 必填）
  */
-function validateExtractedNote(data: unknown): data is ExtractedNote {
+function validateExtractedMeta(data: unknown): data is ExtractedMeta {
   if (!data || typeof data !== 'object') return false
   const d = data as Record<string, unknown>
   return (
-    typeof d.title === 'string' &&
+    (d.title === undefined || typeof d.title === 'string') &&
     typeof d.description === 'string' &&
-    typeof d.proposition === 'string' &&
-    typeof d.explanation === 'string' &&
-    typeof d.type === 'string' &&
-    ['concept', 'method', 'fact', 'question'].includes(d.type) &&
     Array.isArray(d.tags) &&
-    d.tags.every((t: unknown) => typeof t === 'string') &&
-    typeof d.confidence === 'number'
+    d.tags.every((t: unknown) => typeof t === 'string')
   )
 }
 
 /**
- * 从划线文本中提炼原子笔记
+ * 将划线文本前若干字作为标题兜底
+ */
+function fallbackTitle(highlightedText: string): string {
+  const cleaned = highlightedText.replace(/\s+/g, ' ').trim()
+  return cleaned.slice(0, 20) || '未命名笔记'
+}
+
+/**
+ * 从划线文本中提取笔记元信息
  *
- * @param highlightedText - 用户选中的文本
+ * 原文不会加工，将作为笔记正文原样保存；本函数只产出
+ * 标题（可选）、描述与标签，其余 ExtractedNote 字段使用保守默认值。
+ *
+ * @param highlightedText - 用户选中的文本（将作为笔记正文）
  * @param sessionContext - 划线文本所在对话的上下文
  * @param provider - LLM 提供商
- * @param userTitle - 用户指定的标题（可选）；提供后 title 固定为该值，描述等其他字段围绕该标题生成
+ * @param userTitle - 用户指定的标题（可选）；提供后 title 固定为该值
  * @returns 提取的笔记数据
  */
 export async function extractNote(
@@ -85,7 +98,7 @@ export async function extractNote(
   })
 
   const messages: Message[] = [
-    { role: 'user', content: '请根据上述要求提炼原子笔记。' },
+    { role: 'user', content: '请为上述划线内容生成笔记元信息。' },
   ]
 
   // 收集完整响应
@@ -108,17 +121,28 @@ export async function extractNote(
   try {
     parsed = JSON.parse(jsonStr)
   } catch {
-    throw new Error(`笔记提取失败: 无法解析 LLM 响应为 JSON\n响应内容: ${fullResponse.slice(0, 200)}`)
+    throw new Error(`笔记元信息提取失败: 无法解析 LLM 响应为 JSON\n响应内容: ${fullResponse.slice(0, 200)}`)
   }
 
-  if (!validateExtractedNote(parsed)) {
-    throw new Error(`笔记提取失败: 响应缺少必要字段\n响应内容: ${JSON.stringify(parsed).slice(0, 200)}`)
+  if (!validateExtractedMeta(parsed)) {
+    throw new Error(`笔记元信息提取失败: 响应缺少必要字段\n响应内容: ${JSON.stringify(parsed).slice(0, 200)}`)
   }
 
-  // 用户指定标题时，无论 LLM 是否遵守，都强制使用用户标题
-  if (userTitle && userTitle.trim()) {
-    return { ...parsed, title: userTitle.trim() }
-  }
+  // 组装 ExtractedNote：原文不加工，proposition/explanation 留空，type/confidence 用保守默认
+  const title =
+    userTitle && userTitle.trim()
+      ? userTitle.trim()
+      : typeof parsed.title === 'string' && parsed.title.trim()
+        ? parsed.title.trim()
+        : fallbackTitle(highlightedText)
 
-  return parsed
+  return {
+    title,
+    description: parsed.description,
+    proposition: '',
+    explanation: '',
+    type: 'concept',
+    tags: parsed.tags,
+    confidence: 0.5,
+  }
 }

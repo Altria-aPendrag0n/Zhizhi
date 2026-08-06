@@ -51,20 +51,10 @@ export function serializeNote(
   lines.push('---')
   lines.push('')
 
-  // Body
+  // Body：划线原文原样保存，不加工
   lines.push(`# ${note.title}`)
   lines.push('')
-  lines.push('## 核心命题')
-  lines.push('')
-  lines.push(note.proposition)
-  lines.push('')
-  lines.push('## 解释')
-  lines.push('')
-  lines.push(note.explanation)
-  lines.push('')
-  lines.push('## 关联笔记')
-  lines.push('')
-  lines.push('<!-- 关联笔记将在此处自动生成 -->')
+  lines.push(highlightSource.trim())
 
   return lines.join('\n')
 }

@@ -36,13 +36,15 @@ describe('serializeNote', () => {
     expect(result).toContain('session: sessions/test/main.md')
   })
 
-  it('序列化笔记包含正文结构', () => {
-    const result = serializeNote(note, 'sessions/test/main.md', '划线文本')
+  it('序列化笔记正文保存划线原文，不生成加工段落', () => {
+    const result = serializeNote(note, 'sessions/test/main.md', '费曼学习法是一种通过向他人解释概念来加深理解的学习方法。')
     expect(result).toContain('# 费曼学习法')
-    expect(result).toContain('## 核心命题')
-    expect(result).toContain('用教别人的方式来检验自己是否真正理解')
-    expect(result).toContain('## 解释')
-    expect(result).toContain('## 关联笔记')
+    // 原文原样保存为正文
+    expect(result).toContain('费曼学习法是一种通过向他人解释概念来加深理解的学习方法。')
+    // 不再生成核心命题/解释等加工内容
+    expect(result).not.toContain('## 核心命题')
+    expect(result).not.toContain('## 解释')
+    expect(result).not.toContain('## 关联笔记')
   })
 
   it('处理包含引号的划线文本', () => {
