@@ -206,6 +206,28 @@ async function loadContext() {
   extractedNotes.value = currentRaw ? extractNoteRefsFromSession(currentRaw) : []
 }
 
+/** 从磁盘重新解析当前分支的笔记引用（删除笔记后同步刷新，避免残留已删除笔记） */
+async function refreshNoteRefs() {
+  if (!vaultStore.vaultPath) {
+    extractedNotes.value = []
+    return
+  }
+  try {
+    const currentFile = getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
+    const currentRaw = await readFile(currentFile)
+    extractedNotes.value = extractNoteRefsFromSession(currentRaw)
+  } catch {
+    extractedNotes.value = []
+  }
+}
+
+// 删除笔记后同步刷新当前分支的"已生成笔记"引用
+// （组件实例可能因路由 key 相同而复用，不会重新挂载解析；磁盘分支文件已被 removeSessionReferences 清理）
+watch(
+  () => noteStore.lastDeletedNotePath,
+  () => { void refreshNoteRefs() },
+)
+
 onMounted(loadContext)
 watch(
   () => [vaultStore.vaultPath, sessionId.value, branchId.value, route.query.fork_index],

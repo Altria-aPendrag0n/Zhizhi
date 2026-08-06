@@ -199,6 +199,8 @@ describe('notes store', () => {
     expect(store.notes).toHaveLength(0)
     expect(JSON.parse(localStorage.getItem('study-thread-extracted-notes') || '[]')).toEqual([])
     expect(removeNote).toHaveBeenCalledWith(path)
+    // 删除信号供聊天页刷新"已生成笔记"引用
+    expect(store.lastDeletedNotePath).toBe(path)
   })
 
   it('deleteNote 拒绝删除当前 Vault notes 目录外或非 Markdown 的文件', async () => {
@@ -218,6 +220,7 @@ describe('notes store', () => {
     expect(await store.deleteNote('/other/notes/笔记.md')).toBe(false)
     expect(vaultFs.deleteFile).not.toHaveBeenCalled()
     expect(store.notes).toHaveLength(1)
+    expect(store.lastDeletedNotePath).toBeNull()
   })
 
   it('deleteNote 在 Vault 删除失败时保留本地数据', async () => {
@@ -236,6 +239,8 @@ describe('notes store', () => {
     expect(await store.deleteNote(path!)).toBe(false)
     expect(store.notes).toHaveLength(1)
     expect(removeNote).not.toHaveBeenCalled()
+    // 删除失败不触发刷新信号
+    expect(store.lastDeletedNotePath).toBeNull()
   })
 
   it('loadNote 对不存在的路径返回 null', async () => {

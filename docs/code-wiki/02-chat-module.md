@@ -84,7 +84,7 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 > 已生成分支: [[branch_1|分支追问]] 划线「划线文本」
 ```
 
-消息后方的 `> 已生成笔记/分支` 引用行持久化划线文本（`划线「…」`），加载时由 `extractNoteRefsFromSession` 解析（`NoteReference` 增加 `kind`/`highlight` 字段）；渲染时在原消息中把划线文本转为虚线链接，点击跳转对应笔记或分支会话。旧格式（无划线文本）仍兼容。删除笔记/分支时由 `removeSessionReferences` 扫描所有会话文件并移除对应引用行，避免虚线标记残留。
+消息后方的 `> 已生成笔记/分支` 引用行持久化划线文本（`划线「…」`），加载时由 `extractNoteRefsFromSession` 解析（`NoteReference` 增加 `kind`/`highlight` 字段）；渲染时在原消息中把划线文本转为虚线链接，点击跳转对应笔记或分支会话。旧格式（无划线文本）仍兼容。删除笔记/分支时由 `removeSessionReferences` 扫描所有会话文件并移除对应引用行，避免虚线标记残留；同时 `notes` store 会更新 `lastDeletedNotePath` 删除信号，`MainChatPage`/`BranchChatPage` watch 该信号后从磁盘重新解析当前会话的引用（`refreshNoteRefs`）——因为从聊天页跳转资料库删除笔记再返回时，`<router-view :key="$route.fullPath">` 的路由 key 相同会复用组件实例而不重新挂载，若只靠重新加载才会发现引用已被清理，会导致聊天页"已生成笔记"列表残留已删除笔记。
 
 ## 3. 组件层（`src/components/chat/`）
 

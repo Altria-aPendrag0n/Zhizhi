@@ -242,6 +242,20 @@ function saveThreadMessages(threadId: string) {
   saveStoredValue(LOCAL_THREAD_MESSAGES_KEY, dynamicThreadMessages)
 }
 
+/** 从磁盘重新解析当前会话的笔记引用（删除笔记后同步刷新，避免残留已删除笔记） */
+async function refreshNoteRefs(threadId: string) {
+  if (!vaultStore.vaultPath) {
+    extractedNotes.value = []
+    return
+  }
+  try {
+    const sessionPath = getSessionFilePath(vaultStore.vaultPath, threadId)
+    extractedNotes.value = extractNoteRefsFromSession(await readFile(sessionPath))
+  } catch {
+    extractedNotes.value = []
+  }
+}
+
 async function loadThreadMessages(threadId: string) {
   if (dynamicThreadMessages[threadId]) {
     messages.value = [...dynamicThreadMessages[threadId]]
@@ -250,16 +264,7 @@ async function loadThreadMessages(threadId: string) {
   } else {
     messages.value = []
   }
-
-  extractedNotes.value = []
-  if (!vaultStore.vaultPath) return
-
-  try {
-    const sessionPath = getSessionFilePath(vaultStore.vaultPath, threadId)
-    extractedNotes.value = extractNoteRefsFromSession(await readFile(sessionPath))
-  } catch {
-    extractedNotes.value = []
-  }
+  await refreshNoteRefs(threadId)
 }
 
 watch(messages, () => {
@@ -278,6 +283,16 @@ watch(
     }
   },
   { immediate: true },
+)
+
+// 删除笔记后同步刷新当前会话的"已生成笔记"引用
+// （组件实例可能因路由 key 相同而复用，不会重新挂载解析；磁盘会话文件已被 removeSessionReferences 清理）
+watch(
+  () => noteStore.lastDeletedNotePath,
+  () => {
+    const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
+    if (threadId) void refreshNoteRefs(threadId)
+  },
 )
 
 const SYSTEM_PROMPT = `你是知枝，一位学习伴读助手。你的职责是帮助用户深入理解概念、拆解知识点、建立知识关联。

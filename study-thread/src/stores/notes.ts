@@ -75,6 +75,8 @@ export const useNoteStore = defineStore('notes', () => {
   const noteIndex = ref<Map<string, Note>>(new Map())
   const isLoading = ref(false)
   const currentVaultPath = ref<string | null>(null)
+  /** 最近一次被删除的笔记路径（聊天页 watch 后刷新会话中的笔记引用，避免残留已删除笔记） */
+  const lastDeletedNotePath = ref<string | null>(null)
 
   const noteCount = computed(() => notes.value.length)
   const notesByType = computed(() => {
@@ -210,6 +212,8 @@ export const useNoteStore = defineStore('notes', () => {
           // 引用清理失败不影响删除结果
         }
       }
+      // 通知聊天页等已挂载界面刷新引用（组件实例可能因路由 key 相同而复用，不会重新解析）
+      lastDeletedNotePath.value = path
       return true
     } catch (error) {
       console.error('删除笔记失败:', error)
@@ -227,6 +231,7 @@ export const useNoteStore = defineStore('notes', () => {
     isLoading,
     noteCount,
     notesByType,
+    lastDeletedNotePath,
     loadLocalNotes,
     loadAllNotes,
     loadNote,
