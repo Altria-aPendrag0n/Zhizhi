@@ -1,7 +1,32 @@
 <template>
-  <div class="learning-hub">
-    <!-- 知识图谱总览视图 -->
-    <template v-if="currentView === 'overview'">
+  <div class="learning-hub-page">
+    <div class="learning-hub-layout">
+      <!-- 学习地图切换管理栏：多个视图间切换，不涉及会话新建 -->
+      <aside class="hub-sidebar">
+        <nav class="hub-nav" aria-label="学习地图视图">
+          <button
+            class="hub-nav__item"
+            :class="{ active: currentView === 'overview' }"
+            type="button"
+            @click="currentView = 'overview'"
+          >
+            学习总览
+          </button>
+          <button
+            class="hub-nav__item"
+            :class="{ active: currentView === 'network' }"
+            type="button"
+            @click="currentView = 'network'"
+          >
+            概念网络
+          </button>
+        </nav>
+      </aside>
+
+      <div class="hub-content">
+        <div class="learning-hub">
+          <!-- 知识图谱总览视图 -->
+          <template v-if="currentView === 'overview'">
       <section class="learning-hub__intro" aria-labelledby="focus-title">
         <div class="eyebrow">Today's learning loop</div>
         <h2 id="focus-title" class="learning-hub__hero-title">把理解留在可回溯的路径上</h2>
@@ -181,13 +206,16 @@
           </div>
         </div>
       </div>
-    </template>
+        </template>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
 import { parseNoteDate } from '../utils/date'
@@ -196,11 +224,11 @@ import { BookOpen, FileText, MessageSquare } from '@lucide/vue'
 import BranchTree from '../components/chat/BranchTree.vue'
 
 const router = useRouter()
-const route = useRoute()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
 
 const sessionTree = ref<SessionTreeNode | null>(null)
+/** 当前视图：由左侧"学习地图切换管理栏"控制 */
 const currentView = ref<'overview' | 'network'>('overview')
 
 interface ConceptRelation {
@@ -258,21 +286,6 @@ onMounted(() => {
   recentActivities.value = activities.slice(0, 10)
 })
 
-// 监听路由参数 thread 切换视图
-watch(
-  () => route.query.thread,
-  (threadId) => {
-    if (threadId === '7') {
-      currentView.value = 'overview'
-    } else if (threadId === '8') {
-      currentView.value = 'network'
-    } else {
-      currentView.value = 'overview'
-    }
-  },
-  { immediate: true },
-)
-
 function handleSelectNode(nodeId: string) {
   // 跳转到对应会话
   sessionStore.switchSession(nodeId)
@@ -300,10 +313,75 @@ function formatRelativeTime(iso: string): string {
 </script>
 
 <style scoped>
-.learning-hub {
-  padding: 42px 54px 72px;
-  height: 100%;
+.learning-hub-page {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 34px 48px 64px;
   overflow-y: auto;
+}
+
+.learning-hub-layout {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+}
+
+/* 学习地图切换管理栏 */
+.hub-sidebar {
+  width: 168px;
+  flex-shrink: 0;
+}
+
+.hub-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hub-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2, #52635d);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.hub-nav__item:hover {
+  background: var(--surface-2, #f0eee7);
+  color: var(--ink);
+}
+
+.hub-nav__item.active {
+  background: var(--brand-soft, #dce9e1);
+  color: var(--brand-strong, #174438);
+  font-weight: 700;
+}
+
+.hub-nav__item.active::before {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--brand);
+  content: '';
+}
+
+.hub-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.learning-hub {
+  min-height: 100%;
 }
 
 /* 简介区域 */
@@ -537,8 +615,29 @@ function formatRelativeTime(iso: string): string {
 }
 
 @media (max-width: 1240px) {
-  .learning-hub {
+  .learning-hub-page {
     padding: 34px 34px 64px;
+  }
+}
+
+@media (max-width: 860px) {
+  .learning-hub-page {
+    padding: 24px 20px 56px;
+  }
+
+  .learning-hub-layout {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .hub-sidebar {
+    width: 100%;
+  }
+
+  .hub-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 }
 

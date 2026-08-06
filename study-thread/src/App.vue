@@ -212,7 +212,7 @@ const showBack = computed(() =>
 )
 const displayedBreadcrumbs = computed(() => {
   if (route.path === '/settings') return ['设置']
-  if (route.path === '/hub') return ['认知地图']
+  if (route.path === '/hub') return ['学习地图']
   if (route.path === '/notes') return ['资料库']
   if (route.path.startsWith('/notes/')) {
     return ['资料库', noteDetailTitle.value || decodeURIComponent((route.params?.id as string) || '')]
@@ -272,7 +272,8 @@ function getProjectRoute(projectId: string, threadId: string | null) {
     return { path: '/notes' }
   }
   if (projectId === '3') {
-    return { path: '/hub', query: threadId ? { thread: threadId } : {} }
+    // 学习地图：左侧为视图切换管理栏，不关联具体会话
+    return { path: '/hub' }
   }
   return { path: '/chat', query: threadId ? { thread: threadId } : {} }
 }
