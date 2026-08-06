@@ -21,6 +21,7 @@ parseFrontmatter(content): { meta: Record<string, unknown>; body: string }
 - 正则 `^---\s*\n([\s\S]*?)\n---\s*\n` 提取 frontmatter；无则返回 `{meta:{}, body:content}`。
 - **使用 `yaml.CORE_SCHEMA`**：日期字符串（如 `2024-01-01`）保持为字符串，避免被默认 schema 解析成 Date 产生时区偏移。
 - `normalizeYamlValue`：Date → ISO 字符串（纯日期输出 `YYYY-MM-DD`）；数组/对象递归归一。
+- **宽松容错 `parseFrontmatterLenient`**：YAML 解析失败时触发。旧版本 `serializeNote` 曾把多行划线文本（表格）裸写入 `highlight` 字段，换行未转义导致整个 frontmatter 解析失败（tags 等字段一并丢失）。容错逻辑丢弃跨行未闭合的 highlight 值后重新解析，尽力恢复 title/tags/description 等关键字段；仍失败返回 `{}`。
 
 ### 2.2 `wikilink.ts`
 

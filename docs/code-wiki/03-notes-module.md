@@ -29,7 +29,7 @@ interface Note {
 }
 ```
 
-`NoteMeta` 为列表使用的轻量元数据（无 `content` / `review`，含可选 `proposition`）。
+`NoteMeta` 为列表使用的轻量元数据（无 `content` / `review`，含可选 `proposition` 与 `links?: string[]`，后者为 json sidecar 中记录的关联笔记路径列表）。
 
 ## 3. 页面层
 
@@ -99,20 +99,24 @@ interface Note {
 | 动作 | 说明 |
 |------|------|
 | `loadAllNotes(vaultPath)` | 递归收集 `notes/` 下所有 `.md`（`collectNotes`），过滤掉本地缓存中已不在 vault 的条目 |
-| `loadNote(path)` | 读文件 → `parseFrontmatter` → 组装 `Note`（缓存于 noteIndex） |
-| `updateNote(note)` | 重写文件：保留原 meta，仅更新 title/tags/updated；刷新列表与本地缓存 |
-| `saveNote(vaultPath, extractedNote, sourceSession, highlight)` | 生成文件名 `notes/<sanitized>.md` → `serializeNote` 写入 → 更新列表 |
-| `deleteNote(path)` | 路径校验（必须位于 `<vault>/notes/` 且 `.md`）→ 删除文件、本地缓存与向量索引 |
+| `loadNote(path)` | 读文件 → `readNoteMeta`（json 优先，frontmatter 兜底）→ `parseFrontmatter` 取正文 → 组装 `Note`（缓存于 noteIndex） |
+| `updateNote(note)` | 重写文件：保留原 meta，仅更新 title/tags/updated；**同步重写 json sidecar**（含关联笔记 links）；刷新列表与本地缓存 |
+| `saveNote(vaultPath, extractedNote, sourceSession, highlight)` | 生成文件名 `notes/<sanitized>.md` → `serializeNote` 写入 md → **写入 json sidecar**（结构化元数据权威源）→ 更新列表 |
+| `deleteNote(path)` | 路径校验（必须位于 `<vault>/notes/` 且 `.md`）→ 删除 md 与 json sidecar、本地缓存与向量索引 |
 
 - 本地缓存键：`study-thread-extracted-notes`。
 - `collectNotes` 递归遍历目录；`normalizePath` 规范化路径用于删除校验。
+- **json sidecar 读写策略**：`readNoteMeta(path, fileName, mdContent)` 先尝试解析 `notes/<标题>.json`（`parseNoteMetaFile`），有效则以其为准（时间/标签/描述/来源/关联笔记），缺失或损坏回退 `toNoteMeta` 解析 md frontmatter，兼容 json 方案之前写入的旧笔记。
 
 ### 5.2 `utils/note-serializer.ts`
 
 | 函数 | 说明 |
 |------|------|
-| `serializeNote(note, sourceSession, highlightSource)` | 生成完整 Markdown：frontmatter（title/description/type/tags/created/updated/source/confidence）+ 正文（`# 标题` + 划线原文原样） |
+| `serializeNote(note, sourceSession, highlightSource)` | 生成完整 Markdown：frontmatter + 正文（`# 标题` + 划线原文原样）。**所有字符串字段经 `JSON.stringify` 序列化**（title/description/session/highlight/各标签）：既转义引号，也把多行划线文本（如表格）的换行转义为 `\n`，避免 YAML 因裸换行整体解析失败而丢失 tags 等字段 |
 | `generateNoteFileName(title)` | 清理非法字符（`\ / : * ? " < > \|`）、空白转 `_`、截断 80 字符，拼 `.md` |
+| `getNoteMetaPath(notePath)` | 返回对应 json sidecar 路径：`notes/<标题>.md` → `notes/<标题>.json` |
+| `serializeNoteMeta(meta, links)` | 将 `NoteMeta`（附关联笔记 links）序列化为格式化 JSON 文本 |
+| `parseNoteMetaFile(content)` | 解析 json sidecar 为 `NoteMeta`；无效 JSON / 缺 title 返回 `null` |
 
 ### 5.3 `utils/note-insert.ts` — 划线插入
 
@@ -135,6 +139,8 @@ interface Note {
 
 - 摘录生成：`MainChatPage.handleExtractNote` → `extractNote`（[09 Skill]）→ `noteStore.saveNote`。
 - **标签兜底与 YAML 安全**：`extractNote` 在 LLM 返回空 tags 时兜底 `['未分类']`（笔记始终有可展示标签）；`serializeNote` 用 JSON 字符串序列化每个标签（`  - "标签"`），避免标签含 `:`/`#` 等 YAML 特殊字符时被解析成对象/注释而丢失。
+- **json sidecar 元数据权威源**：每个笔记 `notes/<标题>.md` 配同名 `<标题>.json`，保存时间/标签/描述/来源/关联笔记（`links`，来自正文 wikilink 的 `extractAllLinks`）等结构化信息。md 内 frontmatter 保留供 Obsidian 等外部工具查看；应用内读取 json 优先，缺失时回退 frontmatter（兼容旧笔记）。保存/更新同步写 json，删除笔记级联删除 json。
+- **旧笔记 frontmatter 容错**：旧版本 `serializeNote` 曾把多行划线文本（表格）裸写入 `highlight` 字段，换行未转义导致整个 frontmatter YAML 解析失败（tags 等字段一并丢失）。`parser/frontmatter.ts` 的 `parseFrontmatter` 捕获解析失败后调用 `parseFrontmatterLenient`：丢弃跨行未闭合的 highlight 值再重新解析，尽力恢复 title/tags/description 等关键字段。
 - **LLM 生成开关**：设置页的「自动生成笔记标题 / 自动生成笔记标签」控制摘录时是否调用 LLM 生成对应字段。标题关闭时用划线文本前 20 字兜底（用户手动指定的标题始终优先）；标签关闭时统一 `['未分类']`。两个开关都关闭时 `extractNote` 完全不调用 LLM（描述同样用划线文本前 80 字兜底），调用方（`MainChatPage`/`BranchChatPage`/`NoteDetailPage`）也会跳过 API Key 校验。
 - 加入笔记：`ChatView` 划线 → `AddToNoteDialog` → `note-insert` 插入 → `noteStore.updateNote`。
 - 反链与关系图：`NoteDetailPage` → `parser/wikilink`（[11]）+ `LocalGraph`（[06]）。
@@ -143,6 +149,7 @@ interface Note {
 ## 7. 相关测试
 
 - `src/stores/notes.test.ts`、`src/utils/note-serializer.test.ts`、`src/utils/note-insert.test.ts`、`src/utils/session-linker.test.ts`
+- `src/parser/frontmatter.test.ts`（含旧版多行 highlight 损坏 frontmatter 的宽松容错用例）
 - `src/components/notes/AddToNoteDialog.test.ts`、`NoteCard.test.ts`、`NoteDetail.test.ts`、`NoteList.test.ts`
 - `src/views/NotesPage.test.ts`
 

@@ -5,7 +5,14 @@ import type { Note, NoteMeta, ExtractedNote } from '../types'
 import { createDir, listDir, readFile, writeFile, deleteFile } from '../utils/vault-fs'
 import { getNoteIndexer } from '../embedding/indexer'
 import { parseFrontmatter } from '../parser/frontmatter'
-import { serializeNote, generateNoteFileName } from '../utils/note-serializer'
+import { extractAllLinks } from '../parser/wikilink'
+import {
+  serializeNote,
+  generateNoteFileName,
+  getNoteMetaPath,
+  serializeNoteMeta,
+  parseNoteMetaFile,
+} from '../utils/note-serializer'
 import { removeSessionReferences } from '../utils/session-linker'
 import { loadStoredValue, saveStoredValue } from '../utils/local-storage'
 
@@ -60,11 +67,26 @@ function normalizePath(path: string): string {
   return parts.join('/').toLowerCase()
 }
 
+/**
+ * 读取笔记元数据：json sidecar 优先（结构化元数据权威源），
+ * 缺失或无效时回退 md frontmatter（兼容 json 方案之前的旧笔记）。
+ */
+async function readNoteMeta(path: string, fileName: string, mdContent: string): Promise<NoteMeta> {
+  try {
+    const parsed = parseNoteMetaFile(await readFile(getNoteMetaPath(path)))
+    if (parsed) return { ...parsed, path }
+  } catch {
+    // json 缺失/损坏，回退 frontmatter
+  }
+  return toNoteMeta(path, fileName, mdContent)
+}
+
 async function collectNotes(entries: Awaited<ReturnType<typeof listDir>>): Promise<NoteMeta[]> {
   const notes = await Promise.all(entries.map(async (entry) => {
     if (entry.is_dir) return collectNotes(await listDir(entry.path))
     if (!entry.name.toLowerCase().endsWith('.md')) return []
-    return [toNoteMeta(entry.path, entry.name, await readFile(entry.path))]
+    const content = await readFile(entry.path)
+    return [await readNoteMeta(entry.path, entry.name, content)]
   }))
   return notes.flat()
 }
@@ -123,7 +145,8 @@ export const useNoteStore = defineStore('notes', () => {
     if (cached) return cached
     try {
       const content = await readFile(path)
-      const meta = toNoteMeta(path, path.split(/[\\/]/).pop() || '', content)
+      const fileName = path.split(/[\\/]/).pop() || ''
+      const meta = await readNoteMeta(path, fileName, content)
       const { body } = parseFrontmatter(content)
       const note: Note = {
         ...meta,
@@ -147,6 +170,8 @@ export const useNoteStore = defineStore('notes', () => {
       const content = `---\n${yaml.dump({ ...meta, title: note.title, tags: note.tags, updated }).trimEnd()}\n---\n\n${note.content}`
       await writeFile(note.path, content)
       const noteMeta = toNoteMeta(note.path, note.path.split(/[\\/]/).pop() || '', content)
+      // json sidecar 同步更新（元数据权威源，含关联笔记 links）
+      await writeFile(getNoteMetaPath(note.path), serializeNoteMeta(noteMeta, extractAllLinks(note.content)))
       const savedNote: Note = { ...note, ...noteMeta, type: noteMeta.type as Note['type'], updated }
       noteIndex.value.set(note.path, savedNote)
       upsertLocalNote(noteMeta)
@@ -182,6 +207,9 @@ export const useNoteStore = defineStore('notes', () => {
         proposition: note.proposition,
         source: { session: sourceSession, highlight: highlightSource },
       }
+      // json sidecar：结构化元数据权威源（时间/标签/描述/来源/关联笔记），
+      // md 内 frontmatter 保留供 Obsidian 查看，读取时 json 优先
+      await writeFile(getNoteMetaPath(filePath), serializeNoteMeta(noteMeta, extractAllLinks(highlightSource)))
       upsertLocalNote(noteMeta)
       notes.value = sortNotes([...notes.value.filter((item) => item.path !== filePath), noteMeta])
       return filePath
@@ -199,6 +227,12 @@ export const useNoteStore = defineStore('notes', () => {
 
     try {
       await deleteFile(path)
+      try {
+        // 级联删除 json sidecar（元数据文件，可能不存在则忽略）
+        await deleteFile(getNoteMetaPath(path))
+      } catch {
+        // json 不存在不影响删除结果
+      }
       localNotes.value = localNotes.value.filter((note) => note.path !== path)
       syncLocalNotes()
       notes.value = notes.value.filter((note) => note.path !== path)

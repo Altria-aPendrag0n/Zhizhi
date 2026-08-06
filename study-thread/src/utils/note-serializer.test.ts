@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import * as yaml from 'js-yaml'
-import { serializeNote, generateNoteFileName } from './note-serializer'
-import type { ExtractedNote } from '../types'
+import {
+  serializeNote,
+  generateNoteFileName,
+  getNoteMetaPath,
+  serializeNoteMeta,
+  parseNoteMetaFile,
+} from './note-serializer'
+import { parseFrontmatter } from '../parser/frontmatter'
+import type { ExtractedNote, NoteMeta } from '../types'
 
 describe('serializeNote', () => {
   const note: ExtractedNote = {
@@ -17,7 +24,8 @@ describe('serializeNote', () => {
   it('序列化笔记包含 frontmatter', () => {
     const result = serializeNote(note, 'sessions/test/main.md', '划线文本')
     expect(result).toContain('---')
-    expect(result).toContain('title: 费曼学习法')
+    // 所有字符串字段经 JSON.stringify 序列化（带引号），多行文本转义为 \n
+    expect(result).toContain('title: "费曼学习法"')
     expect(result).toContain('description: "用教别人来检验自己是否真正理解"')
     expect(result).toContain('type: method')
     expect(result).toContain('  - "学习方法"')
@@ -47,7 +55,26 @@ describe('serializeNote', () => {
   it('序列化笔记包含来源信息', () => {
     const result = serializeNote(note, 'sessions/test/main.md', '划线文本')
     expect(result).toContain('source:')
-    expect(result).toContain('session: sessions/test/main.md')
+    expect(result).toContain('session: "sessions/test/main.md"')
+  })
+
+  it('多行划线文本（表格摘录）换行被转义，round-trip 后 tags 完整保留', () => {
+    const multiLineNote: ExtractedNote = { ...note, tags: ['表格', '知识'] }
+    const highlight = '| 种类 | 特点 |\n| 草虾 | 口感弹牙 |\n| 明虾 | 肉质紧实 |'
+    const result = serializeNote(multiLineNote, 'sessions/test/main.md', highlight)
+
+    // 换行被转义为 \n，不破坏 YAML frontmatter
+    expect(result).toContain('highlight: "| 种类 | 特点 |\\n| 草虾 | 口感弹牙 |\\n| 明虾 | 肉质紧实 |"')
+
+    // 完整 round-trip：写出的 md 重新解析，tags 等关键字段不丢失
+    const { meta, body } = parseFrontmatter(result)
+    expect(meta.tags).toEqual(['表格', '知识'])
+    expect(meta.title).toBe('费曼学习法')
+    expect(meta.source).toMatchObject({
+      session: 'sessions/test/main.md',
+      highlight,
+    })
+    expect(body).toContain('| 草虾 | 口感弹牙 |')
   })
 
   it('序列化笔记正文保存划线原文，不生成加工段落', () => {
@@ -88,5 +115,53 @@ describe('generateNoteFileName', () => {
   it('空格替换为下划线', () => {
     const name = generateNoteFileName('my note title')
     expect(name).toBe('my_note_title.md')
+  })
+})
+
+describe('json sidecar', () => {
+  const meta: NoteMeta = {
+    path: '/vault/notes/费曼学习法.md',
+    title: '费曼学习法',
+    description: '用教别人来检验自己是否真正理解',
+    type: 'method',
+    tags: ['学习方法', '费曼'],
+    created: '2026-08-01T10:00:00.000Z',
+    updated: '2026-08-01T10:00:00.000Z',
+    proposition: '用教别人的方式来检验自己是否真正理解',
+    source: {
+      session: 'sessions/test/main.md',
+      highlight: '| 种类 | 特点 |\n| 草虾 | 口感弹牙 |',
+    },
+  }
+
+  it('getNoteMetaPath 将 .md 替换为 .json', () => {
+    expect(getNoteMetaPath('/vault/notes/费曼学习法.md')).toBe('/vault/notes/费曼学习法.json')
+    expect(getNoteMetaPath('/vault/notes/abc.MD')).toBe('/vault/notes/abc.json')
+  })
+
+  it('serializeNoteMeta / parseNoteMetaFile round-trip 完整保留结构化信息', () => {
+    const links = ['/vault/notes/虾类大全.md', '/vault/notes/烹饪技巧.md']
+    const content = serializeNoteMeta(meta, links)
+    const parsed = parseNoteMetaFile(content)
+
+    expect(parsed).not.toBeNull()
+    expect(parsed).toMatchObject({
+      title: '费曼学习法',
+      type: 'method',
+      tags: ['学习方法', '费曼'],
+      links,
+    })
+    expect(parsed!.source).toEqual(meta.source)
+    expect(parsed!.created).toBe('2026-08-01T10:00:00.000Z')
+  })
+
+  it('多行 highlight 在 json sidecar 中保留原样（换行不丢失）', () => {
+    const parsed = parseNoteMetaFile(serializeNoteMeta(meta))
+    expect(parsed!.source!.highlight).toBe('| 种类 | 特点 |\n| 草虾 | 口感弹牙 |')
+  })
+
+  it('parseNoteMetaFile 对无效 json 返回 null', () => {
+    expect(parseNoteMetaFile('not-json{{{')).toBeNull()
+    expect(parseNoteMetaFile('{"tags": "not-array"}')).toBeNull()
   })
 })

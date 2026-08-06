@@ -70,6 +70,8 @@ export interface NoteMeta {
     session: string
     highlight: string
   }
+  /** 关联笔记路径列表（json sidecar 中的正向 wikilink 目标） */
+  links?: string[]
 }
 
 // 设置相关类型

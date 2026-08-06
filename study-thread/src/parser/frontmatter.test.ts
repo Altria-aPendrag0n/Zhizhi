@@ -110,4 +110,40 @@ body`
     expect(result.meta.title).toBe('test')
     expect(result.body).toBe('body')
   })
+
+  it('宽松容错：旧版本多行 highlight 未转义导致整体解析失败时，tags 等字段仍可恢复', () => {
+    // 旧 serializeNote 将表格多行划线裸写入 highlight 字段，跨行未闭合引号使整个 YAML 解析失败
+    const input = `---
+title: "淡水虾种类与吃法一览"
+tags:
+  - 淡水虾
+  - 菜谱
+source:
+  session: "sessions/美食/main.md"
+  highlight: "| 种类 | 特点 |
+| 草虾 | 口感弹牙 |
+| 明虾 | 肉质紧实 |"
+---
+# 淡水虾种类与吃法一览
+
+正文`
+    const result = parseFrontmatter(input)
+    // 容错解析丢弃跨行 highlight 后，关键字段完整保留
+    expect(result.meta.title).toBe('淡水虾种类与吃法一览')
+    expect(result.meta.tags).toEqual(['淡水虾', '菜谱'])
+    expect((result.meta.source as any).session).toBe('sessions/美食/main.md')
+  })
+
+  it('宽松容错：highlight 跨行但后续字段仍可解析', () => {
+    const input = `---
+title: "虾类知识"
+highlight: "第一行
+第二行"
+confidence: 0.8
+---
+正文`
+    const result = parseFrontmatter(input)
+    expect(result.meta.title).toBe('虾类知识')
+    expect(result.meta.confidence).toBe(0.8)
+  })
 })

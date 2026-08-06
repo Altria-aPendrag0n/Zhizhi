@@ -55,6 +55,31 @@ describe('notes store', () => {
     expect(reloadedStore.notes[0].title).toBe('费曼学习法')
   })
 
+  it('saveNote 写入的标签经 frontmatter round-trip 重新加载后完整保留', async () => {
+    const store = useNoteStore()
+    const note: ExtractedNote = {
+      title: '标签笔记',
+      description: '描述',
+      proposition: '命题',
+      explanation: '解释',
+      type: 'concept',
+      tags: ['学习', '记忆方法'],
+      confidence: 0.8,
+    }
+
+    const path = await store.saveNote('/vault', note, 'sessions/test.md', '划线内容')
+
+    // 写入的文件包含标签 frontmatter
+    const written = vaultFs.writeFile.mock.calls.find((call) => call[0] === path)?.[1] as string
+    expect(written).toContain('tags:')
+    expect(written).toContain('"学习"')
+
+    // 模拟重新打开笔记：读取写入内容重新解析，标签应完整保留
+    vaultFs.readFile.mockResolvedValueOnce(written)
+    const loaded = await store.loadNote(path!)
+    expect(loaded?.tags).toEqual(['学习', '记忆方法'])
+  })
+
   it('saveNote 重复保存同一笔记会更新', async () => {
     const store = useNoteStore()
     const note: ExtractedNote = {
