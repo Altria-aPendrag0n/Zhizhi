@@ -16,6 +16,8 @@ pub fn run() {
             commands::vault::delete_file,
             commands::vault::start_watch,
             commands::vault::stop_watch,
+            commands::vault::read_file_bytes,
+            commands::vault::write_file_bytes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

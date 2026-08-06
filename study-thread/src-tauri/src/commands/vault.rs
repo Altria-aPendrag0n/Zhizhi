@@ -139,6 +139,20 @@ pub fn stop_watch(state: tauri::State<'_, WatcherState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn write_file_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    // 确保父目录存在
+    if let Some(parent) = Path::new(&path).parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+    fs::write(&path, &bytes).map_err(|e| format!("写入文件失败: {}", e))
+}
+
+#[tauri::command]
+pub fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    fs::read(&path).map_err(|e| format!("读取文件失败: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,5 +387,62 @@ mod tests {
         assert!(!entries[3].is_dir);
 
         fs::remove_dir_all(&tmp).ok();
+    }
+
+    // ========== write_file_bytes 测试 ==========
+
+    #[test]
+    fn test_write_file_bytes_success() {
+        let tmp = std::env::temp_dir().join("test_write_file_bytes.bin");
+        let data: Vec<u8> = vec![0, 159, 146, 150, 255];
+        let result = write_file_bytes(tmp.to_string_lossy().to_string(), data.clone());
+        assert!(result.is_ok());
+        // 写后读回，字节往返一致
+        let content = fs::read(&tmp).unwrap();
+        assert_eq!(content, data);
+        fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_write_file_bytes_creates_parent_dir() {
+        let tmp = std::env::temp_dir().join("test_nested_dir_bytes").join("sub").join("file.bin");
+        let data: Vec<u8> = vec![0, 159, 146, 150, 255];
+        let result = write_file_bytes(tmp.to_string_lossy().to_string(), data.clone());
+        assert!(result.is_ok());
+        let content = fs::read(&tmp).unwrap();
+        assert_eq!(content, data);
+        // 清理
+        fs::remove_dir_all(tmp.parent().unwrap().parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn test_write_file_bytes_overwrite() {
+        let tmp = std::env::temp_dir().join("test_overwrite_bytes.bin");
+        fs::write(&tmp, vec![1, 2, 3]).unwrap();
+        let data: Vec<u8> = vec![0, 159, 146, 150, 255];
+        let result = write_file_bytes(tmp.to_string_lossy().to_string(), data.clone());
+        assert!(result.is_ok());
+        let content = fs::read(&tmp).unwrap();
+        assert_eq!(content, data);
+        fs::remove_file(&tmp).ok();
+    }
+
+    // ========== read_file_bytes 测试 ==========
+
+    #[test]
+    fn test_read_file_bytes_success() {
+        let tmp = std::env::temp_dir().join("test_read_file_bytes.bin");
+        let data: Vec<u8> = vec![0, 159, 146, 150, 255];
+        fs::write(&tmp, &data).unwrap();
+        let result = read_file_bytes(tmp.to_string_lossy().to_string());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), data);
+        fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_read_file_bytes_not_found() {
+        let result = read_file_bytes("/nonexistent/path/to/file.bin".to_string());
+        assert!(result.is_err());
     }
 }

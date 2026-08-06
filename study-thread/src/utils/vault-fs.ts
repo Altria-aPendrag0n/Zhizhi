@@ -38,6 +38,15 @@ export async function deleteFile(path: string): Promise<void> {
   return invoke('delete_file', { path })
 }
 
+export async function writeFileBytes(path: string, bytes: Uint8Array): Promise<void> {
+  return invoke('write_file_bytes', { path, bytes: Array.from(bytes) })
+}
+
+export async function readFileBytes(path: string): Promise<Uint8Array> {
+  const bytes: number[] = await invoke('read_file_bytes', { path })
+  return new Uint8Array(bytes)
+}
+
 export interface FileChangeEvent {
   kind: string
   paths: string[]
