@@ -78,6 +78,7 @@ import ChatMessage from './ChatMessage.vue'
 import StreamText from './StreamText.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import HighlightMenu from './HighlightMenu.vue'
+import { tableToMarkdown } from '../../utils/table-to-markdown'
 
 const props = defineProps<{
   messages: Message[]
@@ -134,15 +135,22 @@ function findHighlightMessageIndex(ancestor: Node): number | null {
   return Number.isNaN(value) ? null : value
 }
 
+/** 从选区定位命中的表格（选区跨多表格时取最近命中的表格）；未命中返回 null */
+function findSelectionTable(range: Range, container: Element): HTMLTableElement | null {
+  const nodes = [range.commonAncestorContainer, range.startContainer, range.endContainer]
+  for (const node of nodes) {
+    const el = node.nodeType === Node.ELEMENT_NODE
+      ? (node as Element)
+      : node.parentElement
+    const table = el?.closest('table')
+    if (table && container.contains(table)) return table
+  }
+  return null
+}
+
 function handleMouseUp() {
   const selection = window.getSelection()
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-    closeHighlightMenu()
-    return
-  }
-
-  const text = selection.toString().trim()
-  if (!text) {
     closeHighlightMenu()
     return
   }
@@ -153,6 +161,15 @@ function handleMouseUp() {
     ? ancestor as Element
     : ancestor.parentElement)?.closest('[data-highlightable="true"]')
   if (!highlightableEl || !containerRef.value?.contains(highlightableEl)) {
+    closeHighlightMenu()
+    return
+  }
+
+  // 选区落在表格内时，把整张表格还原为带 | 分隔符的 Markdown 表格。
+  // selection.toString() 只返回渲染后文本节点，会丢失表格结构标志。
+  const table = findSelectionTable(range, highlightableEl)
+  const text = table ? tableToMarkdown(table) : selection.toString().trim()
+  if (!text) {
     closeHighlightMenu()
     return
   }
