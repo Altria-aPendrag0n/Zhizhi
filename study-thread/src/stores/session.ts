@@ -178,7 +178,8 @@ export const useSessionStore = defineStore('session', () => {
    * 删除会话节点及其所有子分支
    *
    * 会话在管理上相互独立：删除一个会话时级联删除其下所有分支（含嵌套），
-   * 不影响同级与上级会话。无 vault 时视为本地会话，直接放行。
+   * 不影响同级与上级会话。无 vault 时视为本地会话，直接放行；
+   * 有 vault 但节点不在会话树中（本地模拟会话，如空的新会话改名而来）时同样放行。
    *
    * @param vaultPath - vault 根目录（可为 null）
    * @param nodeId - 要删除的会话/分支 id
@@ -191,7 +192,13 @@ export const useSessionStore = defineStore('session', () => {
     if (!vaultPath) return true
     try {
       await initSessionTree(vaultPath)
-      if (!sessionTree.value || !findNode(sessionTree.value, nodeId)) return false
+      if (!sessionTree.value || !findNode(sessionTree.value, nodeId)) {
+        // 本地模拟会话（不在 vault 会话树中，如空的新会话改名而来、内置示例会话等）：
+        // 按 id 尝试删除对应会话文件（若存在），文件不存在也视为本地会话放行
+        const filePath = getSessionFilePath(vaultPath, nodeId, nodeId.startsWith('branch_'))
+        if (await fileExists(filePath)) await deleteFile(filePath)
+        return true
+      }
 
       // 级联删除该会话及其所有子分支的会话文件
       const ids = collectSubtreeIds(sessionTree.value, nodeId)

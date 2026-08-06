@@ -76,7 +76,7 @@
 | `addBranchToSessionTree` / `saveSessionTree` | 分支树维护与持久化 |
 | `createBranchInVault(vaultPath, parentSession, forkMessageIndex, branchTitle, parentSessionFile?)` | 完整分支创建流程：深度校验 → 保存父会话文件 → 建根节点/分支 → 写树（详见 [02-chat-module.md](./02-chat-module.md)） |
 | `getBranches(nodeId)` / `getNodeBranchDepth(nodeId)` | 查询分支与深度 |
-| `deleteSessionNodeFromVault(vaultPath, nodeId)` | 级联删除节点及全部子分支的会话文件并更新树；无 vault 直接放行 |
+| `deleteSessionNodeFromVault(vaultPath, nodeId)` | 级联删除节点及全部子分支的会话文件并更新树；无 vault 或节点不在会话树中（本地模拟会话）直接放行 |
 
 ## 5. `notes.ts`
 

@@ -224,11 +224,22 @@ describe('session store', () => {
       expect(store.sessionTree!.id).toBe('root')
     })
 
-    it('不在会话树中的节点返回 false', async () => {
+    it('不在会话树中的本地会话放行并删除对应文件（若存在）', async () => {
       vaultFs.readFile.mockResolvedValue(serializeTree(buildTree()))
       const store = useSessionStore()
 
-      expect(await store.deleteSessionNodeFromVault('/vault', 'nonexistent')).toBe(false)
+      // fileExists 默认 true：按 id 删除对应会话文件后放行
+      expect(await store.deleteSessionNodeFromVault('/vault', 'new_local')).toBe(true)
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/new_local.md')
+    })
+
+    it('不在会话树且无对应文件时同样放行（空的新会话改名会话）', async () => {
+      vaultFs.readFile.mockResolvedValue(serializeTree(buildTree()))
+      vaultFs.fileExists.mockResolvedValueOnce(false)
+      const store = useSessionStore()
+
+      expect(await store.deleteSessionNodeFromVault('/vault', 'new_local')).toBe(true)
+      expect(vaultFs.deleteFile).not.toHaveBeenCalled()
     })
 
     it('无 vault 时放行（本地会话）', async () => {
