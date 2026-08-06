@@ -198,20 +198,21 @@ function syncActiveThread(id: string | null) {
   saveSessionList()
 }
 
-/** 资料库（/notes*）与设置页隐藏会话列：左侧只保留项目栏 */
+/** 资料库（/notes*）、设置页、认知地图（/hub）隐藏会话列：左侧只保留项目栏 */
 const hideThreadsByRoute = computed(() =>
-  route.path.startsWith('/notes') || route.path === '/settings',
+  route.path.startsWith('/notes') || route.path === '/settings' || route.path === '/hub',
 )
 /** 会话栏是否隐藏：路由隐藏（资料库/设置）或用户手动收起 */
 const hideThreads = computed(() => threadsCollapsed.value || hideThreadsByRoute.value)
 /** 会话界面显示"收起/展开会话栏"按钮（路由未隐藏且非小窗口模式） */
 const showCollapseThreads = computed(() => !hideThreadsByRoute.value && !isCompact.value)
-/** 笔记/会话/设置界面显示顶部返回按钮 */
+/** 笔记/会话/设置/认知地图界面显示顶部返回按钮 */
 const showBack = computed(() =>
-  route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings',
+  route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings' || route.path === '/hub',
 )
 const displayedBreadcrumbs = computed(() => {
   if (route.path === '/settings') return ['设置']
+  if (route.path === '/hub') return ['认知地图']
   if (route.path === '/notes') return ['资料库']
   if (route.path.startsWith('/notes/')) {
     return ['资料库', noteDetailTitle.value || decodeURIComponent((route.params?.id as string) || '')]
