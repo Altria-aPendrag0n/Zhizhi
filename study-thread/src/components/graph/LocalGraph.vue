@@ -17,6 +17,13 @@
         >
           2 度
         </button>
+        <button
+          class="local-graph__btn"
+          :class="{ 'is-active': !Number.isFinite(depth) }"
+          @click="setDepth(Infinity)"
+        >
+          全部
+        </button>
         <button class="local-graph__btn" @click="resetZoom" title="重置视图">
           重置
         </button>
@@ -108,6 +115,9 @@ function getNodeColor(node: GraphNode): string {
 
 /**
  * 构建图数据
+ *
+ * @param maxDepth - 局部模式的最大深度；传非有限值（如 Infinity）时为全量模式，
+ *   展示所有笔记节点与全部 wikilink 联系（不限制深度）。
  */
 function buildGraph(noteId: string, maxDepth: number) {
   // 使用 noteIndex 获取完整笔记数据（含 content），回退到 notes 元数据列表
@@ -160,43 +170,67 @@ function buildGraph(noteId: string, maxDepth: number) {
     linkMap.set(path, targets)
   }
 
-  // BFS 构建图
-  const visited = new Set<string>()
   const graphNodes: GraphNode[] = []
   const graphLinks: GraphLink[] = []
-  const queue: { path: string; depth: number }[] = []
 
-  // 起始节点
-  queue.push({ path: noteId, depth: 0 })
-  visited.add(noteId)
-
-  while (queue.length > 0) {
-    const current = queue.shift()!
-    const note = noteMap.get(current.path)
-    if (!note) continue
-
-    const neighbors = linkMap.get(current.path) || new Set()
-    const degree = neighbors.size
-
-    graphNodes.push({
-      id: note.path,
-      title: note.title,
-      type: note.type,
-      isCenter: current.depth === 0,
-      degree,
-      depth: current.depth,
-    })
-
-    if (current.depth < maxDepth) {
+  // 全量模式：所有笔记均为节点（含孤立笔记），全部 wikilink 均为边
+  if (!Number.isFinite(maxDepth)) {
+    const seenEdges = new Set<string>()
+    for (const [path, note] of noteMap) {
+      const neighbors = linkMap.get(path) || new Set()
+      graphNodes.push({
+        id: note.path,
+        title: note.title,
+        type: note.type,
+        isCenter: path === noteId,
+        degree: neighbors.size,
+        depth: 0,
+      })
       for (const neighbor of neighbors) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor)
-          queue.push({ path: neighbor, depth: current.depth + 1 })
+        // 无向边去重：A→B 与 B→A 只保留一条
+        const edgeKey = path < neighbor ? `${path}|${neighbor}` : `${neighbor}|${path}`
+        if (seenEdges.has(edgeKey)) continue
+        seenEdges.add(edgeKey)
+        graphLinks.push({ source: path, target: neighbor })
+      }
+    }
+  } else {
+    // 局部模式：从当前笔记 BFS，限制深度
+    const visited = new Set<string>()
+    const queue: { path: string; depth: number }[] = []
+
+    // 起始节点
+    queue.push({ path: noteId, depth: 0 })
+    visited.add(noteId)
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const note = noteMap.get(current.path)
+      if (!note) continue
+
+      const neighbors = linkMap.get(current.path) || new Set()
+      const degree = neighbors.size
+
+      graphNodes.push({
+        id: note.path,
+        title: note.title,
+        type: note.type,
+        isCenter: current.depth === 0,
+        degree,
+        depth: current.depth,
+      })
+
+      if (current.depth < maxDepth) {
+        for (const neighbor of neighbors) {
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor)
+            queue.push({ path: neighbor, depth: current.depth + 1 })
+          }
+          graphLinks.push({
+            source: note.path,
+            target: neighbor,
+          })
         }
-        graphLinks.push({
-          source: note.path,
-          target: neighbor,
-        })
       }
     }
   }

@@ -52,7 +52,7 @@ interface Note {
   - `loadBacklinks`：遍历其余笔记解析 wikilink，命中当前笔记的记录 `{sourcePath, title, context(命中行原文)}`。
   - `handleNoteUpdate`：300ms 防抖后 `noteStore.updateNote` 保存。
   - `handleCreateBranch`：若笔记有 `source.session` 则从来源会话文件解析父会话（含 fork 定位）；否则构造 `note_root_<timestamp>` 虚拟根会话，再 `createBranchInVault`。
-  - `hasGraphRelations`：有出链或反链时渲染 `LocalGraph`（depth=1）。
+  - **全量关系图**：详情页下方固定展示 `LocalGraph`（`:depth="Infinity"`，全量模式）——所有笔记节点与全部 wikilink 联系，不限制深度，孤立笔记也展示；当前笔记高亮为中心节点。工具栏可切换「1 度 / 2 度 / 全部」聚焦局部。
 
 ## 4. 组件层（`src/components/notes/`）
 

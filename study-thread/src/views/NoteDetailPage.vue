@@ -26,8 +26,9 @@
       </aside>
     </div>
 
-    <div v-if="currentNote && hasGraphRelations" class="detail-graph">
-      <LocalGraph :note-id="currentNote.path" :depth="1" />
+    <!-- 关系图：展示所有笔记节点与全部联系（全量模式，不限制深度） -->
+    <div v-if="currentNote && noteStore.notes.length > 0" class="detail-graph">
+      <LocalGraph :note-id="currentNote.path" :depth="Infinity" />
     </div>
 
     <ExtractNoteDialog
@@ -88,12 +89,6 @@ const extractDialog = reactive({
   highlightedText: '',
   error: '',
   draft: null as ExtractedNote | null,
-})
-
-const hasGraphRelations = computed(() => {
-  if (!currentNote.value) return false
-  const outgoing = parseWikiLinks(currentNote.value.content).some((link) => resolveWikiLinkTarget(link, noteStore.notes))
-  return outgoing || backlinks.value.length > 0
 })
 
 const noteId = computed(() => {
