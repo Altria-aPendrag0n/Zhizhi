@@ -400,4 +400,21 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
+
+@media (max-width: 860px) {
+  .detail-main {
+    padding: 24px 20px 56px;
+  }
+
+  .detail-layout {
+    flex-direction: column;
+  }
+
+  .detail-sidebar {
+    width: 100%;
+    flex-shrink: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
 </style>

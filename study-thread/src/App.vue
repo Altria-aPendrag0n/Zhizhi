@@ -1,5 +1,10 @@
 <template>
-  <AppShell :hide-threads="hideThreads">
+  <AppShell
+    :hide-threads="hideThreads"
+    :compact="isCompact"
+    :drawer-open="drawerOpen"
+    @close-drawer="drawerOpen = false"
+  >
     <template #rail>
       <ProjectRail
         :projects="projects"
@@ -29,9 +34,11 @@
       <TopBar
         :breadcrumbs="displayedBreadcrumbs"
         :show-back="showBack"
+        :show-threads-toggle="isCompact"
         @update-title="handleActiveThreadTitleUpdate"
         @settings="handleSettings"
         @back="handleBack"
+        @toggle-threads="handleToggleThreads"
       />
     </template>
     <template #main>
@@ -110,6 +117,23 @@ const threads = ref<Thread[]>([...initialThreads])
 const activeThreadId = ref<string | null>(initialThreadId)
 const breadcrumbs = ref(initialThreadId ? ['学习会话', initialThreads.find((thread) => thread.id === initialThreadId)?.title ?? ''] : ['学习会话'])
 const noteDetailTitle = ref('')
+
+/** 小窗口断点：低于此宽度时进入 compact 模式（会话列表变抽屉） */
+const COMPACT_BREAKPOINT = 860
+/** 当前是否处于小窗口（compact）模式 */
+const isCompact = ref(false)
+/** 小窗口模式下会话列表抽屉是否展开 */
+const drawerOpen = ref(false)
+
+function updateViewport() {
+  isCompact.value = window.innerWidth < COMPACT_BREAKPOINT
+  // 恢复大窗口时自动收起抽屉
+  if (!isCompact.value) drawerOpen.value = false
+}
+
+function handleToggleThreads() {
+  drawerOpen.value = !drawerOpen.value
+}
 
 if (didMigrateSessionMeta) {
   saveStoredValue(LOCAL_SESSION_LIST_KEY, {
@@ -418,6 +442,8 @@ watch(
 )
 
 onMounted(() => {
+  updateViewport()
+  window.addEventListener('resize', updateViewport)
   vaultStore.restoreLastVault().catch(() => {})
   const engine = getEmbeddingEngine()
   engine.initialize()
@@ -440,5 +466,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('resize', updateViewport)
 })
 </script>

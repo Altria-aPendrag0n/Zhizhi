@@ -398,4 +398,18 @@ async function handleEditDelete(path: string) {
   font-size: 12px;
   line-height: 1.65;
 }
+
+@media (max-width: 860px) {
+  .notes-page {
+    padding: 24px 20px 56px;
+  }
+
+  .notes-layout {
+    gap: 20px;
+  }
+
+  .sidebar {
+    width: 104px;
+  }
+}
 </style>

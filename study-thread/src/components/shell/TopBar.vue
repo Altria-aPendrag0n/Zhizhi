@@ -10,6 +10,15 @@
       >
         <ArrowLeft :size="18" :stroke-width="1.75" />
       </button>
+      <button
+        v-else-if="showThreadsToggle"
+        class="top-bar__back-btn"
+        type="button"
+        aria-label="展开会话列表"
+        @click="$emit('toggle-threads')"
+      >
+        <PanelLeft :size="18" :stroke-width="1.75" />
+      </button>
       <PanelLeft v-else :size="18" :stroke-width="1.75" class="top-bar__crumb-icon" />
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
         <span v-if="index > 0" aria-hidden="true" class="top-bar__separator">/</span>
@@ -63,12 +72,15 @@ const props = defineProps<{
   breadcrumbs: string[]
   /** 是否显示返回按钮（笔记/会话/设置界面） */
   showBack?: boolean
+  /** 小窗口模式下是否显示"展开会话列表"按钮（替换装饰性 PanelLeft 图标） */
+  showThreadsToggle?: boolean
 }>()
 
 const emit = defineEmits<{
   search: []
   settings: []
   back: []
+  'toggle-threads': []
   'update-title': [title: string]
 }>()
 

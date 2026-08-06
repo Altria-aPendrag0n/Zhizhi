@@ -1,9 +1,18 @@
 <template>
-  <div class="app-shell" :class="{ 'app-shell--threads-hidden': hideThreads }" aria-label="知枝学习工作台">
+  <div
+    class="app-shell"
+    :class="{ 'app-shell--threads-hidden': hideThreads, 'app-shell--compact': compact }"
+    aria-label="知枝学习工作台"
+  >
     <aside class="app-shell__rail" aria-label="项目">
       <slot name="rail" />
     </aside>
-    <aside v-if="!hideThreads" class="app-shell__threads" aria-label="会话列表">
+    <aside
+      v-if="!hideThreads"
+      class="app-shell__threads"
+      :class="{ 'app-shell__threads--open': compact && drawerOpen }"
+      aria-label="会话列表"
+    >
       <slot name="threads" />
     </aside>
     <header class="app-shell__toolbar">
@@ -12,12 +21,26 @@
     <main class="app-shell__main">
       <slot name="main" />
     </main>
+    <!-- 小窗口模式下会话列表抽屉的遮罩，点击关闭 -->
+    <div
+      v-if="compact && !hideThreads && drawerOpen"
+      class="app-shell__drawer-mask"
+      @click="$emit('close-drawer')"
+    ></div>
   </div>
 </template>
 
 <script setup lang="ts">
 defineProps<{
   hideThreads?: boolean
+  /** 小窗口模式：会话列表不占主网格列，以抽屉形式从左侧滑出 */
+  compact?: boolean
+  /** 小窗口模式下会话列表抽屉是否展开 */
+  drawerOpen?: boolean
+}>()
+
+defineEmits<{
+  'close-drawer': []
 }>()
 </script>
 
@@ -101,5 +124,42 @@ defineProps<{
   .app-shell--threads-hidden {
     grid-template-columns: 64px minmax(0, 1fr);
   }
+}
+
+/* 小窗口模式（compact）：会话列表移出主网格，改为左侧抽屉 */
+.app-shell--compact {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.app-shell--compact .app-shell__toolbar {
+  grid-column: 2 / -1;
+}
+
+.app-shell--compact .app-shell__main {
+  grid-column: 2;
+}
+
+.app-shell--compact .app-shell__threads {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  width: 244px;
+  transform: translateX(-100%);
+  box-shadow: none;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+.app-shell--compact .app-shell__threads--open {
+  transform: translateX(0);
+  box-shadow: 0 0 40px rgba(20, 39, 33, 0.18);
+}
+
+.app-shell__drawer-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(25, 39, 33, 0.32);
 }
 </style>

@@ -117,6 +117,12 @@ CSS Grid 五区布局，全部为具名插槽：
 
 `hideThreads` 时通过 `app-shell--threads-hidden` 类将 Grid 变为 3 列，会话列用 `v-if` **立即隐藏**（无过渡动画）。曾用 `<Transition name="threads-collapse">` + `grid-template-columns` 过渡平滑收起，但实测会导致会话列元素在过渡期被拉伸到整个内容区宽度（896px）覆盖笔记页，并把主内容区下推 33px（表现为"界面从下往上出现"），且拖慢跳转约 200ms；故移除过渡改为即时切换，进入资料库更干脆快速。
 
+**响应式断点（三档）**：
+- `≥1100px`：完整三列 `76px 244px 1fr`（`hideThreads` 时 `76px 1fr`）。
+- `<1100px`：列缩窄为 `64px 218px 1fr`（纯 CSS 媒体查询）。
+- `<860px`（**compact 模式**）：`App.vue` 监听 `resize` 维护 `isCompact`；会话列表移出主网格（Grid 变 `76px 1fr`），以 `position: fixed` 抽屉形式从左侧滑出（`translateX` 过渡），由顶栏 `showThreadsToggle` 按钮（`toggle-threads` 事件）展开、遮罩点击（`close-drawer`）关闭；窗口恢复大屏时自动收起抽屉。
+- 各内容页（设置/资料库/笔记详情/学习地图）在 `<860px` 收缩内边距（`34px 48px` → `22~24px 20px`），笔记详情侧栏由右侧改到内容下方；聊天页 `padding` 使用 `max(48px, 8vw)` 已自适应。
+
 ## 6. 导航组件
 
 ### 6.1 `ProjectRail.vue`

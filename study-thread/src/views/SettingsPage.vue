@@ -506,5 +506,11 @@ onMounted(() => {
     padding: 34px 34px 64px;
   }
 }
+
+@media (max-width: 860px) {
+  .settings-page {
+    padding: 22px 20px 56px;
+  }
+}
 </style>
 
