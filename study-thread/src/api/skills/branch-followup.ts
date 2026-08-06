@@ -8,6 +8,8 @@
 import type { LLMProvider, Message, StreamChunk } from '../llm-provider'
 import type { Note } from '../../types'
 import { parseSkill, buildPrompt } from '../../skills/loader'
+import { chatWithTools } from '../chat-loop'
+import { CLIENT_TOOLS, type ToolContext } from '../tools'
 
 // SKILL.md 内容（构建时内联）
 import skillRaw from '../../skills/branch-followup/SKILL.md?raw'
@@ -50,32 +52,49 @@ function serializeNotes(notes: Note[]): string {
 /**
  * 分支追问流式响应
  *
+ * 分支会话与主会话同等地位：上下文 = 分叉点前的主会话历史（forkContext，
+ * 注入 systemPrompt）+ 分支会话自身的对话历史（history，作为多轮消息传入）。
+ *
  * @param question - 用户追问内容
- * @param forkContext - 分叉点前的对话消息
+ * @param forkContext - 分叉点前的主会话消息
+ * @param history - 分支会话自身的对话历史（不含本次追问）
  * @param relatedNotes - 相关的笔记列表
  * @param provider - LLM 提供商
+ * @param knowledgeContext - 可选的知识检索上下文（非空时拼接到 systemPrompt 之后）
+ * @param toolContext - 工具执行上下文（vault 路径），支持 AI 按需读取参考资料全文
  * @returns 流式响应迭代器
  */
 export async function* branchFollowupStream(
   question: string,
   forkContext: Message[],
+  history: Message[],
   relatedNotes: Note[],
   provider: LLMProvider,
+  knowledgeContext?: string,
+  toolContext?: ToolContext,
 ): AsyncIterable<StreamChunk> {
   const skill = getSkill()
-  const systemPrompt = buildPrompt(skill, {
+  let systemPrompt = buildPrompt(skill, {
     fork_context: serializeMessages(forkContext),
     user_question: question,
     related_notes: serializeNotes(relatedNotes),
   })
+  if (knowledgeContext) {
+    systemPrompt = `${systemPrompt}\n\n${knowledgeContext}`
+  }
 
   const messages: Message[] = [
+    ...history.map((message) => ({ ...message })),
     { role: 'user', content: question },
   ]
 
   try {
-    for await (const chunk of provider.chat(messages, {
+    for await (const chunk of chatWithTools({
+      provider,
+      messages,
       systemPrompt,
+      tools: CLIENT_TOOLS,
+      toolContext: toolContext || { vaultPath: '' },
       temperature: 0.7,
       maxTokens: 4096,
     })) {
