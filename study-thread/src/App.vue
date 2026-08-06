@@ -93,10 +93,8 @@ const defaultProjectThreads: Record<string, Thread[]> = {
     { id: '5', title: '认知科学论文索引', meta: '11:20' },
     { id: '6', title: '机器学习基础', meta: '昨天 09:40' },
   ],
-  '3': [
-    { id: '7', title: '知识图谱总览', meta: '10:05' },
-    { id: '8', title: '概念关系网络', meta: '昨天 18:30' },
-  ],
+  // 学习地图（项目3）为纯视图切换界面，不含会话；
+  // 旧版 /hub?thread=7（知识图谱总览）/thread=8（概念关系网络）的示例会话已废弃移除
 }
 
 type StoredSessionList = {
@@ -151,6 +149,13 @@ if (didMigrateSessionMeta) {
 
 function migrateSessionMeta(projectThreads: Record<string, Thread[]>, threadMessages: Record<string, unknown[]>): boolean {
   let migrated = false
+
+  // 学习地图（项目3）是纯视图切换界面，不包含会话；
+  // 旧版 /hub?thread=7/8 的示例会话（知识图谱总览/概念关系网络）已废弃，加载时清理持久化残留
+  if (projectThreads['3']?.length) {
+    projectThreads['3'] = []
+    migrated = true
+  }
 
   for (const threads of Object.values(projectThreads)) {
     for (const thread of threads) {
@@ -259,6 +264,8 @@ provide('updateThreadTitle', updateThreadTitle)
 provide('updateNoteBreadcrumbTitle', (title: string) => {
   noteDetailTitle.value = title
 })
+/** 学习地图等页面"开始新会话"入口：默认在知枝学习（项目1）下新建会话 */
+provide('createNewThread', handleNewThread)
 
 watch(
   () => route.path,
@@ -300,6 +307,14 @@ function handleProjectSelect(id: string) {
     router.push(targetRoute)
     // 会话激活状态与持久化在导航发起后同步（threads 列表保持原样，/notes 隐藏会话栏）
     syncActiveThread(nextThreadId)
+    return
+  }
+  if (targetRoute.path === '/hub') {
+    // 学习地图为纯视图切换界面（无会话）：同步空会话列表并清空激活会话，
+    // 避免 /hub 异步加载期间在 /chat 上闪现旧版废弃的会话栏（知识图谱总览/概念关系网络）
+    threads.value = []
+    syncActiveThread(null)
+    router.push(targetRoute)
     return
   }
   threads.value = [...currentThreads]
@@ -374,14 +389,18 @@ async function handleThreadDelete(id: string) {
   toast.success('已删除会话')
 }
 
-function handleNewThread() {
+function handleNewThread(projectId = activeProjectId.value) {
+  // 学习地图为纯视图切换界面，不支持新建会话（/hub 隐藏会话栏，此处为兜底保护）
+  if (projectId === '3') {
+    toast.info('学习地图为视图界面，不支持新建会话')
+    return
+  }
   const newId = `new_${Date.now()}`
   const newThread: Thread = {
     id: newId,
     title: '新会话',
     meta: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
   }
-  const projectId = activeProjectId.value
   projectThreads[projectId] = [newThread, ...(projectThreads[projectId] ?? [])]
   threads.value = [...projectThreads[projectId]]
   syncActiveThread(newId)

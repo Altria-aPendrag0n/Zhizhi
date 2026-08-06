@@ -123,7 +123,7 @@
 
       <!-- 快速入口 -->
       <div class="learning-hub__quick">
-        <button class="quick-btn" @click="router.push('/chat')">
+        <button class="quick-btn" @click="startNewChat">
           <MessageSquare :size="16" />
           <span>开始新会话</span>
         </button>
@@ -214,7 +214,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
@@ -226,6 +226,8 @@ import BranchTree from '../components/chat/BranchTree.vue'
 const router = useRouter()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
+/** 知枝学习项目下新建会话（由 App 提供，避免跳转到无会话的空白聊天界面） */
+const createNewThread = inject<(projectId?: string) => void>('createNewThread', () => {})
 
 const sessionTree = ref<SessionTreeNode | null>(null)
 /** 当前视图：由左侧"学习地图切换管理栏"控制 */
@@ -287,16 +289,21 @@ onMounted(() => {
 })
 
 function handleSelectNode(nodeId: string) {
-  // 跳转到对应会话
+  // 跳转到对应会话（携带 thread 参数，避免进入无会话的空白聊天界面）
   sessionStore.switchSession(nodeId)
-  router.push('/chat')
+  router.push({ path: '/chat', query: { thread: nodeId } })
 }
 
 function handleActivityClick(item: ActivityItem) {
   if (item.type === 'session') {
     sessionStore.switchSession(item.target || '')
-    router.push('/chat')
+    router.push({ path: '/chat', query: { thread: item.target || '' } })
   }
+}
+
+/** 快速入口：在知枝学习项目下新建会话并跳转 */
+function startNewChat() {
+  createNewThread('1')
 }
 
 function formatRelativeTime(iso: string): string {

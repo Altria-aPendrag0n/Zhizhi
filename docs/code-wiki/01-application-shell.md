@@ -51,9 +51,9 @@ activeProjectId / activeThreadId
 breadcrumbs                                  // ['学习会话', 会话标题]
 ```
 
-- 初始数据有 3 个内置项目：`1 知枝学习`、`2 资料库`、`3 学习地图`，以及各项目下的示例会话。
+- 初始数据有 3 个内置项目：`1 知枝学习`、`2 资料库`、`3 学习地图`，其中知枝学习/资料库含示例会话，**学习地图为纯视图切换界面、不含任何会话**（旧版 `/hub?thread=7/8` 的示例会话"知识图谱总览/概念关系网络"已废弃移除）。
 - 持久化：`saveSessionList()` 写入 `study-thread-session-list`；会话消息持久化在 `study-thread-messages`（由 `MainChatPage` 使用）。
-- 启动时执行一次元数据迁移 `migrateSessionMeta`（归一化 `meta` 时间、修正空"新会话"标题）。
+- 启动时执行一次元数据迁移 `migrateSessionMeta`（归一化 `meta` 时间、修正空"新会话"标题、**清理持久化中学习地图项目的残留会话**——旧版 `/hub?thread=7/8` 的示例会话已废弃，加载时清空避免再次闪现废弃界面）。
 
 ### 4.2 项目路由映射
 
@@ -69,7 +69,8 @@ function getProjectRoute(projectId, threadId) {
 
 - 切到新项目时，更新 `activeProjectId` / `threads` 后 `push(getProjectRoute(...))`。
 - **资料库（项目 `2`）例外**：目标路由 `/notes` 会隐藏会话栏（`hideThreads`），因此切换时**不提前替换 `threads`**，直接 `push('/notes')`——否则会在 `/chat` 上先闪现一帧资料库项目的会话列表（如"知枝学习/认知科学论文索引/机器学习基础"）再跳转；会话激活状态与持久化（`syncActiveThread`）在导航发起后同步。
-- **学习地图（项目 `3`）**：目标路由 `/hub` 同样隐藏会话栏，且不携带 `thread` 参数——学习地图左侧是自己的**视图切换管理栏**（`LearningHubPage` 内 `hub-nav`：学习总览 / 概念网络，通过 `currentView` 切换），不关联具体会话、也不提供新建会话。
+- **学习地图（项目 `3`）**：目标路由 `/hub` 同样隐藏会话栏，且不携带 `thread` 参数——学习地图左侧是自己的**视图切换管理栏**（`LearningHubPage` 内 `hub-nav`：学习总览 / 概念网络，通过 `currentView` 切换），不关联具体会话、也不提供新建会话。切换时**同步空会话列表并清空激活会话**（`threads = []` + `syncActiveThread(null)`）——旧版此处会写入项目 `3` 的废弃示例会话（知识图谱总览/概念关系网络），在 `/hub` 异步加载期间于 `/chat` 上闪现"学习地图 + 废弃会话列表"的废弃界面，已修复；`handleNewThread` 对项目 `3` 有兜底保护（提示"学习地图为视图界面，不支持新建会话"）。
+- **学习地图页内跳转（`LearningHubPage`）**：点击"会话树/最近活动"节点时 `handleSelectNode`/`handleActivityClick` 会 `push({ path: '/chat', query: { thread: nodeId } })`——**必须携带 `thread` 参数**，否则进入无会话的空白聊天界面（曾误用 `push('/chat')` 造成"废弃界面"）；顶部"开始新会话"快速入口通过注入的 `createNewThread('1')` 在知枝学习项目下新建会话并跳转，而非直接跳空白 `/chat`。
 - 再次点击**已激活**项目时视为"回到该项目首页"：若当前 path 偏离目标路由则修正；资料库（项目 `2`）还会检查是否残留 `tab=references` 等 query——资料库页内切换 tab 会把 tab 写入 query（`NotesPage` 里 `router.push({ query: { tab } })`），残留 query 会让再次点击资料库时仍停留在旧视图（表现为"老版本废弃页面"），因此有残留 query 时强制 `push({ path: '/notes' })` 回默认笔记视图。
 - vue-router 4 中 `push({ path })`（不含 query 的对象形式）会**清除**现有 query，因此该写法即可完成重置。
 
@@ -86,6 +87,7 @@ function getProjectRoute(projectId, threadId) {
 
 - `provide('updateThreadTitle', updateThreadTitle)`：由聊天页在会话标题变化时调用。
 - `provide('updateNoteBreadcrumbTitle', (title) => …)`：由笔记详情页更新面包屑末级标题。
+- `provide('createNewThread', handleNewThread)`：供学习地图等页面"开始新会话"入口调用，`handleNewThread(projectId = activeProjectId)` 支持指定项目（学习地图按钮传 `'1'` 在知枝学习下新建会话，避免跳转到无会话的空白聊天界面）。
 - **顶栏面包屑派生（`displayedBreadcrumbs`）**：`/settings` → `['设置']`；`/notes` → `['资料库']`；`/notes/:id` → `['资料库', 笔记标题]`；其余（会话/分支）→ 会话面包屑 `['学习会话', 会话标题]`（支持内联编辑）。
 
 ### 4.5 生命周期初始化（`onMounted`）
