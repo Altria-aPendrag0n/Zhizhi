@@ -10,6 +10,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const apiKey = ref('')
   const baseUrl = ref('https://api.openai.com')
   const model = ref('gpt-4o')
+  const enableWebSearch = ref(true)
   const recentVaults = ref<string[]>([])
 
   function saveSettings() {
@@ -18,6 +19,7 @@ export const useSettingsStore = defineStore('settings', () => {
       apiKey: apiKey.value,
       baseUrl: baseUrl.value,
       model: model.value,
+      enableWebSearch: enableWebSearch.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   }
@@ -31,6 +33,7 @@ export const useSettingsStore = defineStore('settings', () => {
         apiKey.value = data.apiKey || ''
         baseUrl.value = data.baseUrl || 'https://api.openai.com'
         model.value = data.model || 'gpt-4o'
+        enableWebSearch.value = data.enableWebSearch !== false
       } catch {
         // 解析失败则使用默认值
       }
@@ -54,6 +57,7 @@ export const useSettingsStore = defineStore('settings', () => {
       apiKey: apiKey.value,
       baseUrl: baseUrl.value,
       model: model.value,
+      enableWebSearch: enableWebSearch.value,
     }
   }
 
@@ -65,6 +69,7 @@ export const useSettingsStore = defineStore('settings', () => {
     apiKey,
     baseUrl,
     model,
+    enableWebSearch,
     recentVaults,
     saveSettings,
     loadSettings,

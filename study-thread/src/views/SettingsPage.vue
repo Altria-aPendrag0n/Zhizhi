@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="settings-page">
     <div class="settings-page__header">
       <div class="eyebrow">Configuration</div>
@@ -67,6 +67,18 @@
         />
       </div>
 
+      <!-- 联网搜索 -->
+      <div class="form-group form-group--toggle">
+        <div class="toggle-row">
+          <label class="form-label" for="enable-web-search">联网搜索</label>
+          <label class="toggle">
+            <input id="enable-web-search" v-model="enableWebSearch" type="checkbox" />
+            <span class="toggle__slider"></span>
+          </label>
+        </div>
+        <p class="form-hint">请求时附带 web_search 工具；模型支持则自动联网搜索，不支持则自动降级为普通请求。DeepSeek 官方 API 将自动走 Anthropic 端点启用联网搜索。Ollama 等本地模型请关闭。</p>
+      </div>
+
       <!-- 按钮组 -->
       <div class="form-actions">
         <button class="btn btn-primary" @click="handleSave">保存设置</button>
@@ -107,6 +119,7 @@ const selectedProvider = ref<string>('openai')
 const baseUrl = ref('https://api.openai.com')
 const apiKey = ref('')
 const model = ref('gpt-4o')
+const enableWebSearch = ref(true)
 const showKey = ref(false)
 const testing = ref(false)
 const saved = ref(false)
@@ -139,6 +152,7 @@ function handleSave() {
   settingsStore.apiKey = apiKey.value
   settingsStore.baseUrl = baseUrl.value
   settingsStore.model = model.value
+  settingsStore.enableWebSearch = enableWebSearch.value
   settingsStore.saveSettings()
   saved.value = true
   testResult.value = null
@@ -186,6 +200,7 @@ onMounted(() => {
   apiKey.value = settingsStore.apiKey
   baseUrl.value = settingsStore.baseUrl
   model.value = settingsStore.model
+  enableWebSearch.value = settingsStore.enableWebSearch
 
   // 根据当前配置推断选中服务商
   if (settingsStore.activeProvider === 'anthropic') {
@@ -386,6 +401,76 @@ onMounted(() => {
 
 .test-result__text {
   line-height: 1.4;
+}
+
+/* 联网搜索开关 */
+.form-group--toggle {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toggle-row .form-label {
+  margin: 0;
+}
+
+.form-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.toggle {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  width: 40px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle__slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--ink-3);
+  transition: background-color 0.2s;
+}
+
+.toggle__slider::before {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  content: '';
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.toggle input:checked + .toggle__slider {
+  background: var(--brand);
+}
+
+.toggle input:checked + .toggle__slider::before {
+  transform: translateX(18px);
 }
 
 @media (max-width: 1240px) {

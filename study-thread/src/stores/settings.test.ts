@@ -14,6 +14,7 @@ describe('settings store', () => {
     expect(store.apiKey).toBe('')
     expect(store.baseUrl).toBe('https://api.openai.com')
     expect(store.model).toBe('gpt-4o')
+    expect(store.enableWebSearch).toBe(true)
     expect(store.recentVaults).toEqual([])
   })
 
@@ -23,6 +24,7 @@ describe('settings store', () => {
     store.apiKey = 'sk-test-key'
     store.baseUrl = 'https://api.anthropic.com'
     store.model = 'claude-sonnet-4-6'
+    store.enableWebSearch = false
     store.saveSettings()
 
     const raw = localStorage.getItem('study-thread-settings')
@@ -32,6 +34,7 @@ describe('settings store', () => {
     expect(data.apiKey).toBe('sk-test-key')
     expect(data.baseUrl).toBe('https://api.anthropic.com')
     expect(data.model).toBe('claude-sonnet-4-6')
+    expect(data.enableWebSearch).toBe(false)
   })
 
   it('loadSettings 从 localStorage 恢复设置', () => {
@@ -40,6 +43,7 @@ describe('settings store', () => {
       apiKey: 'sk-saved-key',
       baseUrl: 'https://api.anthropic.com',
       model: 'claude-opus-4-1',
+      enableWebSearch: false,
     }))
 
     const store = useSettingsStore()
@@ -47,6 +51,7 @@ describe('settings store', () => {
     expect(store.apiKey).toBe('sk-saved-key')
     expect(store.baseUrl).toBe('https://api.anthropic.com')
     expect(store.model).toBe('claude-opus-4-1')
+    expect(store.enableWebSearch).toBe(false)
   })
 
   it('loadSettings 处理无效 JSON 使用默认值', () => {
@@ -62,6 +67,7 @@ describe('settings store', () => {
     expect(store.activeProvider).toBe('openai-compat')
     expect(store.baseUrl).toBe('https://api.openai.com')
     expect(store.model).toBe('gpt-4o')
+    expect(store.enableWebSearch).toBe(true)
   })
 
   it('addRecentVault 添加最近 vault 并去重', () => {
@@ -88,6 +94,7 @@ describe('settings store', () => {
     store.apiKey = 'sk-key'
     store.baseUrl = 'https://custom.api'
     store.model = 'custom-model'
+    store.enableWebSearch = false
 
     const config = store.getProviderConfig()
     expect(config).toEqual({
@@ -95,6 +102,7 @@ describe('settings store', () => {
       apiKey: 'sk-key',
       baseUrl: 'https://custom.api',
       model: 'custom-model',
+      enableWebSearch: false,
     })
   })
 })
