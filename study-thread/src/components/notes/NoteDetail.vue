@@ -11,7 +11,6 @@
     <template v-else>
       <!-- 头部 -->
       <header class="note-header">
-        <div class="note-type-badge">{{ typeLabel }}</div>
         <div class="note-meta">
           <span>创建于 {{ formatDate(note.created) }}</span>
           <span v-if="note.updated !== note.created"> · 更新于 {{ formatDate(note.updated) }}</span>
@@ -90,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, reactive } from 'vue'
+import { ref, watch, nextTick, reactive } from 'vue'
 import type { Note } from '../../types'
 import { formatNoteFullDate } from '../../utils/date'
 import MarkdownEditor from '../editor/MarkdownEditor.vue'
@@ -120,18 +119,6 @@ const highlightMenu = reactive({
   x: 0,
   y: 0,
   text: '',
-})
-
-const typeLabels: Record<string, string> = {
-  concept: '概念卡',
-  method: '方法卡',
-  fact: '事实卡',
-  question: '问题卡',
-}
-
-const typeLabel = computed(() => {
-  if (!props.note) return ''
-  return typeLabels[props.note.type] || '笔记'
 })
 
 function formatDate(dateStr: string): string {
@@ -243,16 +230,6 @@ watch(showTagInput, async (val) => {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
-}
-
-.note-type-badge {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.12em;
 }
 
 .note-meta {

@@ -19,9 +19,10 @@ describe('NoteCard', () => {
     expect(wrapper.find('h3').text()).toBe('费曼学习法')
   })
 
-  it('渲染笔记类型标签', () => {
+  it('不再渲染笔记分类徽标（概念卡/方法卡等已取消）', () => {
     const wrapper = mount(NoteCard, { props: { note } })
-    expect(wrapper.find('.note-kind').text()).toBe('方法卡')
+    expect(wrapper.find('.note-kind').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('方法卡')
   })
 
   it('渲染笔记命题', () => {

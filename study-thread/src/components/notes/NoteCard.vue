@@ -6,7 +6,6 @@
     @contextmenu.prevent="$emit('contextmenu', $event)"
   >
     <div class="note-top">
-      <span class="note-kind">{{ typeLabel }}</span>
       <span v-if="formattedDate" class="note-created">{{ formattedDate }}</span>
     </div>
     <h3>{{ note.title }}</h3>
@@ -37,15 +36,6 @@ defineEmits<{
   openSource: [source: NonNullable<NoteMeta['source']>]
   contextmenu: [event: MouseEvent]
 }>()
-
-const typeLabels: Record<string, string> = {
-  concept: '概念卡',
-  method: '方法卡',
-  fact: '事实卡',
-  question: '问题卡',
-}
-
-const typeLabel = computed(() => typeLabels[props.note.type] || '笔记')
 
 const formattedDate = computed(() => formatNoteShortDate(props.note.updated))
 </script>
@@ -90,13 +80,6 @@ const formattedDate = computed(() => formatNoteShortDate(props.note.updated))
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
-}
-
-.note-kind {
-  color: var(--brand);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.12em;
 }
 
 .note-created {

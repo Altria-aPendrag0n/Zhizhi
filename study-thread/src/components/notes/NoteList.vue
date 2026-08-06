@@ -8,13 +8,17 @@
           <option value="created">按创建时间</option>
           <option value="title">按标题</option>
         </select>
-        <select v-model="filterType" class="filter-select">
-          <option value="">全部类型</option>
-          <option value="concept">概念卡</option>
-          <option value="method">方法卡</option>
-          <option value="fact">事实卡</option>
-          <option value="question">问题卡</option>
-        </select>
+        <input
+          v-model="filterTag"
+          type="text"
+          class="filter-select tag-filter-input"
+          list="note-tags"
+          placeholder="按标签筛选..."
+          title="输入标签筛选笔记，多个标签用逗号或空格分隔（需同时包含）"
+        />
+        <datalist id="note-tags">
+          <option v-for="tag in allTags" :key="tag" :value="tag" />
+        </datalist>
       </div>
     </div>
 
@@ -87,16 +91,34 @@ const emit = defineEmits<{
 }>()
 
 const sortBy = ref<'updated' | 'created' | 'title'>('updated')
-const filterType = ref('')
+const filterTag = ref('')
 const searchQuery = ref('')
 const contextMenu = ref<{ path: string; x: number; y: number } | null>(null)
 const contextMenuElement = ref<HTMLElement>()
 
+// 汇总所有笔记标签（去重排序），用于筛选输入框的提示
+const allTags = computed(() => {
+  const set = new Set<string>()
+  for (const note of props.notes) note.tags.forEach((t) => set.add(t))
+  return [...set].sort((a, b) => a.localeCompare(b, 'zh'))
+})
+
 const filteredNotes = computed(() => {
   let result = [...props.notes]
 
-  if (filterType.value) {
-    result = result.filter((n) => n.type === filterType.value)
+  // 标签筛选：逗号/空格分隔多个标签，笔记需同时包含全部输入标签（AND）
+  const tagQuery = filterTag.value.trim()
+  if (tagQuery) {
+    const tags = tagQuery
+      .split(/[,，\s]+/)
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean)
+    if (tags.length > 0) {
+      result = result.filter((note) => {
+        const noteTags = note.tags.map((t) => t.toLowerCase())
+        return tags.every((tag) => noteTags.includes(tag))
+      })
+    }
   }
 
   if (searchQuery.value.trim()) {
@@ -197,6 +219,10 @@ onUnmounted(() => {
 .filter-select {
   padding: 6px 8px;
   font-size: 11px;
+}
+
+.tag-filter-input {
+  width: 148px;
 }
 
 .search-bar {

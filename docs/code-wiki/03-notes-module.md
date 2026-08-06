@@ -59,15 +59,15 @@ interface Note {
 ### 4.1 `NoteList.vue` — 笔记列表容器
 
 - props：`notes: NoteMeta[]`、`selectedPath?`、`loading?`；emits：`select(path)`、`openSource(source)`、`delete(path)`。
-- 链式过滤：排序（updated/created/title）+ 类型过滤 + 关键词搜索（标题/标签）→ `filteredNotes`。
+- 链式过滤：排序（updated/created/title）+ 标签筛选（逗号/空格分隔多标签，需同时包含，AND 匹配，输入框带 `datalist` 汇总所有已有标签提示）+ 关键词搜索（标题/标签）→ `filteredNotes`。
 - **加载占位仅在 `loading && notes.length === 0` 时显示**：已有缓存笔记时立即渲染列表（后台静默刷新），避免每次进入资料库都闪现"正在加载笔记…"中间态。
 - 右键菜单 Teleport 定位（边缘 clamp）；document 级 pointerdown / Escape 关闭。
 
 ### 4.2 `NoteCard.vue` — 笔记卡片
 
 - props：`note: NoteMeta`、`isSelected?`；emits：`select(path)`、`openSource(source)`、`contextmenu(event)`。
-- 类型徽标：`concept 概念卡 / method 方法卡 / fact 事实卡 / question 问题卡`。
 - 展示标题、描述/命题、标签、短日期（`formatNoteShortDate`）、来源会话按钮。
+- **不展示笔记分类**：概念卡/方法卡/事实卡/问题卡等分类概念已取消（`type` 字段仅保留数据兼容，UI 不再显示）。
 
 ### 4.3 `NoteDetail.vue` — 笔记详情主体
 
