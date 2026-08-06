@@ -240,8 +240,6 @@ async function handleEditDelete(path: string) {
   display: flex;
   gap: 40px;
   align-items: flex-start;
-  max-width: 1078px;
-  margin: 0 auto;
 }
 
 .sidebar {
