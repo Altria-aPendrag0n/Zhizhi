@@ -117,6 +117,8 @@ CSS Grid 五区布局，全部为具名插槽：
 
 `hideThreads` 时通过 `app-shell--threads-hidden` 类将 Grid 变为 3 列，会话列用 `v-if` **立即隐藏**（无过渡动画）。曾用 `<Transition name="threads-collapse">` + `grid-template-columns` 过渡平滑收起，但实测会导致会话列元素在过渡期被拉伸到整个内容区宽度（896px）覆盖笔记页，并把主内容区下推 33px（表现为"界面从下往上出现"），且拖慢跳转约 200ms；故移除过渡改为即时切换，进入资料库更干脆快速。
 
+**会话栏手动收起/展开**：`App.vue` 维护 `threadsCollapsed`，与路由隐藏（资料库/设置）共同决定 `hideThreads`。会话界面顶栏右侧显示"收起/展开会话栏"按钮（`showCollapseThreads`，`PanelLeft`/`PanelRight` 图标随状态切换），点击切换 `threadsCollapsed`；资料库/设置页及小窗口（compact）模式不显示该按钮（小窗口用左侧抽屉按钮）。
+
 **响应式断点（三档）**：
 - `≥1100px`：完整三列 `76px 244px 1fr`（`hideThreads` 时 `76px 1fr`）。
 - `<1100px`：列缩窄为 `64px 218px 1fr`（纯 CSS 媒体查询）。

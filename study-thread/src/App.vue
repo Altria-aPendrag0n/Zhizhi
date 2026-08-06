@@ -35,10 +35,13 @@
         :breadcrumbs="displayedBreadcrumbs"
         :show-back="showBack"
         :show-threads-toggle="isCompact"
+        :show-collapse-threads="showCollapseThreads"
+        :threads-collapsed="threadsCollapsed"
         @update-title="handleActiveThreadTitleUpdate"
         @settings="handleSettings"
         @back="handleBack"
         @toggle-threads="handleToggleThreads"
+        @toggle-collapse-threads="threadsCollapsed = !threadsCollapsed"
       />
     </template>
     <template #main>
@@ -118,12 +121,14 @@ const activeThreadId = ref<string | null>(initialThreadId)
 const breadcrumbs = ref(initialThreadId ? ['学习会话', initialThreads.find((thread) => thread.id === initialThreadId)?.title ?? ''] : ['学习会话'])
 const noteDetailTitle = ref('')
 
-/** 小窗口断点：低于此宽度时进入 compact 模式（会话列表变抽屉） */
+/** 小窗口模式：会话列表不占主网格列，以抽屉形式从左侧滑出 */
 const COMPACT_BREAKPOINT = 860
 /** 当前是否处于小窗口（compact）模式 */
 const isCompact = ref(false)
 /** 小窗口模式下会话列表抽屉是否展开 */
 const drawerOpen = ref(false)
+/** 用户手动收起的会话栏（顶栏图标切换，再点展开） */
+const threadsCollapsed = ref(false)
 
 function updateViewport() {
   isCompact.value = window.innerWidth < COMPACT_BREAKPOINT
@@ -194,9 +199,13 @@ function syncActiveThread(id: string | null) {
 }
 
 /** 资料库（/notes*）与设置页隐藏会话列：左侧只保留项目栏 */
-const hideThreads = computed(() =>
+const hideThreadsByRoute = computed(() =>
   route.path.startsWith('/notes') || route.path === '/settings',
 )
+/** 会话栏是否隐藏：路由隐藏（资料库/设置）或用户手动收起 */
+const hideThreads = computed(() => threadsCollapsed.value || hideThreadsByRoute.value)
+/** 会话界面显示"收起/展开会话栏"按钮（路由未隐藏且非小窗口模式） */
+const showCollapseThreads = computed(() => !hideThreadsByRoute.value && !isCompact.value)
 /** 笔记/会话/设置界面显示顶部返回按钮 */
 const showBack = computed(() =>
   route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings',

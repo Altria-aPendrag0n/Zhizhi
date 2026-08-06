@@ -54,6 +54,17 @@
       </template>
     </div>
     <div class="top-bar__actions">
+      <button
+        v-if="showCollapseThreads"
+        class="top-bar__icon-btn"
+        type="button"
+        :aria-label="threadsCollapsed ? '展开会话栏' : '收起会话栏'"
+        :title="threadsCollapsed ? '展开会话栏' : '收起会话栏'"
+        @click="$emit('toggle-collapse-threads')"
+      >
+        <PanelLeft v-if="!threadsCollapsed" :size="18" :stroke-width="1.75" />
+        <PanelRight v-else :size="18" :stroke-width="1.75" />
+      </button>
       <button class="top-bar__icon-btn" type="button" aria-label="搜索" @click="$emit('search')">
         <Search :size="18" :stroke-width="1.75" />
       </button>
@@ -66,7 +77,7 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { ArrowLeft, PanelLeft, Search, Ellipsis, Pencil } from '@lucide/vue'
+import { ArrowLeft, PanelLeft, PanelRight, Search, Ellipsis, Pencil } from '@lucide/vue'
 
 const props = defineProps<{
   breadcrumbs: string[]
@@ -74,6 +85,10 @@ const props = defineProps<{
   showBack?: boolean
   /** 小窗口模式下是否显示"展开会话列表"按钮（替换装饰性 PanelLeft 图标） */
   showThreadsToggle?: boolean
+  /** 会话界面是否显示"收起/展开会话栏"按钮（路由未隐藏且非小窗口模式） */
+  showCollapseThreads?: boolean
+  /** 会话栏当前是否被手动收起（决定收起按钮图标方向） */
+  threadsCollapsed?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -81,6 +96,7 @@ const emit = defineEmits<{
   settings: []
   back: []
   'toggle-threads': []
+  'toggle-collapse-threads': []
   'update-title': [title: string]
 }>()
 
