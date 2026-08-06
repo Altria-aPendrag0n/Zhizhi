@@ -188,8 +188,7 @@ onUnmounted(() => {
 
 <style scoped>
 .note-list-container {
-  max-width: 830px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .notes-toolbar {

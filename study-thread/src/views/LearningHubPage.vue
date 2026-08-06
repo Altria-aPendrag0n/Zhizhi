@@ -302,8 +302,6 @@ function formatRelativeTime(iso: string): string {
 <style scoped>
 .learning-hub {
   padding: 42px 54px 72px;
-  max-width: 800px;
-  margin: 0 auto;
   height: 100%;
   overflow-y: auto;
 }

@@ -293,7 +293,6 @@ async function handleEditDelete(path: string) {
 }
 
 .content {
-  max-width: 830px;
   flex: 1;
   min-width: 0;
 }

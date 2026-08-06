@@ -250,8 +250,6 @@ onMounted(() => {
 
 <style scoped>
 .settings-page {
-  max-width: 560px;
-  margin: 0 auto;
   padding: 42px 54px 72px;
   height: 100%;
   overflow-y: auto;

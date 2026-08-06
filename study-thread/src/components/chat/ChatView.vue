@@ -289,9 +289,9 @@ watch(
   line-height: 1.7;
 }
 
-/* 对话区域 */
+/* 对话区域：撑满剩余宽度，主界面不再居中留白 */
 .chat-view__conversation {
-  width: min(760px, 100%);
+  width: 100%;
   margin: 0 auto;
 }
 

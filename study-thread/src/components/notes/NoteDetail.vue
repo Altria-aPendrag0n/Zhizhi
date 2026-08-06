@@ -212,8 +212,7 @@ watch(showTagInput, async (val) => {
 
 <style scoped>
 .note-detail {
-  max-width: 830px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .loading-state,
