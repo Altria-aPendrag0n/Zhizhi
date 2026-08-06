@@ -158,10 +158,14 @@ CSS Grid 五区布局，全部为具名插槽：
 
 ### 6.4 `TopBar.vue`
 
-- props：`breadcrumbs: string[]`、`showBack?: boolean`；emits：`search`、`settings`、`back`、`update-title(title)`。
+- props：`breadcrumbs: string[]`、`showBack?`、`showThreadsToggle?`、`showCollapseThreads?`、`threadsCollapsed?`、`menuItems?: TopBarMenuItem[]`；emits：`search`、`settings`、`back`、`update-title(title)`、`menu-action(id)`。
 - `showBack` 为真时（笔记/会话/设置界面）最左侧渲染返回按钮（ArrowLeft），替换装饰性 PanelLeft 图标；点击 emit `back`，由 `App.vue` 的 `handleBack` 执行 `router.back()`（vue-router 4 的 `history.state.back` 非空时），无站内历史（如直达 URL）时回退到 `/chat`。
 - 末级面包屑支持内联编辑（Pencil 图标触发，Enter 保存且仅在标题变化时 emit）。
-- 工具栏含搜索与更多操作按钮（均为 UI 占位）。
+- 工具栏右侧：**齿轮设置按钮**（`Settings` 图标 → emit `settings`）与**更多操作按钮**（`Ellipsis` 三个点 → 打开下拉菜单，Teleport 到 body 固定定位，点击外部/Escape/路由切换关闭）。
+- 下拉菜单项 `TopBarMenuItem { id, label?, shortcut?, danger?, separator? }` 由 `App.vue` 的 `contextMenuItems` 按当前路由计算（`handleMenuAction` 分发）：
+  - 会话界面（`/chat*`）：新建会话（Ctrl+N）、打开资料库（Ctrl+B）、打开学习地图（Ctrl+H）、收起/展开会话栏（非 compact 时）；
+  - 资料库（`/notes*`）：查看笔记 / 查看参考资料（切换 `query.tab`）、打开学习地图、返回学习会话；
+  - 学习地图/设置：打开资料库、打开学习地图、返回学习会话。
 
 ## 7. 全局类型（跨模块使用）
 

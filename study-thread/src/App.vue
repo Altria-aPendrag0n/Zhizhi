@@ -37,11 +37,13 @@
         :show-threads-toggle="isCompact"
         :show-collapse-threads="showCollapseThreads"
         :threads-collapsed="threadsCollapsed"
+        :menu-items="contextMenuItems"
         @update-title="handleActiveThreadTitleUpdate"
         @settings="handleSettings"
         @back="handleBack"
         @toggle-threads="handleToggleThreads"
         @toggle-collapse-threads="threadsCollapsed = !threadsCollapsed"
+        @menu-action="handleMenuAction"
       />
     </template>
     <template #main>
@@ -58,7 +60,7 @@ import { loadStoredValue, saveStoredValue } from './utils/local-storage'
 import AppShell from './components/shell/AppShell.vue'
 import ProjectRail from './components/shell/ProjectRail.vue'
 import ThreadList from './components/shell/ThreadList.vue'
-import TopBar from './components/shell/TopBar.vue'
+import TopBar, { type TopBarMenuItem } from './components/shell/TopBar.vue'
 import Toast from './components/common/Toast.vue'
 import { useToast } from './composables/useToast'
 import type { Project } from './components/shell/ProjectRail.vue'
@@ -418,6 +420,80 @@ function handleNewThread(projectId = activeProjectId.value) {
 
 function handleSettings() {
   router.push('/settings')
+}
+
+/** 顶栏"更多操作"菜单项：按当前界面提供相关拓展操作 */
+const contextMenuItems = computed<TopBarMenuItem[]>(() => {
+  const path = route.path
+
+  // 学习会话界面：会话相关操作 + 跨界面跳转
+  if (path.startsWith('/chat')) {
+    const items: TopBarMenuItem[] = [
+      { id: 'new-thread', label: '新建会话', shortcut: 'Ctrl+N' },
+      { id: 'notes', label: '打开资料库', shortcut: 'Ctrl+B' },
+      { id: 'hub', label: '打开学习地图', shortcut: 'Ctrl+H' },
+    ]
+    // 非小窗口模式可在此收起/展开会话栏
+    if (showCollapseThreads.value) {
+      items.push({ id: 'sep', separator: true })
+      items.push({
+        id: 'toggle-threads',
+        label: threadsCollapsed.value ? '展开会话栏' : '收起会话栏',
+      })
+    }
+    return items
+  }
+
+  // 资料库：切换笔记/参考资料视图 + 跨界面跳转
+  if (path.startsWith('/notes')) {
+    return [
+      { id: 'tab-notes', label: '查看笔记' },
+      { id: 'tab-references', label: '查看参考资料' },
+      { id: 'sep', separator: true },
+      { id: 'hub', label: '打开学习地图' },
+      { id: 'chat', label: '返回学习会话' },
+    ]
+  }
+
+  // 学习地图 / 设置：跨界面跳转
+  if (path === '/hub' || path === '/settings') {
+    return [
+      { id: 'notes', label: '打开资料库' },
+      { id: 'hub', label: '打开学习地图' },
+      { id: 'chat', label: '返回学习会话' },
+    ]
+  }
+
+  return [
+    { id: 'notes', label: '打开资料库' },
+    { id: 'hub', label: '打开学习地图' },
+  ]
+})
+
+function handleMenuAction(id: string) {
+  switch (id) {
+    case 'new-thread':
+      handleNewThread()
+      break
+    case 'notes':
+      router.push('/notes')
+      break
+    case 'hub':
+      router.push('/hub')
+      break
+    case 'chat':
+      router.push('/chat')
+      break
+    case 'toggle-threads':
+      threadsCollapsed.value = !threadsCollapsed.value
+      break
+    case 'tab-notes':
+      router.push({ path: '/notes' })
+      break
+    case 'tab-references':
+      router.push({ path: '/notes', query: { tab: 'references' } })
+      break
+  }
 }
 
 /** 顶部返回按钮：退回上一界面；无站内历史（如直达 URL）时回退到会话页 */

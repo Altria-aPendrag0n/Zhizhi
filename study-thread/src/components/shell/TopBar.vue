@@ -68,16 +68,69 @@
       <button class="top-bar__icon-btn" type="button" aria-label="搜索" @click="$emit('search')">
         <Search :size="18" :stroke-width="1.75" />
       </button>
-      <button class="top-bar__icon-btn" type="button" aria-label="更多操作" @click="$emit('settings')">
-        <Ellipsis :size="18" :stroke-width="1.75" />
+      <button
+        class="top-bar__icon-btn"
+        type="button"
+        aria-label="设置"
+        title="设置"
+        @click="$emit('settings')"
+      >
+        <Settings :size="18" :stroke-width="1.75" />
       </button>
+      <div ref="menuAnchorRef" class="top-bar__menu-anchor">
+        <button
+          class="top-bar__icon-btn"
+          type="button"
+          aria-label="更多操作"
+          aria-haspopup="menu"
+          :aria-expanded="menuOpen"
+          @click="toggleMenu"
+        >
+          <Ellipsis :size="18" :stroke-width="1.75" />
+        </button>
+        <Teleport to="body">
+          <div
+            v-if="menuOpen"
+            class="top-bar__dropdown"
+            role="menu"
+            :style="dropdownStyle"
+            @click.stop
+          >
+            <template v-for="item in menuItems" :key="item.id">
+              <div v-if="item.separator" class="top-bar__dropdown-sep" role="separator" />
+              <button
+                v-else
+                type="button"
+                role="menuitem"
+                class="top-bar__dropdown-item"
+                :class="{ 'is-danger': item.danger }"
+                @click="handleAction(item.id)"
+              >
+                <span>{{ item.label }}</span>
+                <span v-if="item.shortcut" class="top-bar__dropdown-shortcut">{{ item.shortcut }}</span>
+              </button>
+            </template>
+          </div>
+        </Teleport>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
-import { ArrowLeft, PanelLeft, PanelRight, Search, Ellipsis, Pencil } from '@lucide/vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { ArrowLeft, PanelLeft, PanelRight, Search, Ellipsis, Settings, Pencil } from '@lucide/vue'
+
+/** 顶栏"更多操作"下拉菜单项 */
+export interface TopBarMenuItem {
+  id: string
+  label?: string
+  shortcut?: string
+  danger?: boolean
+  /** 分隔线（忽略 label 等字段） */
+  separator?: boolean
+}
 
 const props = defineProps<{
   breadcrumbs: string[]
@@ -89,6 +142,8 @@ const props = defineProps<{
   showCollapseThreads?: boolean
   /** 会话栏当前是否被手动收起（决定收起按钮图标方向） */
   threadsCollapsed?: boolean
+  /** "更多操作"下拉菜单项（由外层按当前界面提供） */
+  menuItems?: TopBarMenuItem[]
 }>()
 
 const emit = defineEmits<{
@@ -98,7 +153,70 @@ const emit = defineEmits<{
   'toggle-threads': []
   'toggle-collapse-threads': []
   'update-title': [title: string]
+  'menu-action': [id: string]
 }>()
+
+const route = useRoute()
+
+/** 下拉菜单开关与定位 */
+const menuOpen = ref(false)
+const menuAnchorRef = ref<HTMLElement>()
+const dropdownStyle = ref<{ top: string; left: string }>({ top: '0px', left: '0px' })
+
+function toggleMenu() {
+  if (menuOpen.value) {
+    menuOpen.value = false
+    return
+  }
+  const rect = menuAnchorRef.value?.getBoundingClientRect()
+  if (rect) {
+    // 固定定位对齐按钮右下角：菜单宽 172px，right 与按钮对齐
+    dropdownStyle.value = {
+      top: `${rect.bottom + 6}px`,
+      left: `${rect.right - 172}px`,
+    }
+  }
+  menuOpen.value = true
+}
+
+function handleAction(id: string) {
+  menuOpen.value = false
+  emit('menu-action', id)
+}
+
+/** 路由切换后关闭菜单（避免残留到下一界面） */
+watch(
+  () => route.fullPath,
+  () => {
+    menuOpen.value = false
+  },
+)
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  const target = event.target
+  if (
+    menuOpen.value &&
+    target instanceof Node &&
+    !menuAnchorRef.value?.contains(target) &&
+    !(target instanceof Element && target.closest('.top-bar__dropdown'))
+  ) {
+    menuOpen.value = false
+  }
+}
+
+function handleDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') menuOpen.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleDocumentPointerDown)
+  document.addEventListener('keydown', handleDocumentKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  document.removeEventListener('keydown', handleDocumentKeydown)
+})
 
 const isEditing = ref(false)
 const draftTitle = ref('')
@@ -221,6 +339,58 @@ watch(
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.top-bar__menu-anchor {
+  display: inline-flex;
+}
+
+.top-bar__dropdown {
+  position: fixed;
+  z-index: 1000;
+  width: 172px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface, #fffefa);
+  box-shadow: 0 8px 28px rgba(20, 39, 33, 0.16);
+}
+
+.top-bar__dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.top-bar__dropdown-item:hover {
+  background: var(--surface-2, #f0eee7);
+}
+
+.top-bar__dropdown-item.is-danger {
+  color: #c2413b;
+}
+
+.top-bar__dropdown-shortcut {
+  flex-shrink: 0;
+  color: var(--ink-3, #9aa39d);
+  font-size: 11px;
+}
+
+.top-bar__dropdown-sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--line, #e4e0d6);
 }
 
 .top-bar__back-btn {
