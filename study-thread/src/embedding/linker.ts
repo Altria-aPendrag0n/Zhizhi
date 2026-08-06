@@ -7,6 +7,8 @@
 
 import { NoteIndexer } from './indexer'
 import { EmbeddingEngine } from './engine'
+import { parseReferenceMeta } from '../utils/reference-serializer'
+import { readFile } from '../utils/vault-fs'
 
 /** 链接建议 */
 export interface LinkSuggestion {
@@ -69,7 +71,7 @@ export class NoteLinker {
 
         candidates.push({
           notePath: entry.path,
-          title: extractTitle(entry.path),
+          title: await resolveEntryTitle(entry.path),
           similarity,
           snippet: '',
         })
@@ -104,6 +106,22 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   if (normA === 0 || normB === 0) return 0
 
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
+}
+
+/**
+ * 索引条目标题解析：
+ * - 参考资料（`.json` 元数据路径）：读取元数据取真实标题（与知识检索一致），读取失败时回退路径文件名
+ * - 笔记：从路径取文件名（去 `.md` 后缀）
+ */
+async function resolveEntryTitle(path: string): Promise<string> {
+  if (path.endsWith('.json')) {
+    try {
+      return parseReferenceMeta(await readFile(path)).title
+    } catch {
+      // 元数据缺失或读取失败（如文件已被删除）时回退到路径文件名
+    }
+  }
+  return extractTitle(path)
 }
 
 /**

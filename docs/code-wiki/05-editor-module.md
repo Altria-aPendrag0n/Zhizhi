@@ -66,6 +66,8 @@
 ## 5. `LinkHint.vue` — 语义相关建议浮层
 
 - props：`suggestions: LinkSuggestion[]`（来自 `embedding/linker`）；emits：`close`、`select(item)`。
+- 标题文案"相关笔记"；条目显示 `[[标题]]` + 相似度百分比。
+- 标题来源：`NoteLinker.suggestLinks` 对索引条目取标题——笔记取路径文件名（去 `.md`）；**参考资料（`references/<id>.json` 路径）读取元数据 JSON 取真实标题**（读取失败时回退路径文件名），避免显示 `xxx.json`。
 - 展示标题与相似度百分比（`(similarity * 100).toFixed(0)%`）；点击选择后插入 wikilink。
 
 ## 6. `Backlinks.vue` — 反链面板
