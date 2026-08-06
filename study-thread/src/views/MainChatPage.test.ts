@@ -1,12 +1,13 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import MainChatPage from './MainChatPage.vue'
 
-const { route, saveCurrentSession, saveStoredValue, chat } = vi.hoisted(() => ({
+const { route, saveCurrentSession, saveStoredValue, chat, retrieveKnowledgeContext } = vi.hoisted(() => ({
   route: { query: { thread: 'new_test' } },
   saveCurrentSession: vi.fn().mockResolvedValue('session-path'),
   saveStoredValue: vi.fn(),
   chat: vi.fn(),
+  retrieveKnowledgeContext: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -43,6 +44,7 @@ vi.mock('../utils/session-serializer', () => ({
   getSessionFilePath: vi.fn(),
 }))
 vi.mock('../utils/vault-fs', () => ({ readFile: vi.fn() }))
+vi.mock('../utils/knowledge-retrieval', () => ({ retrieveKnowledgeContext }))
 vi.mock('../utils/local-storage', () => ({
   loadStoredValue: vi.fn(() => ({})),
   saveStoredValue,
@@ -52,7 +54,7 @@ function createWrapper() {
   return mount(MainChatPage, {
     global: {
       stubs: {
-        ChatView: { name: 'ChatView', props: ['messages', 'isStreaming', 'streamingText'], template: '<div />' },
+        ChatView: { name: 'ChatView', props: ['messages', 'isStreaming', 'streamingText', 'streamingThinking'], template: '<div />' },
         Composer: { name: 'Composer', template: '<div />' },
       },
     },
@@ -69,6 +71,8 @@ describe('MainChatPage', () => {
   beforeEach(() => {
     route.query.thread = 'new_test'
     chat.mockReset()
+    retrieveKnowledgeContext.mockReset()
+    retrieveKnowledgeContext.mockResolvedValue('')
     saveCurrentSession.mockClear()
     saveStoredValue.mockClear()
   })
@@ -103,5 +107,41 @@ describe('MainChatPage', () => {
       { role: 'assistant', content: '正常结束的回答' },
     ])
     expect(saveStoredValue).toHaveBeenCalled()
+  })
+
+  it('思考内容与回答分离：流式分别输出，结束后保存到 message.thinking', async () => {
+    chat.mockReturnValue((async function* () {
+      yield { type: 'thinking' as const, content: '思考中' }
+      yield { type: 'text' as const, content: '回答内容' }
+      yield { type: 'stop' as const }
+    })())
+
+    const chatView = await sendMessage(createWrapper())
+
+    expect(chatView.props('messages')).toEqual([
+      { role: 'user', content: '测试问题' },
+      { role: 'assistant', content: '回答内容', thinking: '思考中' },
+    ])
+    expect(chatView.props('streamingThinking')).toBe('')
+    expect(chatView.props('streamingText')).toBe('')
+  })
+
+  it('知识检索结果注入 system 提示', async () => {
+    let capturedOptions: Record<string, unknown> = {}
+    chat.mockImplementation(async function* (_messages: unknown, options: unknown) {
+      capturedOptions = options as Record<string, unknown>
+      yield { type: 'text' as const, content: '带知识库的回答' }
+      yield { type: 'stop' as const }
+    })
+    retrieveKnowledgeContext.mockResolvedValue('### [笔记] 测试笔记\n测试片段内容')
+
+    await sendMessage(createWrapper())
+
+    expect(retrieveKnowledgeContext).toHaveBeenCalledWith('测试问题')
+    // system prompt 通过 options.systemPrompt 传入 provider
+    const systemPrompt = capturedOptions.systemPrompt as string
+    expect(systemPrompt).toContain('你是知枝，一位学习伴读助手')
+    expect(systemPrompt).toContain('### [笔记] 测试笔记')
+    expect(systemPrompt).toContain('测试片段内容')
   })
 })
