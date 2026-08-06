@@ -79,6 +79,30 @@
         <p class="form-hint">请求时附带 web_search 工具；模型支持则自动联网搜索，不支持则自动降级为普通请求。DeepSeek 官方 API 将自动走 Anthropic 端点启用联网搜索。Ollama 等本地模型请关闭。</p>
       </div>
 
+      <!-- 自动生成笔记标题 -->
+      <div class="form-group form-group--toggle">
+        <div class="toggle-row">
+          <label class="form-label" for="auto-generate-note-title">自动生成笔记标题</label>
+          <label class="toggle">
+            <input id="auto-generate-note-title" v-model="autoGenerateNoteTitle" type="checkbox" />
+            <span class="toggle__slider"></span>
+          </label>
+        </div>
+        <p class="form-hint">划线摘录笔记时，允许 LLM 根据内容自动拟定标题；关闭后用划线文本前 20 字作为标题，跳过 LLM 生成环节（手动指定标题始终优先）。</p>
+      </div>
+
+      <!-- 自动生成笔记标签 -->
+      <div class="form-group form-group--toggle">
+        <div class="toggle-row">
+          <label class="form-label" for="auto-generate-note-tags">自动生成笔记标签</label>
+          <label class="toggle">
+            <input id="auto-generate-note-tags" v-model="autoGenerateNoteTags" type="checkbox" />
+            <span class="toggle__slider"></span>
+          </label>
+        </div>
+        <p class="form-hint">划线摘录笔记时，允许 LLM 根据内容自动生成标签；关闭后统一使用「未分类」标签，跳过 LLM 生成环节。两者都关闭时，摘录笔记将完全不调用 LLM。</p>
+      </div>
+
       <!-- 按钮组 -->
       <div class="form-actions">
         <button class="btn btn-primary" @click="handleSave">保存设置</button>
@@ -120,6 +144,8 @@ const baseUrl = ref('https://api.openai.com')
 const apiKey = ref('')
 const model = ref('gpt-4o')
 const enableWebSearch = ref(true)
+const autoGenerateNoteTitle = ref(true)
+const autoGenerateNoteTags = ref(true)
 const showKey = ref(false)
 const testing = ref(false)
 const saved = ref(false)
@@ -153,6 +179,8 @@ function handleSave() {
   settingsStore.baseUrl = baseUrl.value
   settingsStore.model = model.value
   settingsStore.enableWebSearch = enableWebSearch.value
+  settingsStore.autoGenerateNoteTitle = autoGenerateNoteTitle.value
+  settingsStore.autoGenerateNoteTags = autoGenerateNoteTags.value
   settingsStore.saveSettings()
   saved.value = true
   testResult.value = null
@@ -201,6 +229,8 @@ onMounted(() => {
   baseUrl.value = settingsStore.baseUrl
   model.value = settingsStore.model
   enableWebSearch.value = settingsStore.enableWebSearch
+  autoGenerateNoteTitle.value = settingsStore.autoGenerateNoteTitle
+  autoGenerateNoteTags.value = settingsStore.autoGenerateNoteTags
 
   // 根据当前配置推断选中服务商
   if (settingsStore.activeProvider === 'anthropic') {

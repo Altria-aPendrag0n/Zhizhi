@@ -15,6 +15,8 @@ describe('settings store', () => {
     expect(store.baseUrl).toBe('https://api.openai.com')
     expect(store.model).toBe('gpt-4o')
     expect(store.enableWebSearch).toBe(true)
+    expect(store.autoGenerateNoteTitle).toBe(true)
+    expect(store.autoGenerateNoteTags).toBe(true)
     expect(store.recentVaults).toEqual([])
   })
 
@@ -25,6 +27,8 @@ describe('settings store', () => {
     store.baseUrl = 'https://api.anthropic.com'
     store.model = 'claude-sonnet-4-6'
     store.enableWebSearch = false
+    store.autoGenerateNoteTitle = false
+    store.autoGenerateNoteTags = false
     store.saveSettings()
 
     const raw = localStorage.getItem('study-thread-settings')
@@ -35,6 +39,8 @@ describe('settings store', () => {
     expect(data.baseUrl).toBe('https://api.anthropic.com')
     expect(data.model).toBe('claude-sonnet-4-6')
     expect(data.enableWebSearch).toBe(false)
+    expect(data.autoGenerateNoteTitle).toBe(false)
+    expect(data.autoGenerateNoteTags).toBe(false)
   })
 
   it('loadSettings 从 localStorage 恢复设置', () => {
@@ -44,6 +50,8 @@ describe('settings store', () => {
       baseUrl: 'https://api.anthropic.com',
       model: 'claude-opus-4-1',
       enableWebSearch: false,
+      autoGenerateNoteTitle: false,
+      autoGenerateNoteTags: false,
     }))
 
     const store = useSettingsStore()
@@ -52,6 +60,8 @@ describe('settings store', () => {
     expect(store.baseUrl).toBe('https://api.anthropic.com')
     expect(store.model).toBe('claude-opus-4-1')
     expect(store.enableWebSearch).toBe(false)
+    expect(store.autoGenerateNoteTitle).toBe(false)
+    expect(store.autoGenerateNoteTags).toBe(false)
   })
 
   it('loadSettings 处理无效 JSON 使用默认值', () => {

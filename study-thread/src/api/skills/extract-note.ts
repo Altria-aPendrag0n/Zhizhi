@@ -49,6 +49,18 @@ interface ExtractedMeta {
 }
 
 /**
+ * 摘录笔记的 LLM 生成开关
+ * - 标题/标签关闭时跳过 LLM 对应环节，改用本地兜底值
+ * - 两个开关都关闭时完全不调用 LLM（描述同样使用本地兜底）
+ */
+export interface ExtractNoteOptions {
+  /** 是否允许 LLM 自动生成标题；关闭时用划线文本前 20 字兜底（用户显式指定的标题始终优先） */
+  generateTitle?: boolean
+  /** 是否允许 LLM 自动生成标签；关闭时统一使用 ['未分类'] */
+  generateTags?: boolean
+}
+
+/**
  * 验证 LLM 输出的元信息是否合法（title 可选，description/tags 必填）
  */
 function validateExtractedMeta(data: unknown): data is ExtractedMeta {
@@ -71,6 +83,14 @@ function fallbackTitle(highlightedText: string): string {
 }
 
 /**
+ * 将划线文本前若干字作为描述兜底（跳过 LLM 生成时的本地替代）
+ */
+function fallbackDescription(highlightedText: string): string {
+  const cleaned = highlightedText.replace(/\s+/g, ' ').trim()
+  return cleaned.slice(0, 80)
+}
+
+/**
  * 从划线文本中提取笔记元信息
  *
  * 原文不会加工，将作为笔记正文原样保存；本函数只产出
@@ -80,6 +100,7 @@ function fallbackTitle(highlightedText: string): string {
  * @param sessionContext - 划线文本所在对话的上下文
  * @param provider - LLM 提供商
  * @param userTitle - 用户指定的标题（可选）；提供后 title 固定为该值
+ * @param options - LLM 生成开关（标题/标签）；关闭时跳过对应环节
  * @returns 提取的笔记数据
  */
 export async function extractNote(
@@ -87,7 +108,28 @@ export async function extractNote(
   sessionContext: string,
   provider: LLMProvider,
   userTitle?: string,
+  options: ExtractNoteOptions = {},
 ): Promise<ExtractedNote> {
+  const generateTitle = options.generateTitle !== false
+  const generateTags = options.generateTags !== false
+  // 描述无独立开关：标题/标签任一开启才调用 LLM，否则完全跳过 LLM 环节
+  const needLLM = generateTitle || generateTags
+  const resolvedUserTitle = userTitle && userTitle.trim() ? userTitle.trim() : ''
+  const titleFallback = fallbackTitle(highlightedText)
+
+  if (!needLLM) {
+    // 标题/标签均不允许 LLM 生成：本地兜底，不发起任何 LLM 调用
+    return {
+      title: resolvedUserTitle || titleFallback,
+      description: fallbackDescription(highlightedText),
+      proposition: '',
+      explanation: '',
+      type: 'concept',
+      tags: ['未分类'],
+      confidence: 0.5,
+    }
+  }
+
   const skill = getSkill()
   const systemPrompt = buildPrompt(skill, {
     highlighted_text: highlightedText,
@@ -129,12 +171,12 @@ export async function extractNote(
   }
 
   // 组装 ExtractedNote：原文不加工，proposition/explanation 留空，type/confidence 用保守默认
+  // 标题优先级：用户指定 > LLM 生成（若开启）> 划线文本兜底
   const title =
-    userTitle && userTitle.trim()
-      ? userTitle.trim()
-      : typeof parsed.title === 'string' && parsed.title.trim()
-        ? parsed.title.trim()
-        : fallbackTitle(highlightedText)
+    resolvedUserTitle ||
+    (generateTitle && typeof parsed.title === 'string' && parsed.title.trim()
+      ? parsed.title.trim()
+      : titleFallback)
 
   return {
     title,
@@ -142,8 +184,8 @@ export async function extractNote(
     proposition: '',
     explanation: '',
     type: 'concept',
-    // LLM 未生成标签（返回空数组）时兜底一个，保证笔记始终有可展示/检索的标签
-    tags: parsed.tags.length > 0 ? parsed.tags : ['未分类'],
+    // 标签：仅当开关开启时采用 LLM 结果，否则一律用默认标签（LLM 返回空数组时同样兜底）
+    tags: generateTags && parsed.tags.length > 0 ? parsed.tags : ['未分类'],
     confidence: 0.5,
   }
 }

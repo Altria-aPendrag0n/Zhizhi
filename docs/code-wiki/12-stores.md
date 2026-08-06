@@ -28,6 +28,8 @@
 | `baseUrl` | `'https://api.openai.com'` |
 | `model` | `'gpt-4o'` |
 | `enableWebSearch` | `true` |
+| `autoGenerateNoteTitle` | `true`（摘录笔记时是否允许 LLM 自动生成标题） |
+| `autoGenerateNoteTags` | `true`（摘录笔记时是否允许 LLM 自动生成标签） |
 | `recentVaults: string[]` | `[]` |
 
 | 动作 | 说明 |

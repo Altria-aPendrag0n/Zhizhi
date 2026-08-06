@@ -180,8 +180,10 @@ async function handleExtractNote(highlightedText: string) {
     return
   }
 
+  // 标题/标签均不允许 LLM 生成时，摘录完全不调用 LLM，无需 API Key
+  const needLLM = settingsStore.autoGenerateNoteTitle || settingsStore.autoGenerateNoteTags
   const config = settingsStore.getProviderConfig()
-  if (!config.apiKey) {
+  if (needLLM && !config.apiKey) {
     toast.error('请先在设置页面配置 API Key')
     router.push('/settings')
     return
@@ -199,6 +201,11 @@ async function handleExtractNote(highlightedText: string) {
       highlightedText,
       `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
       createProvider(config),
+      undefined,
+      {
+        generateTitle: settingsStore.autoGenerateNoteTitle,
+        generateTags: settingsStore.autoGenerateNoteTags,
+      },
     )
     extractDialog.draft = draft
     extractDialog.title = draft.title
@@ -226,6 +233,10 @@ async function confirmExtract(title: string) {
         `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
         createProvider(config),
         title,
+        {
+          generateTitle: settingsStore.autoGenerateNoteTitle,
+          generateTags: settingsStore.autoGenerateNoteTags,
+        },
       )
     } else {
       note = { ...extractDialog.draft, title: title.trim() }

@@ -11,6 +11,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const baseUrl = ref('https://api.openai.com')
   const model = ref('gpt-4o')
   const enableWebSearch = ref(true)
+  const autoGenerateNoteTitle = ref(true)
+  const autoGenerateNoteTags = ref(true)
   const recentVaults = ref<string[]>([])
 
   function saveSettings() {
@@ -20,6 +22,8 @@ export const useSettingsStore = defineStore('settings', () => {
       baseUrl: baseUrl.value,
       model: model.value,
       enableWebSearch: enableWebSearch.value,
+      autoGenerateNoteTitle: autoGenerateNoteTitle.value,
+      autoGenerateNoteTags: autoGenerateNoteTags.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   }
@@ -34,6 +38,8 @@ export const useSettingsStore = defineStore('settings', () => {
         baseUrl.value = data.baseUrl || 'https://api.openai.com'
         model.value = data.model || 'gpt-4o'
         enableWebSearch.value = data.enableWebSearch !== false
+        autoGenerateNoteTitle.value = data.autoGenerateNoteTitle !== false
+        autoGenerateNoteTags.value = data.autoGenerateNoteTags !== false
       } catch {
         // 解析失败则使用默认值
       }
@@ -70,6 +76,8 @@ export const useSettingsStore = defineStore('settings', () => {
     baseUrl,
     model,
     enableWebSearch,
+    autoGenerateNoteTitle,
+    autoGenerateNoteTags,
     recentVaults,
     saveSettings,
     loadSettings,

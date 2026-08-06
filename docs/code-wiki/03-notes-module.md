@@ -135,6 +135,7 @@ interface Note {
 
 - 摘录生成：`MainChatPage.handleExtractNote` → `extractNote`（[09 Skill]）→ `noteStore.saveNote`。
 - **标签兜底与 YAML 安全**：`extractNote` 在 LLM 返回空 tags 时兜底 `['未分类']`（笔记始终有可展示标签）；`serializeNote` 用 JSON 字符串序列化每个标签（`  - "标签"`），避免标签含 `:`/`#` 等 YAML 特殊字符时被解析成对象/注释而丢失。
+- **LLM 生成开关**：设置页的「自动生成笔记标题 / 自动生成笔记标签」控制摘录时是否调用 LLM 生成对应字段。标题关闭时用划线文本前 20 字兜底（用户手动指定的标题始终优先）；标签关闭时统一 `['未分类']`。两个开关都关闭时 `extractNote` 完全不调用 LLM（描述同样用划线文本前 80 字兜底），调用方（`MainChatPage`/`BranchChatPage`/`NoteDetailPage`）也会跳过 API Key 校验。
 - 加入笔记：`ChatView` 划线 → `AddToNoteDialog` → `note-insert` 插入 → `noteStore.updateNote`。
 - 反链与关系图：`NoteDetailPage` → `parser/wikilink`（[11]）+ `LocalGraph`（[06]）。
 - 向量索引：`noteStore.saveNote/updateNote/deleteNote` 同步 `getNoteIndexer()` 更新（[10]）。
