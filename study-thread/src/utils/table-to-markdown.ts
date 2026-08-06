@@ -30,6 +30,8 @@ function cellToMarkdown(cell: HTMLTableCellElement): string {
     .replace(/&gt;/gi, '>')
   // 折叠内部空白（表格单元格不支持多行）
   html = html.replace(/\s+/g, ' ').trim()
+  // 单元格内的字面 | 是表格列分隔符，必须转义为 \|，否则摘录源码会把单元格拆成多列
+  html = html.replace(/\|/g, '\\|')
   return html
 }
 

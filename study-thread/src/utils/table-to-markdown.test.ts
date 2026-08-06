@@ -35,6 +35,11 @@ describe('tableToMarkdown', () => {
     expect(tableToMarkdown(table)).toBe('| [示例](https://example.com/x) | 值 |')
   })
 
+  it('单元格内字面 | 转义为 \\|，避免摘录源码拆列', () => {
+    const table = renderTable('<tr><td>皮皮虾</td><td>濑尿虾 | 富贵虾</td></tr>')
+    expect(tableToMarkdown(table)).toBe('| 皮皮虾 | 濑尿虾 \\| 富贵虾 |')
+  })
+
   it('无任何行时返回空串', () => {
     const table = renderTable('')
     expect(tableToMarkdown(table)).toBe('')
