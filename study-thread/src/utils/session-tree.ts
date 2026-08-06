@@ -121,6 +121,49 @@ export function getNodePath(
 }
 
 /**
+ * 获取节点深度（根节点深度为 0）
+ *
+ * @returns 节点深度；节点不存在时返回 0
+ */
+export function getNodeDepth(tree: SessionTreeNode, id: string): number {
+  const path = getNodePath(tree, id)
+  return path.length > 0 ? path.length - 1 : 0
+}
+
+/**
+ * 收集节点自身及其所有后代的 id（用于级联删除）
+ */
+export function collectSubtreeIds(tree: SessionTreeNode, id: string): string[] {
+  const node = findNode(tree, id)
+  if (!node) return []
+  const ids: string[] = []
+  const walk = (current: SessionTreeNode) => {
+    ids.push(current.id)
+    current.children.forEach(walk)
+  }
+  walk(node)
+  return ids
+}
+
+/**
+ * 从树中移除节点及其子树（不可变更新）
+ *
+ * @returns 移除后的新树；移除根节点（整棵树被清空）时返回 null
+ */
+export function removeNodeFromTree(
+  tree: SessionTreeNode,
+  id: string,
+): SessionTreeNode | null {
+  if (tree.id === id) return null
+  return {
+    ...tree,
+    children: tree.children
+      .map((child) => (child.id === id ? null : removeNodeFromTree(child, id)))
+      .filter((child): child is SessionTreeNode => child !== null),
+  }
+}
+
+/**
  * 序列化树为 JSON
  */
 export function serializeTree(tree: SessionTreeNode): string {
