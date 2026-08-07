@@ -74,7 +74,7 @@ import type { Message, Session, ExtractedNote } from '../types'
 import { loadBranchContext, buildForkContextPreview, stripInheritedContext, extractForkContext, parseMessages } from '../utils/branch-context'
 import { parseFrontmatter } from '../parser/frontmatter'
 import type { NoteReference } from '../utils/session-linker'
-import { extractNoteRefsFromSession } from '../utils/session-linker'
+import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { resolveMessageIndex } from '../utils/message-locator'
 import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
@@ -215,7 +215,8 @@ async function refreshNoteRefs() {
   try {
     const currentFile = getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
     const currentRaw = await readFile(currentFile)
-    extractedNotes.value = extractNoteRefsFromSession(currentRaw)
+    // 过滤已删除笔记的悬空引用（会话文件引用行可能因旧版本/路径差异未被清理）
+    extractedNotes.value = await filterExistingNoteRefs(extractNoteRefsFromSession(currentRaw))
   } catch {
     extractedNotes.value = []
   }

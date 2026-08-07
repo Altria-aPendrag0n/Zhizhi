@@ -37,7 +37,10 @@ vi.mock('../api/provider-factory', () => ({
 }))
 
 vi.mock('../api/skills/extract-note', () => ({ extractNote: vi.fn() }))
-vi.mock('../utils/session-linker', () => ({ extractNoteRefsFromSession: vi.fn(() => []) }))
+vi.mock('../utils/session-linker', () => ({
+  extractNoteRefsFromSession: vi.fn(() => []),
+  filterExistingNoteRefs: vi.fn(async () => []),
+}))
 vi.mock('../composables/useToast', () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn() }) }))
 vi.mock('../utils/session-serializer', () => ({
   generateSessionTitle: vi.fn(() => '测试会话'),

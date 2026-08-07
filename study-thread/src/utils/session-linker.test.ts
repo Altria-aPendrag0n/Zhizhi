@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { extractNoteRefsFromSession, removeSessionReferences } from './session-linker'
+import {
+  extractNoteRefsFromSession,
+  removeSessionReferences,
+  filterExistingNoteRefs,
+} from './session-linker'
 
 vi.mock('./vault-fs', () => ({
   readFile: vi.fn(),
@@ -95,5 +99,40 @@ describe('removeSessionReferences', () => {
   it('sessions 目录不存在时静默跳过', async () => {
     vi.mocked(listDir).mockRejectedValue(new Error('not found'))
     await expect(removeSessionReferences('/vault', ['branch_1'], 'branch')).resolves.toBeUndefined()
+  })
+
+  it('Windows 路径分隔符/大小写不一致时也能移除引用行（归一化匹配）', async () => {
+    vi.mocked(listDir).mockResolvedValue([
+      { name: 'sess.md', path: '/vault/sessions/sess.md', is_dir: false },
+    ])
+    // 会话引用行用正斜杠 + 原样大小写；删除目标用反斜杠 + 不同大小写（Windows 场景）
+    vi.mocked(readFile).mockResolvedValue(
+      '## 知枝\n回答\n> 已生成笔记: [[D:\\work\\Zhizhi\\test vault/notes/淡水虾种类与吃法一览.md|淡水虾]] 划线「x」\n',
+    )
+    await removeSessionReferences('/vault', ['d:\\work\\zhizhi\\test vault\\notes\\淡水虾种类与吃法一览.MD'], 'note')
+    expect(writeFile).toHaveBeenCalledWith('/vault/sessions/sess.md', '## 知枝\n回答\n')
+  })
+})
+
+describe('filterExistingNoteRefs', () => {
+  beforeEach(() => {
+    vi.mocked(readFile).mockReset()
+  })
+
+  it('保留存在的笔记引用与全部分支引用，过滤已删除的笔记引用', async () => {
+    vi.mocked(readFile).mockImplementation(async (path) => {
+      if (path === '/vault/notes/exists.md') return 'content'
+      throw new Error('not found')
+    })
+    const refs = [
+      { path: '/vault/notes/exists.md', title: '存在', messageIndex: 0, kind: 'note' as const },
+      { path: '/vault/notes/gone.md', title: '已删', messageIndex: 0, kind: 'note' as const },
+      { path: 'branch_1', title: '分支', messageIndex: 0, kind: 'branch' as const },
+    ]
+    const result = await filterExistingNoteRefs(refs)
+    expect(result).toEqual([
+      { path: '/vault/notes/exists.md', title: '存在', messageIndex: 0, kind: 'note' },
+      { path: 'branch_1', title: '分支', messageIndex: 0, kind: 'branch' },
+    ])
   })
 })

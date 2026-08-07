@@ -98,8 +98,31 @@ export async function findNotesBySession(
   return allNotes.filter((note) => note.source?.session === sessionPath)
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** 路径归一化：统一小写与正斜杠（用于跨来源路径比较，兼容 Windows 反斜杠/大小写差异） */
+function normalizePathKey(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '')
+}
+
+/**
+ * 过滤已不存在的笔记引用（文件已被删除），分支引用保留
+ *
+ * 删除笔记后除清理会话文件引用行外，此处再兜底过滤一次：
+ * 兼容历史遗留的悬空引用（旧版本删除时未清理会话引用行），
+ * 并防止删除路径与会话引用行路径格式不一致（Windows 混合斜杠/大小写）
+ * 导致引用行清理失败时界面仍残留已删除笔记。
+ */
+export async function filterExistingNoteRefs(refs: NoteReference[]): Promise<NoteReference[]> {
+  const results = await Promise.all(refs.map(async (ref) => {
+    // 分支引用（branchId）不是笔记文件，不参与存在性检查
+    if (ref.kind === 'branch') return ref
+    try {
+      await readFile(ref.path)
+      return ref
+    } catch {
+      return null
+    }
+  }))
+  return results.filter((ref): ref is NoteReference => ref !== null)
 }
 
 /**
@@ -124,15 +147,22 @@ export async function removeSessionReferences(
   }
 
   const kindLabel = kind === 'branch' ? '分支' : '笔记'
-  const escapedTargets = targets.map(escapeRegExp)
-  const pattern = new RegExp(`^> 已生成${kindLabel}: \\[\\[(?:${escapedTargets.join('|')})\\|`)
+  const normalizedTargets = targets.map(normalizePathKey)
+  // 逐行解析引用行的目标（笔记路径或分支 id），归一化后比较：
+  // 旧实现用正则直接拼接完整路径匹配整行，Windows 下删除路径（可能带反斜杠）
+  // 与会话引用行路径（正斜杠）不一致时匹配失败，导致悬空引用残留
+  const refLinePattern = new RegExp(`^> 已生成${kindLabel}: \\[\\[([^|\\]]+)\\|`)
 
   for (const entry of entries) {
     if (entry.is_dir || !entry.name.toLowerCase().endsWith('.md')) continue
     try {
       const filePath = `${sessionsDir}/${entry.name}`
       const raw = await readFile(filePath)
-      const newRaw = raw.split('\n').filter((line) => !pattern.test(line)).join('\n')
+      const newRaw = raw.split('\n').filter((line) => {
+        const m = line.match(refLinePattern)
+        if (!m) return true
+        return !normalizedTargets.includes(normalizePathKey(m[1]))
+      }).join('\n')
       if (newRaw !== raw) await writeFile(filePath, newRaw)
     } catch {
       // 忽略单个文件处理失败

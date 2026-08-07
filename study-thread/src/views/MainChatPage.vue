@@ -47,7 +47,7 @@ import { extractNote } from '../api/skills/extract-note'
 import { chatWithTools } from '../api/chat-loop'
 import { CLIENT_TOOLS } from '../api/tools'
 import type { NoteReference } from '../utils/session-linker'
-import { extractNoteRefsFromSession } from '../utils/session-linker'
+import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { useToast } from '../composables/useToast'
 import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
@@ -250,7 +250,8 @@ async function refreshNoteRefs(threadId: string) {
   }
   try {
     const sessionPath = getSessionFilePath(vaultStore.vaultPath, threadId)
-    extractedNotes.value = extractNoteRefsFromSession(await readFile(sessionPath))
+    // 过滤已删除笔记的悬空引用（会话文件引用行可能因旧版本/路径差异未被清理）
+    extractedNotes.value = await filterExistingNoteRefs(extractNoteRefsFromSession(await readFile(sessionPath)))
   } catch {
     extractedNotes.value = []
   }
