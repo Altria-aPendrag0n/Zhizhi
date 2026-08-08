@@ -209,6 +209,19 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **SKILL.md**（`src/skills/update-learner/SKILL.md`）：输入新增 `{review_performance}`；分析要求第 6 条——连续 good/easy 或掌握度高 → 对应概念升档；多次 again 或掌握度低 → 降档；表现为空时仅依据会话内容；只通过 updated_concepts 输出建议。
 - **测试**：`review-scheduler.test.ts`（评级分布汇总 / windowSize 截取 / 无记录忽略 4 用例）、`update-learner.test.ts`（新增：复习表现注入与默认占位 5 用例）。
 
+## 12. P4 图谱簇复习（已完成 P4-1）
+
+### 12.1 簇选择策略（`src/utils/review-cluster.ts`）
+
+以到期笔记为中心，取 wikilink / 反链 **1 度邻居**构成复习簇：
+
+- **邻居解析**：
+  - 正向链接：中心笔记正文中的 `[[wikilink]]` 目标（`extractAllLinks` + `resolveWikiLinkTarget` 解析到笔记路径）。
+  - 反向链接：遍历其余笔记正文，解析 wikilink 命中中心笔记（复用 `parseWikiLinks` + `resolveWikiLinkTarget`，与详情页反链同一套解析）。
+- **簇构成**（`buildReviewCluster(notePath, allNotes, maxSize = 5)`）：返回中心笔记 + 1 度邻居（去重、截断）；**无邻居 → 退化为仅含中心的单条复习**（保持 P2 行为）；`maxSize ≤ 1` 时仅返回中心；中心不存在返回空数组。
+- **排序**（`collectOneHopNeighbors`）：按链接强度降序——双向（正+反）> 仅正向 > 仅反向；同强度按更新时间较新优先。`linkStrength(note, outgoing, incoming)` 为纯函数。
+- **测试**：`review-cluster.test.ts`（正向 / 反向 / 双向优先 / 强度排序 / 上限截断 / 无邻居退化单条 / 中心缺失 11 用例）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)
