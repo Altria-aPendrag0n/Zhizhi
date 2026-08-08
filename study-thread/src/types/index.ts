@@ -31,6 +31,8 @@ export interface Session {
   reviewed_note?: string
   /** 复习会话的出题结果（持久化到 frontmatter，重新打开时无需重新出题） */
   review_questions?: ReviewQuestion[]
+  /** 复习簇内全部笔记路径（P4 簇复习，首条为中心被复习笔记；单条复习不设置） */
+  review_cluster?: string[]
 }
 
 export interface Message {

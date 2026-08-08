@@ -235,6 +235,17 @@ skill 输入扩展为多笔记，生成概念间**关系型问题**（联系 / �
 - **答案缺口定位**：`reviewFollowupStream(question, answer, note, provider, clusterNotes?)` 新增可选簇上下文——注入 `review-feedback` SKILL.md 新增的 `{cluster_notes}` 变量；SKILL.md 反馈要求第 6 条：结合整簇判断完整性，明确指出回答涉及/应涉及哪条笔记。
 - **测试**：`review-quiz.test.ts`（簇序列化 4 用例 + generateClusterQuestions 4 用例 + 反馈簇注入 2 用例）。
 
+### 12.3 簇复习 UI（P4-3，`src/views/ReviewChatPage.vue`）
+
+复习会话页面按 `frontmatter.review_cluster` 进入簇模式（簇内笔记 > 1）：
+
+- **簇展示**：对话区首条消息前展示可折叠「复习簇」面板——簇内笔记列表（编号 + 标题，点击跳转笔记详情），当前被复习笔记高亮（品牌色块 + 「当前」徽标，复用 `--brand-soft` / `--brand` tokens，对齐学习地图概念网络视图）。
+- **簇上下文出题**：`handleSend` 将 `clusterNotes` 作为第 5 参传入 `reviewFollowupStream`，AI 反馈结合整簇笔记并指出回答涉及/应涉及哪条笔记（P4-2 能力）。
+- **逐条评级**：结束面板在簇模式下展示每条簇内笔记的四档自评按钮，**每条笔记独立 `applyReview(notePath, rating)`**；已评级条目标记「已评级」并禁用；全部评级后点击「完成复习」返回学习地图（不自动跳转）。未评级的簇内笔记不改变调度状态（为 P4-4 精准回写留口）。
+- **单条模式保持原行为**：无簇（长度 ≤ 1）时维持四档自评、评级后自动返回。
+- **持久化**：`createReviewSession` 第 4 参 `cluster` 仅在簇长度 > 1 时写入 `review_cluster`；`loadReviewSession` 解析 frontmatter（兼容 YAML 数组 / JSON 字符串），重开复习会话自动恢复簇面板。
+- **测试**：`ReviewChatPage.test.ts`（簇面板渲染与当前高亮、逐条评级独立 applyReview、评级后不自动跳转需手动完成、`reviewFollowupStream` 第 5 参透传）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)

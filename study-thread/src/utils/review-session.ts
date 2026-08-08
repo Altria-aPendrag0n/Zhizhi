@@ -59,11 +59,17 @@ function parseReviewQuestions(value: unknown): ReviewQuestion[] | undefined {
  * 首条 assistant 消息为复习引导：复习目标（被复习笔记标题）+ 问题列表。
  * 复习会话 id 前缀为 `review_`，与普通会话（sess_/branch_）区分。
  *
- * @param note - 被复习的原子笔记
- * @param reviewQuestions - 出题结果（generateReviewQuestions 的输出）
+ * @param note - 被复习的原子笔记（簇复习时为中心笔记）
+ * @param reviewQuestions - 出题结果（generateReviewQuestions / generateClusterQuestions 的输出）
  * @param now - 创建时间（默认当前时间）
+ * @param cluster - 复习簇笔记（P4，可空）：首条为中心笔记，全部路径写入 frontmatter
  */
-export function createReviewSession(note: Note, reviewQuestions: ReviewQuestion[], now: Date = new Date()): Session {
+export function createReviewSession(
+  note: Note,
+  reviewQuestions: ReviewQuestion[],
+  now: Date = new Date(),
+  cluster?: Note[],
+): Session {
   // 有出题结果时展示问题列表；无出题（未配置 AI / 出题失败）时展示笔记原文，进入原文复习模式
   const introContent =
     reviewQuestions.length > 0
@@ -86,6 +92,7 @@ export function createReviewSession(note: Note, reviewQuestions: ReviewQuestion[
     kind: 'review',
     reviewed_note: note.path,
     review_questions: reviewQuestions,
+    review_cluster: cluster && cluster.length > 1 ? cluster.map((item) => item.path) : undefined,
   }
 }
 
@@ -129,10 +136,26 @@ export function getReviewSessionFilePath(vaultPath: string, sessionId: string): 
   return `${vaultPath}/sessions/review-${sanitizeFileName(sessionId)}.md`
 }
 
+/** 从 frontmatter 解析复习簇笔记路径（兼容 YAML 数组 / JSON 字符串两种形态） */
+function parseReviewCluster(value: unknown): string[] | undefined {
+  let parsed: unknown = value
+  if (typeof value === 'string' && value) {
+    try {
+      parsed = JSON.parse(value)
+    } catch {
+      return undefined
+    }
+  }
+  if (Array.isArray(parsed) && parsed.every((item): item is string => typeof item === 'string')) {
+    return parsed
+  }
+  return undefined
+}
+
 /**
  * 从文件加载复习会话
  *
- * 解析 frontmatter（kind/reviewed_note/review_questions）与正文消息；
+ * 解析 frontmatter（kind/reviewed_note/review_questions/review_cluster）与正文消息；
  * 文件缺失或损坏时返回 null。
  */
 export async function loadReviewSession(vaultPath: string, sessionId: string): Promise<Session | null> {
@@ -154,6 +177,7 @@ export async function loadReviewSession(vaultPath: string, sessionId: string): P
       kind: meta.kind === 'review' ? 'review' : undefined,
       reviewed_note: toString(meta.reviewed_note) || undefined,
       review_questions: reviewQuestions,
+      review_cluster: parseReviewCluster(meta.review_cluster),
     }
   } catch {
     return null

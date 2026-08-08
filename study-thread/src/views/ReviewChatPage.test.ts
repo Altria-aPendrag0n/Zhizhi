@@ -75,6 +75,18 @@ const note: Note = {
   content: '费曼学习法通过向他人解释来暴露知识缺口。',
 }
 
+const clusterNote: Note = {
+  path: 'notes/主动回忆.md',
+  title: '主动回忆',
+  type: 'concept',
+  tags: [],
+  created: '2026-08-01T00:00:00.000Z',
+  updated: '2026-08-01T00:00:00.000Z',
+  confidence: 0.5,
+  review: { next: null, interval: 0, mastery: 0 },
+  content: '主动回忆是一种检索练习，能显著提升记忆保持。',
+}
+
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
     id: 'review_1',
@@ -178,8 +190,59 @@ describe('ReviewChatPage', () => {
     await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '通过教别人来检验理解')
     await flushPromises()
 
-    expect(mocks.reviewFollowupStream).toHaveBeenCalledWith('什么是费曼学习法？', '通过教别人来检验理解', expect.anything(), expect.anything())
+    expect(mocks.reviewFollowupStream).toHaveBeenCalledWith(
+      '什么是费曼学习法？',
+      '通过教别人来检验理解',
+      expect.anything(),
+      expect.anything(),
+      undefined,
+    )
     expect(mocks.saveSessionToVault).toHaveBeenCalled()
     expect(wrapper.text()).toContain('1 / 2')
+  })
+
+  it('簇模式：加载 review_cluster 展示簇面板并高亮当前笔记', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({ review_cluster: ['notes/费曼学习法.md', 'notes/主动回忆.md'] }),
+    )
+    mocks.loadNote.mockImplementation((path: string) =>
+      Promise.resolve(path === 'notes/主动回忆.md' ? clusterNote : note),
+    )
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('复习簇 · 2 条关联笔记')
+    expect(wrapper.text()).toContain('主动回忆')
+    expect(wrapper.find('.review-chat-page__cluster-item--current').text()).toContain('费曼学习法')
+  })
+
+  it('簇模式：结束面板逐条评级，每条笔记独立 applyReview', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({ review_cluster: ['notes/费曼学习法.md', 'notes/主动回忆.md'] }),
+    )
+    mocks.loadNote.mockImplementation((path: string) =>
+      Promise.resolve(path === 'notes/主动回忆.md' ? clusterNote : note),
+    )
+    const wrapper = createWrapper()
+    await flushPromises()
+    await wrapper.find('.review-chat-page__end').trigger('click')
+
+    expect(wrapper.text()).toContain('逐条评级簇内笔记')
+    const items = wrapper.findAll('.review-chat-page__rating-item')
+    expect(items).toHaveLength(2)
+
+    await items[0].find('.review-chat-page__rate--good').trigger('click')
+    await flushPromises()
+    expect(mocks.applyReview).toHaveBeenCalledWith('notes/费曼学习法.md', 'good')
+
+    await items[1].find('.review-chat-page__rate--easy').trigger('click')
+    await flushPromises()
+    expect(mocks.applyReview).toHaveBeenCalledWith('notes/主动回忆.md', 'easy')
+
+    // 簇模式评级后不自动跳转，需点击「完成复习」
+    expect(mocks.routerPush).not.toHaveBeenCalledWith('/hub')
+    await wrapper.find('.review-chat-page__finish').trigger('click')
+    await flushPromises()
+    expect(mocks.routerPush).toHaveBeenCalledWith('/hub')
   })
 })

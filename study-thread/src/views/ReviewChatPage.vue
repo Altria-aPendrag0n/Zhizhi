@@ -28,6 +28,37 @@
       </button>
     </header>
 
+    <!-- 簇内笔记展示（P4-3）：对话首条消息前展示复习簇，当前被复习笔记高亮 -->
+    <section v-if="hasCluster" class="review-chat-page__cluster">
+      <button
+        type="button"
+        class="review-chat-page__cluster-toggle"
+        :aria-expanded="clusterOpen"
+        @click="clusterOpen = !clusterOpen"
+      >
+        <span class="review-chat-page__cluster-summary">复习簇 · {{ clusterNotes.length }} 条关联笔记</span>
+        <span class="review-chat-page__cluster-caret">{{ clusterOpen ? '收起' : '展开' }}</span>
+      </button>
+      <ul v-if="clusterOpen" class="review-chat-page__cluster-list">
+        <li
+          v-for="(item, index) in clusterNotes"
+          :key="item.path"
+          class="review-chat-page__cluster-item"
+          :class="{ 'review-chat-page__cluster-item--current': item.path === note?.path }"
+        >
+          <span class="review-chat-page__cluster-index">{{ index + 1 }}</span>
+          <button
+            type="button"
+            class="review-chat-page__cluster-note"
+            @click="handleNavigateNote(item.path)"
+          >
+            {{ item.title }}
+          </button>
+          <span v-if="item.path === note?.path" class="review-chat-page__cluster-badge">当前</span>
+        </li>
+      </ul>
+    </section>
+
     <!-- 对话区（复用 ChatView：渲染/划线/已生成笔记） -->
     <div class="review-chat-page__body">
       <ChatView
@@ -51,20 +82,62 @@
 
     <!-- 输入区 / 自评面板 -->
     <div v-if="showRating" class="review-chat-page__rating">
-      <p v-if="!rated" class="review-chat-page__rating-title">这次复习，你记得怎么样？</p>
-      <p v-else class="review-chat-page__rating-done">已评级，正在返回学习地图…</p>
-      <div v-if="!rated" class="review-chat-page__rating-actions">
-        <button
-          v-for="item in RATINGS"
-          :key="item.value"
-          class="review-chat-page__rate"
-          :class="`review-chat-page__rate--${item.value}`"
-          type="button"
-          @click="handleRate(item.value)"
-        >
-          {{ item.label }}
-        </button>
-      </div>
+      <!-- 簇模式：逐条评级（每条笔记独立 applyReview） -->
+      <template v-if="hasCluster">
+        <p class="review-chat-page__rating-title">逐条评级簇内笔记，各自更新复习计划</p>
+        <div v-for="item in clusterNotes" :key="item.path" class="review-chat-page__rating-item">
+          <div class="review-chat-page__rating-item-head">
+            <button
+              type="button"
+              class="review-chat-page__rating-item-title"
+              @click="handleNavigateNote(item.path)"
+            >
+              {{ item.title }}
+            </button>
+            <span
+              class="review-chat-page__rating-item-state"
+              :class="ratedPaths.has(item.path) ? 'is-done' : 'is-pending'"
+            >
+              {{ ratedPaths.has(item.path) ? '已评级' : '待评级' }}
+            </span>
+          </div>
+          <div class="review-chat-page__rating-actions">
+            <button
+              v-for="item2 in RATINGS"
+              :key="item2.value"
+              class="review-chat-page__rate"
+              :class="`review-chat-page__rate--${item2.value}`"
+              type="button"
+              :disabled="ratedPaths.has(item.path)"
+              @click="handleRate(item.path, item2.value)"
+            >
+              {{ item2.label }}
+            </button>
+          </div>
+        </div>
+        <div class="review-chat-page__rating-footer">
+          <button class="review-chat-page__finish" type="button" @click="finishReview">
+            完成复习，返回学习地图
+          </button>
+        </div>
+      </template>
+      <!-- 单条模式：保持原四档自评 -->
+      <template v-else>
+        <p v-if="!rated" class="review-chat-page__rating-title">这次复习，你记得怎么样？</p>
+        <p v-else class="review-chat-page__rating-done">已评级，正在返回学习地图…</p>
+        <div v-if="!rated" class="review-chat-page__rating-actions">
+          <button
+            v-for="item in RATINGS"
+            :key="item.value"
+            class="review-chat-page__rate"
+            :class="`review-chat-page__rate--${item.value}`"
+            type="button"
+            @click="handleRate(session?.reviewed_note ?? '', item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+      </template>
     </div>
     <Composer
       v-else
@@ -119,6 +192,11 @@ const toast = useToast()
 
 const session = ref<Session | null>(null)
 const note = ref<Note | null>(null)
+/** 复习簇内笔记（P4-3，来自 frontmatter review_cluster，仅簇模式长度 > 1） */
+const clusterNotes = ref<Note[]>([])
+const clusterOpen = ref(true)
+/** 已评级笔记路径（簇模式逐条评级） */
+const ratedPaths = ref<Set<string>>(new Set())
 const messages = ref<Message[]>([])
 const isStreaming = ref(false)
 const streamingText = ref('')
@@ -139,6 +217,8 @@ let abortController: AbortController | null = null
 const sessionId = computed(() => String(route.params.sessionId || ''))
 const questions = computed<ReviewQuestion[]>(() => session.value?.review_questions ?? [])
 const hasQuestions = computed(() => questions.value.length > 0)
+/** 簇模式：簇内笔记超过 1 条时进入逐条评级 */
+const hasCluster = computed(() => clusterNotes.value.length > 1)
 const noteRefs = computed(() => extractedNotes.value)
 const composerPlaceholder = computed(() =>
   questions.value[currentQuestionIndex.value]
@@ -172,6 +252,18 @@ async function load() {
   currentQuestionIndex.value = 0
   if (loaded.reviewed_note) {
     note.value = await noteStore.loadNote(loaded.reviewed_note)
+  }
+  // P4-3 簇复习：加载 frontmatter review_cluster 中的簇内笔记（当前笔记高亮展示）
+  if (loaded.review_cluster && loaded.review_cluster.length > 1) {
+    if (noteStore.notes.length === 0 && vaultStore.vaultPath) {
+      await noteStore.loadAllNotes(vaultStore.vaultPath)
+    }
+    const cluster: Note[] = []
+    for (const path of loaded.review_cluster) {
+      const clusterNote = await noteStore.loadNote(path)
+      if (clusterNote) cluster.push(clusterNote)
+    }
+    clusterNotes.value = cluster
   }
   // 从会话文件解析已生成的笔记引用（划线摘录后）
   try {
@@ -223,7 +315,13 @@ async function handleSend(content: string) {
   abortController = controller
   try {
     const provider = createProvider(config)
-    for await (const chunk of reviewFollowupStream(question.question, content, note.value, provider)) {
+    for await (const chunk of reviewFollowupStream(
+      question.question,
+      content,
+      note.value,
+      provider,
+      hasCluster.value ? clusterNotes.value : undefined,
+    )) {
       if (chunk.type === 'text') {
         streamingText.value += chunk.content
       } else if (chunk.type === 'thinking') {
@@ -274,16 +372,26 @@ function handleRetry() {
   }
 }
 
-async function handleRate(rating: ReviewRating) {
-  const notePath = session.value?.reviewed_note
+async function handleRate(notePath: string, rating: ReviewRating) {
   if (!notePath) {
     toast.error('未找到被复习笔记')
     return
   }
+  if (ratedPaths.value.has(notePath)) return
   await reviewStore.applyReview(notePath, rating)
-  rated.value = true
+  ratedPaths.value.add(notePath)
   toast.success(`已评级「${ratingLabel(rating)}」，已更新复习计划`)
-  setTimeout(() => router.push('/hub'), 800)
+  // 单条模式：评级即完成，自动返回；簇模式：等待逐条评级后手动返回
+  if (!hasCluster.value) {
+    rated.value = true
+    setTimeout(() => router.push('/hub'), 800)
+  }
+}
+
+/** 簇模式：结束逐条评级并返回学习地图 */
+function finishReview() {
+  rated.value = true
+  void router.push('/hub')
 }
 
 function ratingLabel(rating: ReviewRating): string {
@@ -425,6 +533,119 @@ function handleNavigateNote(path: string) {
   text-decoration: underline;
 }
 
+/* ---- 簇展示（P4-3）---- */
+.review-chat-page__cluster {
+  flex-shrink: 0;
+  margin: 10px 20px 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.review-chat-page__cluster-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.review-chat-page__cluster-toggle:hover {
+  background: var(--surface-2);
+}
+
+.review-chat-page__cluster-summary {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.review-chat-page__cluster-caret {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.review-chat-page__cluster-list {
+  margin: 0;
+  padding: 0 14px 10px;
+  list-style: none;
+}
+
+.review-chat-page__cluster-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+}
+
+.review-chat-page__cluster-index {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.review-chat-page__cluster-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-align: left;
+}
+
+.review-chat-page__cluster-note:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.review-chat-page__cluster-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.review-chat-page__cluster-item--current {
+  background: var(--brand-soft);
+  border-radius: var(--r-md);
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.review-chat-page__cluster-item--current .review-chat-page__cluster-note {
+  color: var(--brand);
+  font-weight: 650;
+}
+
+.review-chat-page__cluster-item--current .review-chat-page__cluster-index {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
 .review-chat-page__progress {
   flex-shrink: 0;
   color: var(--ink-3);
@@ -522,5 +743,86 @@ function handleNavigateNote(path: string) {
   border-color: var(--state-success);
   color: var(--state-success);
   background: #e7f3ec;
+}
+
+.review-chat-page__rate:disabled {
+  opacity: 0.55;
+  cursor: default;
+  border-color: var(--line);
+  color: var(--ink-3);
+  background: var(--surface);
+}
+
+/* ---- 簇模式逐条评级（P4-3）---- */
+.review-chat-page__rating-item {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.review-chat-page__rating-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.review-chat-page__rating-item-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.review-chat-page__rating-item-title:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.review-chat-page__rating-item-state {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.review-chat-page__rating-item-state.is-done {
+  color: var(--state-success);
+}
+
+.review-chat-page__rating-item-state.is-pending {
+  color: var(--ink-3);
+}
+
+.review-chat-page__rating-footer {
+  margin-top: 14px;
+  text-align: center;
+}
+
+.review-chat-page__finish {
+  padding: 9px 22px;
+  border: 1px solid var(--brand);
+  border-radius: var(--r-md);
+  background: var(--brand);
+  color: var(--brand-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.review-chat-page__finish:hover {
+  background: var(--brand-strong);
 }
 </style>

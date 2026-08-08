@@ -258,9 +258,10 @@ import { parseNoteDate } from '../utils/date'
 import type { Note, ReviewQuestion, ReviewRating, ReviewTask } from '../types'
 import type { SessionTreeNode } from '../utils/session-tree'
 import { createProvider } from '../api/provider-factory'
-import { generateReviewQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
+import { generateReviewQuestions, generateClusterQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
 import { loadLearnerProfile, describeLearnerProfile } from '../utils/learner-profile'
 import { buildReviewRelatedNotes, createReviewSession } from '../utils/review-session'
+import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
 import { BookOpen, FileText, MessageSquare } from '@lucide/vue'
 import BranchTree from '../components/chat/BranchTree.vue'
@@ -376,6 +377,9 @@ async function handleStartReview(task: ReviewTask) {
     if (full) allNotes.push(full)
   }
   const relatedNotes = buildReviewRelatedNotes(note, allNotes)
+  // P4 簇复习：以到期笔记为中心取 wikilink/反链 1 度邻居构成复习簇（无邻居 → 单条复习保持 P2 行为）
+  const cluster = buildReviewCluster(note.path, allNotes)
+  const clusterMode = cluster.length > 1
 
   // 出题（无 API Key 或出题失败时 questions 为空 → 原文复习模式）
   const config = settingsStore.getProviderConfig()
@@ -385,26 +389,31 @@ async function handleStartReview(task: ReviewTask) {
       // P3-4 难度个性化：加载画像注入出题 prompt；高置信度 + 高掌握度时附毕业引导
       const profile = await loadLearnerProfile(vaultPath)
       const learnerProfile = describeLearnerProfile(profile)
-      let graduationHint = ''
-      if (shouldSuggestGraduation(note, profile, task.mastery)) {
-        graduationHint =
-          `该笔记关联的概念在你的画像中标记为 high（能独立解释），且复习掌握度已达 ` +
-          `${Math.round(task.mastery * 100)}%。若你觉得已掌握，可只出 1-2 道 explain 挑战题，` +
-          `或建议跳过本次复习。`
+      if (clusterMode) {
+        // P4 簇模式：按簇上下文出关系型问题（涉及笔记标注，供 P4-4 缺口回写）
+        questions = await generateClusterQuestions(cluster, createProvider(config), learnerProfile)
+      } else {
+        let graduationHint = ''
+        if (shouldSuggestGraduation(note, profile, task.mastery)) {
+          graduationHint =
+            `该笔记关联的概念在你的画像中标记为 high（能独立解释），且复习掌握度已达 ` +
+            `${Math.round(task.mastery * 100)}%。若你觉得已掌握，可只出 1-2 道 explain 挑战题，` +
+            `或建议跳过本次复习。`
+        }
+        questions = await generateReviewQuestions(
+          note,
+          relatedNotes,
+          createProvider(config),
+          learnerProfile,
+          graduationHint,
+        )
       }
-      questions = await generateReviewQuestions(
-        note,
-        relatedNotes,
-        createProvider(config),
-        learnerProfile,
-        graduationHint,
-      )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '复习出题失败，已进入原文复习模式')
     }
   }
 
-  const session = createReviewSession(note, questions)
+  const session = createReviewSession(note, questions, undefined, clusterMode ? cluster : undefined)
   await saveSessionToVault(vaultPath, session, false, [], true)
   toast.success(questions.length > 0 ? '已创建复习会话' : '已创建复习会话（原文模式）')
   router.push(`/review/${encodeURIComponent(session.id)}`)

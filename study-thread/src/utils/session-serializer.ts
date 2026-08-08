@@ -61,6 +61,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     // 出题结果以 JSON 字符串序列化，重新打开复习会话时无需重新出题
     lines.push(`review_questions: ${JSON.stringify(session.review_questions)}`)
   }
+  if (session.review_cluster && session.review_cluster.length > 0) {
+    // 复习簇笔记路径列表（P4 簇复习），JSON 字符串保证 YAML 解析安全
+    lines.push(`review_cluster: ${JSON.stringify(session.review_cluster)}`)
+  }
   lines.push('---')
   lines.push('')
 
