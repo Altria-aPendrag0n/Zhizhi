@@ -246,6 +246,15 @@ skill 输入扩展为多笔记，生成概念间**关系型问题**（联系 / �
 - **持久化**：`createReviewSession` 第 4 参 `cluster` 仅在簇长度 > 1 时写入 `review_cluster`；`loadReviewSession` 解析 frontmatter（兼容 YAML 数组 / JSON 字符串），重开复习会话自动恢复簇面板。
 - **测试**：`ReviewChatPage.test.ts`（簇面板渲染与当前高亮、逐条评级独立 applyReview、评级后不自动跳转需手动完成、`reviewFollowupStream` 第 5 参透传）。
 
+### 12.4 复习缺口精准回写（P4-4，`src/utils/review-gap.ts`）
+
+用户回答暴露的知识缺口定位到具体笔记，**仅调整缺口笔记的调度状态**：
+
+- **缺口定位（AI 标注路径）**：review-feedback SKILL 第 6 条已要求 AI 明确指出回答涉及/应涉及哪条笔记（标题）；`parseMentionedNotes(feedbackText, notes)` 纯函数按标题从反馈文本解析提及的簇内笔记路径——优先 `[[wikilink]]`（兼容 `[[标题|别名]]`）匹配，其次纯文本标题包含（标题长度 ≥ 2 防误判）；只匹配簇内笔记，避免误匹配 vault 其他笔记。
+- **缺口定位（评级路径）**：簇内每条笔记独立四档评级（P4-3），用户评级即视为对该笔记状态的显式回写。
+- **回写**：`ReviewChatPage` 在 AI 反馈完成后解析缺口笔记存入 `gapPaths`，评级面板对缺口笔记显示「AI 缺口」徽标引导用户聚焦；仅用户实际评级的笔记调用 `reviewStore.applyReview`，**未涉及的簇内笔记不改变调度状态**。
+- **测试**：`review-gap.test.ts`（wikilink / 别名 / 纯文本匹配、未提及不标记、短标题防误判、去重，6 用例）；`ReviewChatPage.test.ts` 新增 AI 反馈后缺口标记用例（9 用例）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   extractNoteRefsFromSession: vi.fn(() => []),
   reviewFollowupStream: vi.fn(),
   extractNote: vi.fn(),
+  parseMentionedNotes: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -60,6 +61,7 @@ vi.mock('../utils/session-linker', () => ({
 }))
 vi.mock('../api/skills/review-quiz', () => ({ reviewFollowupStream: mocks.reviewFollowupStream }))
 vi.mock('../api/skills/extract-note', () => ({ extractNote: mocks.extractNote }))
+vi.mock('../utils/review-gap', () => ({ parseMentionedNotes: mocks.parseMentionedNotes }))
 vi.mock('../api/provider-factory', () => ({ createProvider: () => ({}) }))
 vi.mock('../composables/useToast', () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }) }))
 
@@ -129,6 +131,7 @@ describe('ReviewChatPage', () => {
     mocks.routerPush.mockReset()
     mocks.loadReviewSession.mockResolvedValue(makeSession())
     mocks.loadNote.mockResolvedValue(note)
+    mocks.parseMentionedNotes.mockReturnValue([])
     mocks.vaultPath = '/vault'
   })
 
@@ -244,5 +247,32 @@ describe('ReviewChatPage', () => {
     await wrapper.find('.review-chat-page__finish').trigger('click')
     await flushPromises()
     expect(mocks.routerPush).toHaveBeenCalledWith('/hub')
+  })
+
+  it('簇模式：AI 反馈后解析缺口笔记，评级面板标记 AI 缺口', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({ review_cluster: ['notes/费曼学习法.md', 'notes/主动回忆.md'] }),
+    )
+    mocks.loadNote.mockImplementation((path: string) =>
+      Promise.resolve(path === 'notes/主动回忆.md' ? clusterNote : note),
+    )
+    mocks.reviewFollowupStream.mockReturnValue((async function* () {
+      yield { type: 'text', content: '回答主要涉及 主动回忆，应补充 费曼学习法 的细节。' }
+    })())
+    mocks.parseMentionedNotes.mockReturnValue(['notes/主动回忆.md'])
+
+    const wrapper = createWrapper()
+    await flushPromises()
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '通过教别人来检验理解')
+    await flushPromises()
+
+    expect(mocks.parseMentionedNotes).toHaveBeenCalledWith(
+      '回答主要涉及 主动回忆，应补充 费曼学习法 的细节。',
+      [note, clusterNote],
+    )
+    await wrapper.find('.review-chat-page__end').trigger('click')
+    const badges = wrapper.findAll('.review-chat-page__gap-badge')
+    expect(badges).toHaveLength(1)
+    expect(badges[0].text()).toContain('AI 缺口')
   })
 })

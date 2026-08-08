@@ -94,6 +94,7 @@
             >
               {{ item.title }}
             </button>
+            <span v-if="gapPaths.has(item.path)" class="review-chat-page__gap-badge">AI 缺口</span>
             <span
               class="review-chat-page__rating-item-state"
               :class="ratedPaths.has(item.path) ? 'is-done' : 'is-pending'"
@@ -173,6 +174,7 @@ import { createProvider } from '../api/provider-factory'
 import { reviewFollowupStream } from '../api/skills/review-quiz'
 import { extractNote } from '../api/skills/extract-note'
 import { loadReviewSession, getReviewSessionFilePath } from '../utils/review-session'
+import { parseMentionedNotes } from '../utils/review-gap'
 import { saveSessionToVault } from '../utils/session-serializer'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { resolveMessageIndex } from '../utils/message-locator'
@@ -197,6 +199,8 @@ const clusterNotes = ref<Note[]>([])
 const clusterOpen = ref(true)
 /** 已评级笔记路径（簇模式逐条评级） */
 const ratedPaths = ref<Set<string>>(new Set())
+/** AI 反馈标注的缺口笔记路径（P4-4：仅这些笔记被 AI 判定为回答涉及/应涉及的缺口） */
+const gapPaths = ref<Set<string>>(new Set())
 const messages = ref<Message[]>([])
 const isStreaming = ref(false)
 const streamingText = ref('')
@@ -337,6 +341,10 @@ async function handleSend(content: string) {
     }
     aiMessage.content = streamingText.value
     aiMessage.thinking = streamingThinking.value || undefined
+    // P4-4 缺口定位：从 AI 反馈解析被标注的簇内缺口笔记（回答涉及/应涉及的笔记）
+    if (hasCluster.value) {
+      gapPaths.value = new Set(parseMentionedNotes(aiMessage.content, clusterNotes.value))
+    }
     currentQuestionIndex.value++
     await persist()
   } catch (e) {
@@ -803,6 +811,17 @@ function handleNavigateNote(path: string) {
 
 .review-chat-page__rating-item-state.is-pending {
   color: var(--ink-3);
+}
+
+.review-chat-page__gap-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--state-warning);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .review-chat-page__rating-footer {
