@@ -16,7 +16,7 @@
 | 函数 | 说明 |
 |------|------|
 | `parseSkill(raw)` | 正则提取 `^---\s*\n(.*?)\n---\s*\n` frontmatter → `yaml.load` → 校验 `name` 必填 → 返回 `{name, description, body}`；格式错误抛异常 |
-| `buildPrompt(skill, vars)` | 将 body 中的 `{key}` 占位符全局替换为实际值（正则转义 key） |
+| `buildPrompt(skill, vars)` | 将 body 中的 `{key}` 占位符全局替换为实际值（正则转义 key）；替换后校验占位符完整性：残留未注入的 `{xxx}` 时开发环境抛错、生产降级警告（`findUnresolvedPlaceholders` 按出现顺序去重返回残留占位符） |
 | `loadSkillFromFile(filePath)` | 通过 `vault-fs.readFile` 读取文件系统上的 SKILL.md |
 
 > 执行器内通过 Vite `?raw` import 直接内联 SKILL.md：`import skillRaw from '../../skills/extract-note/SKILL.md?raw'`（构建时内联，且 `tauri.conf.json` 的 bundle.resources 也会携带 `../src/skills/**/*.md`）。
@@ -118,6 +118,31 @@ reviewFollowupStream(question, answer, note, provider): AsyncIterable<StreamChun
 
 所有 Skill 触发点都是固定用户操作路径（点"生成笔记" / 进入分支 / 会话结束），没有"用户自由说话、LLM 自行判断用哪个 skill"的场景，因此直接由代码按路径加载对应 SKILL.md。V2 如需多能力动态路由再引入 manifest 模式。
 
+## 5.1 触发机制与场景边界（确保只在正确场景传入 skill 全文）
+
+### 触发矩阵
+
+| Skill 全文 | 注入场景 | 触发条件 | 调用方 |
+|-----------|---------|---------|--------|
+| `extract-note` | 任意页面划线 → 生成笔记 | 用户显式点「生成笔记」且标题/标签至少一个开启 LLM | MainChatPage / BranchChatPage / ReviewChatPage / NoteDetailPage |
+| `branch-followup` | 分支会话每轮追问 | 分支会话发送消息 | BranchChatPage |
+| `update-learner` | 学习会话（主/分支）一轮回答结束 | 消息数 ≥ 3、每会话仅一次、非复习会话 | useLearnerUpdate（MainChatPage / BranchChatPage 回调） |
+| `review-quiz` | 学习地图单条复习出题 | 到期笔记点「开始复习」（簇 ≤ 1） | LearningHubPage |
+| `review-cluster-quiz` | 学习地图簇复习出题 | 「开始复习」且复习簇 > 1 | LearningHubPage |
+| `review-feedback` | 复习会话逐题作答反馈 | 复习会话发送回答 | ReviewChatPage |
+| （无 skill） | 主会话自由学习对话 | 普通聊天 | MainChatPage（硬编码 SYSTEM_PROMPT） |
+
+### 五条约束（新增 skill / 执行器时必须遵守）
+
+1. **场景 → skill 一对一绑定**：每个用户操作路径只注入其专属 skill 全文，禁止跨场景复用其他 skill 模板。
+2. **固定流程优于动态选择**：skill 全文只在确定性操作路径注入，不引入"LLM 自行判断用哪个 skill"，避免全文被错误注入；V2 动态路由需走 manifest 并显式评审。
+3. **场景边界**：
+   - 自由学习对话（主会话）→ 普通 `SYSTEM_PROMPT`，不注入任何 skill；
+   - 复习会话 → 仅允许 `review-quiz` / `review-feedback` / `review-cluster-quiz` + `extract-note`（划线），**不触发 `update-learner`**（画像通过 `review_performance` 回写，而非复习会话文本）；
+   - 画像更新 → 仅学习会话（主/分支），且每会话一次（`useLearnerUpdate` 模块级 `updatedSessionIds` 去重）。
+4. **占位符完整性**：`buildPrompt` 会对残留 `{xxx}` 报错（开发）/警告（生产），新增 SKILL.md 变量必须同步注入，防止 skill 全文带占位符原样传给 LLM。
+5. **无 LLM 场景不传 skill**：如 `extract-note` 在标题/标签开关全关时走本地兜底、完全不调用 LLM，连 skill 全文也不下发。
+
 ## 6. 协作链路
 
 ```
@@ -129,7 +154,7 @@ BranchChatPage.handleSend ──► branchFollowupStream ──► chatWithTools
 
 ## 7. 相关测试
 
-- `src/skills/loader.test.ts`
+- `src/skills/loader.test.ts`（含占位符残留校验：全部注入无残留 / 残留报错 / `findUnresolvedPlaceholders` 去重与 JSON 花括号不误报）
 - `src/api/skills/extract-note.test.ts`、`branch-followup.test.ts`、`update-learner.test.ts`
 
 ---

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parseSkill, buildPrompt } from './loader'
+import { parseSkill, buildPrompt, findUnresolvedPlaceholders } from './loader'
 
 // Mock vault-fs
 vi.mock('../utils/vault-fs', () => ({
@@ -96,14 +96,28 @@ describe('buildPrompt', () => {
     expect(result).toBe('包含 $ ^ . * + 等特殊字符')
   })
 
-  it('不存在的变量保持原样', () => {
-    const skill = {
-      name: 'test',
-      description: '',
-      body: '模板中有 {existing_var} 和 {missing_var}',
-    }
-    const result = buildPrompt(skill, { existing_var: '值' })
-    expect(result).toContain('值')
-    expect(result).toContain('{missing_var}')
+  it('全部变量注入时无残留，正常返回替换结果', () => {
+    const skill = { name: 'test', description: '', body: '模板中有 {existing_var} 和 {other_var}' }
+    const result = buildPrompt(skill, { existing_var: '值', other_var: '别的值' })
+    expect(result).toBe('模板中有 值 和 别的值')
+  })
+
+  it('残留未注入的占位符在开发环境抛错（防止 skill 全文带占位符传入 LLM）', () => {
+    const skill = { name: 'test', description: '', body: '模板中有 {existing_var} 和 {missing_var}' }
+    expect(() => buildPrompt(skill, { existing_var: '值' })).toThrow('missing_var')
+  })
+})
+
+describe('findUnresolvedPlaceholders', () => {
+  it('返回未注入的占位符并按出现顺序去重', () => {
+    expect(findUnresolvedPlaceholders('使用 {a} 和 {b}，再次 {a}')).toEqual(['{a}', '{b}'])
+  })
+
+  it('无残留占位符时返回空数组', () => {
+    expect(findUnresolvedPlaceholders('已渲染完成，无变量')).toEqual([])
+  })
+
+  it('不匹配 JSON/代码块中的花括号（如 {"title": ...}）', () => {
+    expect(findUnresolvedPlaceholders('输出格式：{"title": "标题", "list": [1, 2]}')).toEqual([])
   })
 })

@@ -72,9 +72,29 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/** 变量占位符风格：`{identifier}`（花括号内为单词字符，不匹配 JSON/代码块中的花括号） */
+const PLACEHOLDER_PATTERN = /\{[a-zA-Z_][a-zA-Z0-9_]*\}/g
+
+/**
+ * 查找模板中未被注入的变量占位符（按出现顺序去重）
+ *
+ * 用于「确保在正确的场景下只传入完整渲染的 skill 全文」：若 SKILL.md 中残留 `{xxx}`，
+ * 说明执行器漏传了变量，skill 全文会带着占位符原样传给 LLM。
+ * 纯函数，供 buildPrompt 校验与单测。
+ */
+export function findUnresolvedPlaceholders(body: string): string[] {
+  const matched = body.match(PLACEHOLDER_PATTERN)
+  if (!matched) return []
+  return [...new Set(matched)]
+}
+
 /**
  * 将 Skill 模板中的变量替换为实际值
  * 模板中使用 {key} 语法标记变量位置
+ *
+ * 替换后校验占位符完整性（触发机制原则四）：
+ * - 残留未注入的 {xxx} 时，开发环境抛错（尽早暴露模板与执行器不同步）；
+ * - 生产环境降级为警告（避免单点模板问题导致功能硬失败）。
  */
 export function buildPrompt(skill: Skill, vars: Record<string, string>): string {
   let result = skill.body
@@ -82,6 +102,15 @@ export function buildPrompt(skill: Skill, vars: Record<string, string>): string 
   for (const [key, value] of Object.entries(vars)) {
     // 使用正则全局替换，兼容 ES2020
     result = result.replace(new RegExp(`\\{${escapeRegex(key)}\\}`, 'g'), value)
+  }
+
+  const unresolved = findUnresolvedPlaceholders(result)
+  if (unresolved.length > 0) {
+    const message = `SKILL.md「${skill.name}」存在未注入的变量占位符: ${unresolved.join(', ')}`
+    if (import.meta.env.DEV) {
+      throw new Error(message)
+    }
+    console.warn(message)
   }
 
   return result
