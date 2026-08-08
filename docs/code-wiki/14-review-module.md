@@ -169,6 +169,16 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **确认 UI**：`useLearnerUpdate` 编排 diff 生成与确认；`LearnerProfileDialog`（`src/components/learner/`，复用 DiffView）展示画像变更，用户确认 → `applyProfileDiff` + `saveLearnerProfile`；取消或生成失败 → 静默关闭，不打断学习流程。
 - **测试**：`src/utils/learner-profile.test.ts`（路径 / 空画像 / round-trip / load-save / diff 应用 8 用例）。
 
+### 11.1 画像概念 → 笔记映射（P3-2，`src/utils/learner-note-link.ts`）
+
+将画像 `known_concepts` 关联到对应原子笔记，供复习提权（P3-3）与难度个性化（P3-4）使用：
+
+- **精确匹配** `matchConceptExact(conceptName, notes)`：概念名 == 笔记标题 或 命中笔记 tags（忽略大小写、去首尾空白）。
+- **语义匹配** `matchConceptSemantic(conceptName, notes, topK, threshold)`：对概念名 embedding，与 `NoteIndexer` 已索引向量算余弦相似度，取 Top-K（默认 3）且相似度 ≥ 阈值（默认 `SEMANTIC_THRESHOLD = 0.5`）；**宁缺毋滥**，低于阈值不关联。引擎未就绪 / 无索引 / 出错时静默返回 `[]`（纯增量能力，不阻塞）。
+- **主入口** `linkConceptsToNotes(profile, notes, options)`：逐概念执行精确 + 语义并合并去重，无命中的概念不写入映射，返回 `Map<conceptName, notePath[]>`。
+- **映射缓存**：`get/set/invalidateLearnerLinkCache(vaultPath)` 按 vault 缓存；笔记变更（`notes store` 的 updateNote / saveNote / deleteNote）时调用 `invalidateLearnerLinkCache` 使缓存失效，下次读取重新计算。
+- **测试**：`src/utils/learner-note-link.test.ts`（标题 / 标签 / 语义三种匹配路径、低相似度过滤、合并去重、缓存失效 18 用例）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)

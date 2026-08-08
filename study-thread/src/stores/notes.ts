@@ -16,6 +16,7 @@ import {
 import { removeSessionReferences } from '../utils/session-linker'
 import { loadStoredValue, saveStoredValue } from '../utils/local-storage'
 import { createReviewTask } from '../utils/review-scheduler'
+import { invalidateLearnerLinkCache } from '../utils/learner-note-link'
 import { useReviewStore } from './review'
 
 const LOCAL_NOTES_KEY = 'study-thread-extracted-notes'
@@ -182,6 +183,8 @@ export const useNoteStore = defineStore('notes', () => {
       noteIndex.value.set(note.path, savedNote)
       upsertLocalNote(noteMeta)
       notes.value = sortNotes([...notes.value.filter((item) => item.path !== note.path), noteMeta])
+      // 笔记变更 → 画像概念映射缓存失效，下次读取时重新计算
+      if (currentVaultPath.value) invalidateLearnerLinkCache(currentVaultPath.value)
       return savedNote
     } catch (error) {
       console.error('更新笔记失败:', error)
@@ -218,6 +221,8 @@ export const useNoteStore = defineStore('notes', () => {
       await writeFile(getNoteMetaPath(filePath), serializeNoteMeta(noteMeta, extractAllLinks(highlightSource)))
       upsertLocalNote(noteMeta)
       notes.value = sortNotes([...notes.value.filter((item) => item.path !== filePath), noteMeta])
+      // 笔记变更 → 画像概念映射缓存失效
+      if (vaultPath) invalidateLearnerLinkCache(vaultPath)
       // 新笔记进入复习队列（次日到期），失败不影响笔记保存
       try {
         await useReviewStore().enqueue(createReviewTask(filePath, note.title, note.type))
@@ -250,6 +255,8 @@ export const useNoteStore = defineStore('notes', () => {
       notes.value = notes.value.filter((note) => note.path !== path)
       noteIndex.value.delete(path)
       getNoteIndexer().removeNote(path)
+      // 笔记删除 → 画像概念映射缓存失效
+      if (vaultPath) invalidateLearnerLinkCache(vaultPath)
       // 清理会话文件中对被删笔记的引用行（划线虚线标记）
       if (vaultPath) {
         try {

@@ -107,6 +107,8 @@ interface SessionTreeNode {
 | `utils/note-serializer.ts` | `serializeNote` / `generateNoteFileName` | 笔记落盘格式（见 [03]） |
 | `utils/note-insert.ts` | `insertHighlightAt` / `insertHighlightAtEnd` | 划线插入（见 [03]） |
 | `utils/knowledge-retrieval.ts` | RAG 检索（见 [10-embedding-module.md](./10-embedding-module.md)） | — |
+| `utils/learner-profile.ts` | `loadLearnerProfile` / `saveLearnerProfile` / `serializeLearnerProfile` / `applyProfileDiff` | 学习者画像读写与 diff 应用（见 [14-review-module.md](./14-review-module.md)） |
+| `utils/learner-note-link.ts` | `linkConceptsToNotes` / `matchConceptExact` / `matchConceptSemantic` / 缓存失效 | 画像概念 → 笔记映射（精确 + 语义，见 [14-review-module.md](./14-review-module.md)） |
 
 ## 8. 文件格式约定（供参考）
 
