@@ -146,9 +146,17 @@ noteStore.loadNote ──► 合并 Note.review 镜像
   - `loadReviewSession(vaultPath, sessionId)`：解析复习会话文件 → Session（含出题结果与消息）。
 - **协作链路**：`LearningHub 开始复习 → generateReviewQuestions → createReviewSession → saveSessionToVault(isReview) → 复习会话页 → 逐题 reviewFollowupStream → reviewStore.applyReview`
 
+### 9.3 复习会话交互 UI（`src/views/ReviewChatPage.vue`）
+
+- **路由**：`/review/:sessionId`（`router/index.ts`）；App 布局中 `/review*` 映射项目 1、隐藏会话列、显示返回按钮。
+- **入口**：学习地图复习视图 `ReviewDueList` 卡片新增「开始复习」按钮 → `LearningHubPage.handleStartReview`（出题 → 创建复习会话 → 跳转）。
+- **页面**：复用 `ChatView` + `Composer`；顶部展示被复习笔记标题（可跳详情）与答题进度；`handleSend` 调 `reviewFollowupStream` 流式反馈，逐题推进。
+- **划线双路径**：复用划线菜单——「生成笔记」→ `extract-note` skill → 新笔记自动入队；「加入笔记」→ `AddToNoteDialog` 插回原笔记。
+- **自评闭环**：「结束复习」→ 四档自评面板 → `reviewStore.applyReview` → Toast 提示 → 返回学习地图。
+- **无 API Key 兜底**：出题为空时 `createReviewSession` 首条消息展示笔记原文，页面显示"原文复习模式"提示并仅提供自评。
+
 ## 10. 后续扩展（本阶段不含）
 
-- P2 剩余：复习会话交互 UI（提问→作答→反馈→划线摘录→自评评级）、无 API Key 兜底。
 - P3：学习者画像驱动——`update-learner` 接入会话结束流程，画像 low/medium 概念对应笔记提权、复习难度个性化。
 - P4：图谱簇复习——按 wikilink 网络整簇提问（关系型问题）。
 - 间隔算法演进：`history` 字段已预留，可升级为 FSRS 式个性化遗忘预测。

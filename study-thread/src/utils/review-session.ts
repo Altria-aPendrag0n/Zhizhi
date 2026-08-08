@@ -64,10 +64,14 @@ function parseReviewQuestions(value: unknown): ReviewQuestion[] | undefined {
  * @param now - 创建时间（默认当前时间）
  */
 export function createReviewSession(note: Note, reviewQuestions: ReviewQuestion[], now: Date = new Date()): Session {
-  const questionsText = reviewQuestions.map((q, index) => `${index + 1}. ${q.question}`).join('\n')
+  // 有出题结果时展示问题列表；无出题（未配置 AI / 出题失败）时展示笔记原文，进入原文复习模式
+  const introContent =
+    reviewQuestions.length > 0
+      ? `## 复习目标\n${note.title}\n\n## 问题\n${reviewQuestions.map((q, index) => `${index + 1}. ${q.question}`).join('\n')}`
+      : `## 复习目标\n${note.title}\n\n## 原文\n${note.content}`
   const intro: Message = {
     role: 'assistant',
-    content: `## 复习目标\n${note.title}\n\n## 问题\n${questionsText}`,
+    content: introContent,
     timestamp: now.toISOString(),
   }
 

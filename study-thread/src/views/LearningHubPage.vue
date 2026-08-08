@@ -160,6 +160,7 @@
           :tasks="reviewStore.dueTasks"
           @rate="handleRate"
           @open="handleOpenReview"
+          @start="handleStartReview"
         />
       </div>
     </template>
@@ -250,10 +251,15 @@ import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
 import { useVaultStore } from '../stores/vault'
+import { useSettingsStore } from '../stores/settings'
 import { useToast } from '../composables/useToast'
 import { parseNoteDate } from '../utils/date'
-import type { ReviewRating, ReviewTask } from '../types'
+import type { Note, ReviewQuestion, ReviewRating, ReviewTask } from '../types'
 import type { SessionTreeNode } from '../utils/session-tree'
+import { createProvider } from '../api/provider-factory'
+import { generateReviewQuestions } from '../api/skills/review-quiz'
+import { buildReviewRelatedNotes, createReviewSession } from '../utils/review-session'
+import { saveSessionToVault } from '../utils/session-serializer'
 import { BookOpen, FileText, MessageSquare } from '@lucide/vue'
 import BranchTree from '../components/chat/BranchTree.vue'
 import ReviewDueList from '../components/review/ReviewDueList.vue'
@@ -263,6 +269,7 @@ const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
 const reviewStore = useReviewStore()
 const vaultStore = useVaultStore()
+const settingsStore = useSettingsStore()
 const toast = useToast()
 /** 知枝学习项目下新建会话（由 App 提供，避免跳转到无会话的空白聊天界面） */
 const createNewThread = inject<(projectId?: string) => void>('createNewThread', () => {})
@@ -342,6 +349,47 @@ async function handleRate(task: ReviewTask, rating: ReviewRating) {
 /** 打开笔记详情（从复习卡片跳转） */
 function handleOpenReview(task: ReviewTask) {
   router.push(`/notes/${encodeURIComponent(task.notePath)}`)
+}
+
+/**
+ * 开始复习：出题（未配置 AI 则进入原文模式）→ 创建复习会话 → 跳转复习页
+ */
+async function handleStartReview(task: ReviewTask) {
+  const vaultPath = vaultStore.vaultPath
+  if (!vaultPath) {
+    toast.error('请先在设置中选择本地 Vault')
+    return
+  }
+  const note = await noteStore.loadNote(task.notePath)
+  if (!note) {
+    toast.error('笔记不存在或无法读取')
+    return
+  }
+
+  // 装载关联笔记（wikilink/同标签），供出题参考
+  if (noteStore.notes.length === 0) await noteStore.loadAllNotes(vaultPath)
+  const allNotes: Note[] = []
+  for (const meta of noteStore.notes) {
+    const full = await noteStore.loadNote(meta.path)
+    if (full) allNotes.push(full)
+  }
+  const relatedNotes = buildReviewRelatedNotes(note, allNotes)
+
+  // 出题（无 API Key 或出题失败时 questions 为空 → 原文复习模式）
+  const config = settingsStore.getProviderConfig()
+  let questions: ReviewQuestion[] = []
+  if (config.apiKey) {
+    try {
+      questions = await generateReviewQuestions(note, relatedNotes, createProvider(config))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '复习出题失败，已进入原文复习模式')
+    }
+  }
+
+  const session = createReviewSession(note, questions)
+  await saveSessionToVault(vaultPath, session, false, [], true)
+  toast.success(questions.length > 0 ? '已创建复习会话' : '已创建复习会话（原文模式）')
+  router.push(`/review/${encodeURIComponent(session.id)}`)
 }
 
 function ratingLabel(rating: ReviewRating): string {

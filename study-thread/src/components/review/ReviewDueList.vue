@@ -37,6 +37,14 @@
 
       <div class="review-card__actions" @click.stop>
         <button
+          class="review-card__start"
+          type="button"
+          title="进入 AI 复习会话"
+          @click="$emit('start', task)"
+        >
+          开始复习
+        </button>
+        <button
           v-for="rating in RATINGS"
           :key="rating.value"
           class="review-card__rate"
@@ -60,6 +68,7 @@ defineProps<{ tasks: ReviewTask[] }>()
 defineEmits<{
   rate: [task: ReviewTask, rating: ReviewRating]
   open: [task: ReviewTask]
+  start: [task: ReviewTask]
 }>()
 
 const RATINGS: { value: ReviewRating; label: string; hint: string }[] = [
@@ -240,6 +249,23 @@ function ratingLabel(rating: ReviewRating | null): string {
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
+}
+
+.review-card__start {
+  padding: 6px 12px;
+  border: 1px solid var(--brand);
+  border-radius: var(--r-md);
+  background: var(--brand);
+  color: var(--brand-ink);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.review-card__start:hover {
+  background: var(--brand-strong);
 }
 
 .review-card__rate:hover {

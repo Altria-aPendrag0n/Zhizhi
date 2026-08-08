@@ -18,6 +18,11 @@ const router = createRouter({
       component: () => import('../views/BranchChatPage.vue'),
     },
     {
+      path: '/review/:sessionId',
+      name: 'review-chat',
+      component: () => import('../views/ReviewChatPage.vue'),
+    },
+    {
       path: '/notes',
       name: 'notes',
       component: () => import('../views/NotesPage.vue'),

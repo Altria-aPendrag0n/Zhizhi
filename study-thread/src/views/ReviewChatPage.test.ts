@@ -1,0 +1,185 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import ReviewChatPage from './ReviewChatPage.vue'
+import type { Session, Note } from '../types'
+
+const mocks = vi.hoisted(() => ({
+  route: { params: { sessionId: 'review_1' } },
+  routerPush: vi.fn(),
+  getProviderConfig: vi.fn(() => ({ apiKey: 'test-key', model: 'test-model' })),
+  vaultPath: '/vault',
+  loadNote: vi.fn(),
+  applyReview: vi.fn().mockResolvedValue({}),
+  loadReviewSession: vi.fn(),
+  saveSessionToVault: vi.fn().mockResolvedValue('/vault/sessions/review-review_1.md'),
+  readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
+  extractNoteRefsFromSession: vi.fn(() => []),
+  reviewFollowupStream: vi.fn(),
+  extractNote: vi.fn(),
+}))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => mocks.route,
+  useRouter: () => ({ push: mocks.routerPush, replace: mocks.routerPush }),
+}))
+
+vi.mock('../stores/settings', () => ({
+  useSettingsStore: () => ({ getProviderConfig: mocks.getProviderConfig, autoGenerateNoteTitle: true, autoGenerateNoteTags: true }),
+}))
+
+vi.mock('../stores/vault', () => ({
+  useVaultStore: () => ({ vaultPath: mocks.vaultPath }),
+}))
+
+vi.mock('../stores/notes', () => ({
+  useNoteStore: () => ({
+    loadNote: mocks.loadNote,
+    notes: [],
+    loadAllNotes: vi.fn(),
+    saveNote: vi.fn().mockResolvedValue('/vault/notes/新笔记.md'),
+    updateNote: vi.fn(),
+  }),
+}))
+
+vi.mock('../stores/review', () => ({
+  useReviewStore: () => ({ applyReview: mocks.applyReview }),
+}))
+
+vi.mock('../utils/review-session', () => ({
+  loadReviewSession: mocks.loadReviewSession,
+  getReviewSessionFilePath: (vaultPath: string, sessionId: string) => `${vaultPath}/sessions/review-${sessionId}.md`,
+}))
+
+vi.mock('../utils/session-serializer', () => ({
+  saveSessionToVault: mocks.saveSessionToVault,
+}))
+
+vi.mock('../utils/vault-fs', () => ({ readFile: mocks.readFile }))
+vi.mock('../utils/session-linker', () => ({
+  extractNoteRefsFromSession: mocks.extractNoteRefsFromSession,
+}))
+vi.mock('../api/skills/review-quiz', () => ({ reviewFollowupStream: mocks.reviewFollowupStream }))
+vi.mock('../api/skills/extract-note', () => ({ extractNote: mocks.extractNote }))
+vi.mock('../api/provider-factory', () => ({ createProvider: () => ({}) }))
+vi.mock('../composables/useToast', () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }) }))
+
+const note: Note = {
+  path: 'notes/费曼学习法.md',
+  title: '费曼学习法',
+  type: 'concept',
+  tags: [],
+  created: '2026-08-01T00:00:00.000Z',
+  updated: '2026-08-01T00:00:00.000Z',
+  confidence: 0.5,
+  review: { next: null, interval: 0, mastery: 0 },
+  content: '费曼学习法通过向他人解释来暴露知识缺口。',
+}
+
+function makeSession(overrides: Partial<Session> = {}): Session {
+  return {
+    id: 'review_1',
+    title: '复习：费曼学习法',
+    created: '2026-08-10T08:00:00.000Z',
+    parent_session: null,
+    fork_point: null,
+    tags: ['复习'],
+    messages: [
+      {
+        role: 'assistant',
+        content: '## 复习目标\n费曼学习法\n\n## 问题\n1. 什么是费曼学习法？\n2. 为什么费曼法能暴露知识缺口？',
+      },
+    ],
+    kind: 'review',
+    reviewed_note: 'notes/费曼学习法.md',
+    review_questions: [
+      { level: 'recognize', question: '什么是费曼学习法？' },
+      { level: 'explain', question: '为什么费曼法能暴露知识缺口？' },
+    ],
+    ...overrides,
+  }
+}
+
+function createWrapper() {
+  return mount(ReviewChatPage, {
+    global: {
+      stubs: {
+        ChatView: { name: 'ChatView', props: ['messages', 'isStreaming', 'streamingText', 'streamingThinking', 'error', 'noteRefs'], template: '<div />' },
+        Composer: { name: 'Composer', props: ['isStreaming', 'disabled', 'placeholder'], template: '<div />' },
+        AddToNoteDialog: { name: 'AddToNoteDialog', template: '<div />' },
+      },
+    },
+  })
+}
+
+describe('ReviewChatPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.routerPush.mockReset()
+    mocks.loadReviewSession.mockResolvedValue(makeSession())
+    mocks.loadNote.mockResolvedValue(note)
+    mocks.vaultPath = '/vault'
+  })
+
+  it('加载复习会话并展示被复习笔记标题与进度', async () => {
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    expect(mocks.loadReviewSession).toHaveBeenCalledWith('/vault', 'review_1')
+    expect(wrapper.text()).toContain('费曼学习法')
+    expect(wrapper.text()).toContain('0 / 2')
+    expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(true)
+  })
+
+  it('无出题结果（原文模式）时显示兜底提示', async () => {
+    mocks.loadReviewSession.mockResolvedValue(makeSession({ review_questions: [] }))
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('原文复习模式')
+  })
+
+  it('会话不存在时提示并返回学习地图', async () => {
+    mocks.loadReviewSession.mockResolvedValue(null)
+    createWrapper()
+    await flushPromises()
+
+    expect(mocks.routerPush).toHaveBeenCalledWith('/hub')
+  })
+
+  it('点击结束复习显示自评面板', async () => {
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    await wrapper.find('.review-chat-page__end').trigger('click')
+    expect(wrapper.text()).toContain('这次复习，你记得怎么样？')
+    expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(false)
+  })
+
+  it('评级调用 applyReview 并提示已更新', async () => {
+    const wrapper = createWrapper()
+    await flushPromises()
+    await wrapper.find('.review-chat-page__end').trigger('click')
+
+    await wrapper.find('.review-chat-page__rate--good').trigger('click')
+    await flushPromises()
+
+    expect(mocks.applyReview).toHaveBeenCalledWith('notes/费曼学习法.md', 'good')
+    expect(wrapper.text()).toContain('已评级')
+  })
+
+  it('发送回答时流式反馈并推进问题进度', async () => {
+    mocks.reviewFollowupStream.mockReturnValue((async function* () {
+      yield { type: 'text', content: '你的回答基本正确' }
+    })())
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '通过教别人来检验理解')
+    await flushPromises()
+
+    expect(mocks.reviewFollowupStream).toHaveBeenCalledWith('什么是费曼学习法？', '通过教别人来检验理解', expect.anything(), expect.anything())
+    expect(mocks.saveSessionToVault).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('1 / 2')
+  })
+})
