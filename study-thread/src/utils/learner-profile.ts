@@ -89,6 +89,27 @@ export async function saveLearnerProfile(vaultPath: string, profile: LearnerProf
 }
 
 /**
+ * 画像 → 复习出题注入用精简文本（P3-4 难度个性化）：
+ * 突出概念名与置信度（low/medium/high），供 review-quiz 调节提问深度。
+ * 画像为空时返回空字符串（调用方按默认难度出题）。
+ */
+export function describeLearnerProfile(profile: LearnerProfile): string {
+  const lines: string[] = []
+  if (profile.known_concepts.length > 0) {
+    lines.push('已掌握概念与置信度（low 刚接触 / medium 能识别不完整 / high 能独立解释）：')
+    lines.push(
+      ...profile.known_concepts.map(
+        (c) => `- ${c.name}（${c.confidence}${c.last_session ? `，最近学习 ${c.last_session}` : ''}）`,
+      ),
+    )
+  }
+  if (profile.active_topics.length > 0) {
+    lines.push(`当前学习主题：${profile.active_topics.join('、')}`)
+  }
+  return lines.join('\n')
+}
+
+/**
  * 应用画像更新 diff（用户确认后调用）
  *
  * - added_concepts → 新增 known_concepts（confidence + last_session=今日）

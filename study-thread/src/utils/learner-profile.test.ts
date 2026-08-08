@@ -7,6 +7,7 @@ import {
   serializeLearnerProfile,
   saveLearnerProfile,
   applyProfileDiff,
+  describeLearnerProfile,
   type LearnerProfile,
 } from './learner-profile'
 import { parseFrontmatter } from '../parser/frontmatter'
@@ -38,6 +39,24 @@ describe('learnerProfilePath / emptyLearnerProfile', () => {
     expect(empty.known_concepts).toEqual([])
     expect(empty.total_sessions).toBe(0)
     expect(empty.total_notes).toBe(0)
+  })
+})
+
+describe('describeLearnerProfile（P3-4 复习出题注入文本）', () => {
+  it('包含概念名与置信度', () => {
+    const text = describeLearnerProfile(profile)
+    expect(text).toContain('费曼学习法（medium')
+    expect(text).toContain('工作记忆（high')
+  })
+
+  it('包含最近学习日期与学习主题', () => {
+    const text = describeLearnerProfile(profile)
+    expect(text).toContain('最近学习 2026-08-01')
+    expect(text).toContain('当前学习主题：认知科学导论')
+  })
+
+  it('空画像返回空字符串', () => {
+    expect(describeLearnerProfile(emptyLearnerProfile())).toBe('')
   })
 })
 

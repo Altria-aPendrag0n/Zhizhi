@@ -108,7 +108,7 @@ reviewFollowupStream(question, answer, note, provider): AsyncIterable<StreamChun
 流程（反馈）：`getFeedbackSkill()` → 注入 `note_content` → 以「复习问题/我的回答」两条 user 消息流式调用（temperature 0.5，maxTokens 2048），异常包装为 `error` chunk。
 
 **SKILL.md 要点**：
-- `review-quiz`（version 1.0.0）：复习伴读出题，3-5 个递进问题（识别→应用→解释），问题不透露答案，按画像调整难度分布。
+- `review-quiz`（version 1.0.0）：复习伴读出题，3-5 个递进问题（识别→应用→解释），问题不透露答案，按画像调整难度分布（low/空→recognize 为主；medium→recognize+apply 均衡；high→explain 为主；标注"可能已掌握"→只出 explain 挑战题或建议跳过，P3-4）。
 - `review-feedback`（version 1.0.0）：费曼式反馈，先肯定再指出缺口，用引导性问题让用户自己补齐，不重复基础概念。
 
 ## 5. 为什么 V1 不做动态 Skill 选择

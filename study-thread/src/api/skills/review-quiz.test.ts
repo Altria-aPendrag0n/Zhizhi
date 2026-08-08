@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LLMProvider, StreamChunk } from '../llm-provider'
 import type { Note } from '../../types'
-import { generateReviewQuestions, reviewFollowupStream, serializeNoteForReview } from './review-quiz'
+import type { LearnerProfile } from '../../utils/learner-profile'
+import {
+  generateReviewQuestions,
+  reviewFollowupStream,
+  serializeNoteForReview,
+  shouldSuggestGraduation,
+  GRADUATION_MASTERY_THRESHOLD,
+} from './review-quiz'
 
 const note: Note = {
   path: 'notes/费曼学习法.md',
@@ -110,6 +117,24 @@ describe('generateReviewQuestions', () => {
     expect(systemPrompt).toContain('known_concepts: 费曼学习法(medium)')
   })
 
+  it('毕业引导文本随画像一并注入 prompt（P3-4）', async () => {
+    const provider = mockProvider([{ type: 'text', content: QUIZ_JSON }])
+    const hint = '该笔记可能已掌握，可只出 1-2 道 explain 挑战题'
+    await generateReviewQuestions(note, [], provider, 'known_concepts: 费曼学习法(high)', hint)
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('known_concepts: 费曼学习法(high)')
+    expect(systemPrompt).toContain(hint)
+  })
+
+  it('无画像但有毕业引导时仍注入引导', async () => {
+    const provider = mockProvider([{ type: 'text', content: QUIZ_JSON }])
+    await generateReviewQuestions(note, [], provider, undefined, '建议跳过本次复习')
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('建议跳过本次复习')
+  })
+
   it('LLM 返回非 JSON 时抛出错误', async () => {
     const provider = mockProvider([{ type: 'text', content: '抱歉，我无法生成问题。' }])
     await expect(generateReviewQuestions(note, [], provider)).rejects.toThrow('复习出题失败')
@@ -123,6 +148,37 @@ describe('generateReviewQuestions', () => {
   it('LLM 返回 error chunk 时抛出错误', async () => {
     const provider = mockProvider([{ type: 'error', content: '网络超时' }])
     await expect(generateReviewQuestions(note, [], provider)).rejects.toThrow('复习出题失败: 网络超时')
+  })
+})
+
+describe('shouldSuggestGraduation（P3-4 毕业引导判断）', () => {
+  function profileWith(concepts: Array<{ name: string; confidence: string }>): LearnerProfile {
+    return { known_concepts: concepts, active_topics: [], total_sessions: 1, total_notes: 1 }
+  }
+
+  it('画像 high 置信度概念命中且掌握度达阈值时建议毕业', () => {
+    const profile = profileWith([{ name: '费曼学习法', confidence: 'high' }])
+    expect(shouldSuggestGraduation(note, profile, GRADUATION_MASTERY_THRESHOLD)).toBe(true)
+    expect(shouldSuggestGraduation(note, profile, 0.95)).toBe(true)
+  })
+
+  it('掌握度低于阈值时不建议毕业', () => {
+    const profile = profileWith([{ name: '费曼学习法', confidence: 'high' }])
+    expect(shouldSuggestGraduation(note, profile, 0.5)).toBe(false)
+  })
+
+  it('仅 high 置信度概念触发（low/medium 不触发）', () => {
+    expect(shouldSuggestGraduation(note, profileWith([{ name: '费曼学习法', confidence: 'medium' }]), 1)).toBe(false)
+    expect(shouldSuggestGraduation(note, profileWith([{ name: '费曼学习法', confidence: 'low' }]), 1)).toBe(false)
+  })
+
+  it('画像概念未命中该笔记时（即使 high + 高掌握度）不触发', () => {
+    const profile = profileWith([{ name: '工作记忆', confidence: 'high' }])
+    expect(shouldSuggestGraduation(note, profile, 1)).toBe(false)
+  })
+
+  it('画像为空时不触发', () => {
+    expect(shouldSuggestGraduation(note, profileWith([]), 1)).toBe(false)
   })
 })
 

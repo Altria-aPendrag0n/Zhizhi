@@ -189,6 +189,16 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **UI 反馈**：`ReviewDueList` 新增可选 `boostedPaths` prop，命中笔记卡片显示「画像弱项」标记（琥珀色徽章）。
 - **测试**：`review-scheduler.test.ts`（提权一档 / 不低于 0 / 排序正确 / 无画像行为不变）、`learner-note-link.test.ts`（弱项提取）、`review.test.ts`（loadQueue 计算提权、失败置空、可单独刷新）。
 
+### 11.3 复习提问难度个性化（P3-4）
+
+`review-quiz` 注入画像后按 confidence 调节提问深度：
+
+- **画像注入文本**（`learner-profile.ts`）：`describeLearnerProfile(profile)` 生成精简文本——概念名 + 置信度（low 刚接触 / medium 能识别不完整 / high 能独立解释）+ 最近学习日期 + 学习主题，供出题 prompt 注入。
+- **出题参数**（`review-quiz.ts`）：`generateReviewQuestions(note, relatedNotes, provider, learnerProfile?, graduationHint?)`——画像非空时原样注入 `{learner_profile}` 变量；`graduationHint` 存在时追加在画像之后一并注入。
+- **毕业引导**：`shouldSuggestGraduation(note, profile, mastery)`——笔记标题/标签命中画像 **high** 置信度概念且掌握度 ≥ `GRADUATION_MASTERY_THRESHOLD (0.9)` 时返回 true。`LearningHubPage.handleStartReview` 据此生成毕业引导文本（"只出 1-2 道 explain 挑战题，或建议跳过"）传入出题。
+- **SKILL.md**（`src/skills/review-quiz/SKILL.md`）：出题要求第 4 条细化难度映射——low/空 → recognize 为主；medium → recognize 与 apply 均衡；high → 减少 recognize 增加 explain；标注"可能已掌握"时只出 explain 挑战题或建议跳过。
+- **测试**：`review-quiz.test.ts`（画像字段注入 / 毕业引导注入 / shouldSuggestGraduation 判定 6 用例）、`learner-profile.test.ts`（describeLearnerProfile 3 用例）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)

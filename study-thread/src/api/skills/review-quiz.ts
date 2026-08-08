@@ -9,6 +9,8 @@
 import type { LLMProvider, Message, StreamChunk } from '../llm-provider'
 import type { Note, ReviewQuestion } from '../../types'
 import { parseSkill, buildPrompt } from '../../skills/loader'
+import type { LearnerProfile } from '../../utils/learner-profile'
+import { matchConceptExact } from '../../utils/learner-note-link'
 
 // SKILL.md 内容（构建时内联）
 import skillRaw from '../../skills/review-quiz/SKILL.md?raw'
@@ -18,6 +20,9 @@ import feedbackRaw from '../../skills/review-feedback/SKILL.md?raw'
 export const MAX_NOTE_BODY_LENGTH = 4000
 /** 关联笔记每条注入的最大长度 */
 const MAX_RELATED_NOTE_LENGTH = 800
+
+/** 毕业引导阈值：画像 high 置信度概念且复习掌握度 ≥ 0.9 视为可能已掌握（P3-4） */
+export const GRADUATION_MASTERY_THRESHOLD = 0.9
 
 /** 缓存解析后的 Skill 对象 */
 let _quizSkillCache: ReturnType<typeof parseSkill> | null = null
@@ -89,12 +94,26 @@ function validateQuizResponse(data: unknown): data is QuizResponse {
 }
 
 /**
+ * 判断笔记是否达到"可毕业"建议条件（P3-4 掌握度引导）：
+ * 笔记标题/标签命中画像中 high 置信度概念，且当前复习掌握度 ≥ GRADUATION_MASTERY_THRESHOLD。
+ */
+export function shouldSuggestGraduation(note: Note, profile: LearnerProfile, mastery: number): boolean {
+  if (mastery < GRADUATION_MASTERY_THRESHOLD) return false
+  const highConcepts = profile.known_concepts.filter((concept) => concept.confidence === 'high')
+  if (highConcepts.length === 0) return false
+  return highConcepts.some((concept) =>
+    matchConceptExact(concept.name, [{ path: note.path, title: note.title, tags: note.tags }]).length > 0,
+  )
+}
+
+/**
  * 基于原子笔记生成递进复习问题（非流式）
  *
  * @param note - 被复习的原子笔记
  * @param relatedNotes - 关联笔记（RAG 检索结果，可空）
  * @param provider - LLM 提供商
  * @param learnerProfile - 学习者画像文本（可空，用于调节难度分布）
+ * @param graduationHint - 毕业引导提示（可空，由调用方根据画像 confidence 与掌握度计算）
  * @returns 递进问题列表（recognize → apply → explain）
  */
 export async function generateReviewQuestions(
@@ -102,12 +121,15 @@ export async function generateReviewQuestions(
   relatedNotes: Note[],
   provider: LLMProvider,
   learnerProfile?: string,
+  graduationHint?: string,
 ): Promise<ReviewQuestion[]> {
   const skill = getQuizSkill()
+  const profileText = learnerProfile && learnerProfile.trim() ? learnerProfile.trim() : '（暂无学习者画像，按默认难度出题）'
+  const learnerSection = graduationHint ? `${profileText}\n\n${graduationHint}` : profileText
   const systemPrompt = buildPrompt(skill, {
     note_content: serializeNoteForReview(note),
     related_notes: serializeRelatedNotes(relatedNotes),
-    learner_profile: learnerProfile && learnerProfile.trim() ? learnerProfile.trim() : '（暂无学习者画像，按默认难度出题）',
+    learner_profile: learnerSection,
   })
 
   const messages: Message[] = [{ role: 'user', content: '请为上述笔记生成复习问题。' }]

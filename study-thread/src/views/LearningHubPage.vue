@@ -258,7 +258,8 @@ import { parseNoteDate } from '../utils/date'
 import type { Note, ReviewQuestion, ReviewRating, ReviewTask } from '../types'
 import type { SessionTreeNode } from '../utils/session-tree'
 import { createProvider } from '../api/provider-factory'
-import { generateReviewQuestions } from '../api/skills/review-quiz'
+import { generateReviewQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
+import { loadLearnerProfile, describeLearnerProfile } from '../utils/learner-profile'
 import { buildReviewRelatedNotes, createReviewSession } from '../utils/review-session'
 import { saveSessionToVault } from '../utils/session-serializer'
 import { BookOpen, FileText, MessageSquare } from '@lucide/vue'
@@ -381,7 +382,23 @@ async function handleStartReview(task: ReviewTask) {
   let questions: ReviewQuestion[] = []
   if (config.apiKey) {
     try {
-      questions = await generateReviewQuestions(note, relatedNotes, createProvider(config))
+      // P3-4 难度个性化：加载画像注入出题 prompt；高置信度 + 高掌握度时附毕业引导
+      const profile = await loadLearnerProfile(vaultPath)
+      const learnerProfile = describeLearnerProfile(profile)
+      let graduationHint = ''
+      if (shouldSuggestGraduation(note, profile, task.mastery)) {
+        graduationHint =
+          `该笔记关联的概念在你的画像中标记为 high（能独立解释），且复习掌握度已达 ` +
+          `${Math.round(task.mastery * 100)}%。若你觉得已掌握，可只出 1-2 道 explain 挑战题，` +
+          `或建议跳过本次复习。`
+      }
+      questions = await generateReviewQuestions(
+        note,
+        relatedNotes,
+        createProvider(config),
+        learnerProfile,
+        graduationHint,
+      )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '复习出题失败，已进入原文复习模式')
     }
