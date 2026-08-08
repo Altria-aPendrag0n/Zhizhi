@@ -11,15 +11,19 @@ import type { Note, ReviewQuestion } from '../../types'
 import { parseSkill, buildPrompt } from '../../skills/loader'
 import type { LearnerProfile } from '../../utils/learner-profile'
 import { matchConceptExact } from '../../utils/learner-note-link'
+import { extractAllLinks } from '../../parser/wikilink'
 
 // SKILL.md 内容（构建时内联）
 import skillRaw from '../../skills/review-quiz/SKILL.md?raw'
 import feedbackRaw from '../../skills/review-feedback/SKILL.md?raw'
+import clusterRaw from '../../skills/review-cluster/SKILL.md?raw'
 
 /** 笔记正文注入的最大长度（原子笔记为划线原文，防止超长） */
 export const MAX_NOTE_BODY_LENGTH = 4000
 /** 关联笔记每条注入的最大长度 */
 const MAX_RELATED_NOTE_LENGTH = 800
+/** 簇模式下每条笔记正文注入的最大长度（多笔记防上下文超限） */
+const MAX_CLUSTER_NOTE_LENGTH = 1200
 
 /** 毕业引导阈值：画像 high 置信度概念且复习掌握度 ≥ 0.9 视为可能已掌握（P3-4） */
 export const GRADUATION_MASTERY_THRESHOLD = 0.9
@@ -27,6 +31,7 @@ export const GRADUATION_MASTERY_THRESHOLD = 0.9
 /** 缓存解析后的 Skill 对象 */
 let _quizSkillCache: ReturnType<typeof parseSkill> | null = null
 let _feedbackSkillCache: ReturnType<typeof parseSkill> | null = null
+let _clusterQuizSkillCache: ReturnType<typeof parseSkill> | null = null
 
 function getQuizSkill() {
   if (!_quizSkillCache) _quizSkillCache = parseSkill(skillRaw)
@@ -36,6 +41,11 @@ function getQuizSkill() {
 function getFeedbackSkill() {
   if (!_feedbackSkillCache) _feedbackSkillCache = parseSkill(feedbackRaw)
   return _feedbackSkillCache
+}
+
+function getClusterQuizSkill() {
+  if (!_clusterQuizSkillCache) _clusterQuizSkillCache = parseSkill(clusterRaw)
+  return _clusterQuizSkillCache
 }
 
 /**
@@ -162,6 +172,113 @@ export async function generateReviewQuestions(
   return parsed.questions.map((q) => ({ level: q.level as ReviewQuestion['level'], question: q.question }))
 }
 
+/** 簇模式问题：额外携带涉及笔记标题（P4-4 缺口定位依据） */
+export interface ClusterReviewQuestion extends ReviewQuestion {
+  notes?: string[]
+}
+
+/** 簇模式下问题响应的内部结构（notes 为可选字段） */
+interface ClusterQuizResponse {
+  questions: { level: string; question: string; notes?: string[] }[]
+}
+
+function validateClusterQuizResponse(data: unknown): data is ClusterQuizResponse {
+  if (!data || typeof data !== 'object') return false
+  const d = data as Record<string, unknown>
+  if (!Array.isArray(d.questions) || d.questions.length === 0) return false
+  return d.questions.every((q) => {
+    if (!q || typeof q !== 'object') return false
+    const item = q as Record<string, unknown>
+    if (typeof item.question !== 'string' || !LEVELS.includes(item.level as ReviewQuestion['level'])) return false
+    return item.notes === undefined || (Array.isArray(item.notes) && item.notes.every((n) => typeof n === 'string'))
+  })
+}
+
+/**
+ * 序列化复习簇笔记（P4-2 簇模式）：每条含标题（首条为中心）+ 标签 + 正文，正文截断防超长
+ */
+export function serializeClusterNotes(notes: Note[]): string {
+  if (notes.length === 0) return '（空）'
+  return notes
+    .map((note, index) => {
+      const body = note.content.slice(0, MAX_CLUSTER_NOTE_LENGTH)
+      const centerMark = index === 0 ? '（中心笔记）' : ''
+      return `${index + 1}. ${note.title}${centerMark}\n标签: ${note.tags.join(', ')}\n${body}`
+    })
+    .join('\n\n')
+}
+
+/**
+ * 序列化簇内已知 wikilink 关系（P4-2）：输出 "A → B" 形式，仅保留簇内互相指向的链接
+ */
+export function serializeClusterRelations(notes: Note[]): string {
+  const byTitle = new Set(notes.map((note) => note.title))
+  const lines: string[] = []
+  for (const note of notes) {
+    for (const target of extractAllLinks(note.content)) {
+      if (byTitle.has(target)) lines.push(`${note.title} → ${target}`)
+    }
+  }
+  return lines.length > 0 ? lines.join('\n') : '（簇内笔记之间暂无显式 wikilink 关系）'
+}
+
+/**
+ * 基于复习簇生成关系型问题（P4-2 簇模式，非流式）
+ *
+ * 输入 2-5 条簇内笔记 + 其 wikilink 关系，问题侧重概念间联系/区别/因果/适用场景，
+ * 并携带涉及笔记标题（notes 字段），供 P4-4 缺口精准回写。
+ *
+ * @param notes - 复习簇笔记（首条为中心笔记）
+ * @param provider - LLM 提供商
+ * @param learnerProfile - 学习者画像文本（可空）
+ * @returns 关系型问题列表（含涉及笔记标注）
+ */
+export async function generateClusterQuestions(
+  notes: Note[],
+  provider: LLMProvider,
+  learnerProfile?: string,
+): Promise<ClusterReviewQuestion[]> {
+  const skill = getClusterQuizSkill()
+  const systemPrompt = buildPrompt(skill, {
+    notes: serializeClusterNotes(notes),
+    relations: serializeClusterRelations(notes),
+    learner_profile: learnerProfile && learnerProfile.trim() ? learnerProfile.trim() : '（暂无学习者画像，按默认难度出题）',
+  })
+
+  const messages: Message[] = [{ role: 'user', content: '请为上述复习簇生成关系型复习问题。' }]
+
+  let fullResponse = ''
+  for await (const chunk of provider.chat(messages, {
+    systemPrompt,
+    temperature: 0.3,
+    maxTokens: 1024,
+  })) {
+    if (chunk.type === 'text') {
+      fullResponse += chunk.content
+    } else if (chunk.type === 'error') {
+      throw new Error(`复习出题失败: ${chunk.content}`)
+    }
+  }
+
+  const jsonStr = extractJSON(fullResponse)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jsonStr)
+  } catch {
+    throw new Error(`复习出题失败: 无法解析 LLM 响应为 JSON\n响应内容: ${fullResponse.slice(0, 200)}`)
+  }
+
+  if (!validateClusterQuizResponse(parsed)) {
+    throw new Error(`复习出题失败: 响应缺少合法的 questions 字段\n响应内容: ${JSON.stringify(parsed).slice(0, 200)}`)
+  }
+
+  return parsed.questions.map((q) => ({
+    level: q.level as ReviewQuestion['level'],
+    question: q.question,
+    notes: q.notes,
+  }))
+}
+
 /**
  * 对用户作答做费曼式反馈（流式）
  *
@@ -169,6 +286,7 @@ export async function generateReviewQuestions(
  * @param answer - 用户的回答
  * @param note - 被复习的原子笔记（对照标准）
  * @param provider - LLM 提供商
+ * @param clusterNotes - 复习簇上下文（P4-2 可空）：提供后反馈会结合整簇笔记，并指出回答涉及/应涉及哪条笔记
  * @returns 流式反馈迭代器
  */
 export async function* reviewFollowupStream(
@@ -176,10 +294,13 @@ export async function* reviewFollowupStream(
   answer: string,
   note: Note,
   provider: LLMProvider,
+  clusterNotes?: Note[],
 ): AsyncIterable<StreamChunk> {
   const skill = getFeedbackSkill()
   const systemPrompt = buildPrompt(skill, {
     note_content: serializeNoteForReview(note),
+    cluster_notes:
+      clusterNotes && clusterNotes.length > 0 ? serializeClusterNotes(clusterNotes) : '（单条笔记复习，无簇上下文）',
   })
 
   const messages: Message[] = [

@@ -29,7 +29,8 @@
 | **branch-followup** | 进入分支会话追问 | `api/skills/branch-followup.ts` | `fork_context`、`user_question`、`related_notes` | 流式 Markdown（回顾/深入解答/延伸思考） |
 | **update-learner** | 会话结束后生成画像 diff | `api/skills/update-learner.ts` | `session_transcript`、`existing_profile`、`new_notes` | JSON `ProfileDiff` |
 | **review-quiz** | 到期笔记开始复习 | `api/skills/review-quiz.ts` | `note_content`、`related_notes`、`learner_profile` | 出题 JSON `{questions[]}` + 反馈流式 Markdown |
-| **review-feedback** | 复习作答后反馈 | `api/skills/review-quiz.ts`（`reviewFollowupStream`） | `note_content` | 流式 Markdown（费曼式反馈） |
+| **review-feedback** | 复习作答后反馈 | `api/skills/review-quiz.ts`（`reviewFollowupStream`） | `note_content`、`cluster_notes` | 流式 Markdown（费曼式反馈 + 涉及笔记标注） |
+| **review-cluster-quiz** | 簇复习（P4）出题 | `api/skills/review-quiz.ts`（`generateClusterQuestions`） | `notes`、`relations`、`learner_profile` | 关系型出题 JSON `{questions[{level,question,notes}]}` |
 
 ## 4. 执行器详解
 
@@ -110,7 +111,8 @@ reviewFollowupStream(question, answer, note, provider): AsyncIterable<StreamChun
 
 **SKILL.md 要点**：
 - `review-quiz`（version 1.0.0）：复习伴读出题，3-5 个递进问题（识别→应用→解释），问题不透露答案，按画像调整难度分布（low/空→recognize 为主；medium→recognize+apply 均衡；high→explain 为主；标注"可能已掌握"→只出 explain 挑战题或建议跳过，P3-4）。
-- `review-feedback`（version 1.0.0）：费曼式反馈，先肯定再指出缺口，用引导性问题让用户自己补齐，不重复基础概念。
+- `review-feedback`（version 1.0.0）：费曼式反馈，先肯定再指出缺口，用引导性问题让用户自己补齐，不重复基础概念；提供簇上下文时明确指出回答涉及/应涉及哪条笔记（P4-2）。
+- `review-cluster-quiz`（version 1.0.0，P4-2）：知识网络复习伴读，基于 2-5 条簇内笔记 + wikilink 关系生成关系型问题（联系/区别/因果/适用场景），每问携带 `notes` 标注涉及笔记标题。
 
 ## 5. 为什么 V1 不做动态 Skill 选择
 

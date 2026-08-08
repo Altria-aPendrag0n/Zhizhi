@@ -7,6 +7,9 @@ import {
   reviewFollowupStream,
   serializeNoteForReview,
   shouldSuggestGraduation,
+  generateClusterQuestions,
+  serializeClusterNotes,
+  serializeClusterRelations,
   GRADUATION_MASTERY_THRESHOLD,
 } from './review-quiz'
 
@@ -182,6 +185,82 @@ describe('shouldSuggestGraduation（P3-4 毕业引导判断）', () => {
   })
 })
 
+describe('serializeClusterNotes / serializeClusterRelations（P4-2 簇序列化）', () => {
+  const cluster = [
+    { ...note, content: '费曼学习法依赖[[知识缺口]]。' },
+    { ...note, path: 'notes/知识缺口.md', title: '知识缺口', content: '暴露解释中的跳步。' },
+    { ...note, path: 'notes/咖啡.md', title: '咖啡', content: '与学习无关。' },
+  ]
+
+  it('簇笔记含编号、中心标记、标签与正文', () => {
+    const text = serializeClusterNotes(cluster)
+    expect(text).toContain('1. 费曼学习法（中心笔记）')
+    expect(text).toContain('2. 知识缺口')
+    expect(text).toContain('3. 咖啡')
+    expect(text).toContain('标签: 学习方法')
+  })
+
+  it('簇笔记正文超长时截断', () => {
+    const longNote = { ...note, content: 'x'.repeat(3000) }
+    const text = serializeClusterNotes([longNote, cluster[1]])
+    expect(text).not.toContain('x'.repeat(1201))
+  })
+
+  it('关系序列化仅保留簇内互相指向的 wikilink', () => {
+    const text = serializeClusterRelations(cluster)
+    expect(text).toContain('费曼学习法 → 知识缺口')
+    expect(text).not.toContain('咖啡')
+  })
+
+  it('无簇内链接时输出占位文案', () => {
+    const isolated = [note, relatedNote]
+    expect(serializeClusterRelations(isolated)).toContain('暂无显式 wikilink 关系')
+  })
+})
+
+describe('generateClusterQuestions（P4-2 簇模式）', () => {
+  const CLUSTER_JSON =
+    '{"questions":[' +
+    '{"level":"apply","question":"费曼学习法与主动回忆有何联系？","notes":["费曼学习法","主动回忆"]},' +
+    '{"level":"explain","question":"为什么费曼法能暴露知识缺口？","notes":["知识缺口"]}' +
+    ']}'
+  const clusterNotes = [note, { ...note, title: '主动回忆' }, { ...note, title: '知识缺口' }]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('解析关系型问题并携带涉及笔记标注', async () => {
+    const provider = mockProvider([{ type: 'text', content: CLUSTER_JSON }])
+    const questions = await generateClusterQuestions(clusterNotes, provider)
+
+    expect(questions).toHaveLength(2)
+    expect(questions[0]).toMatchObject({ level: 'apply', notes: ['费曼学习法', '主动回忆'] })
+    expect(questions[1].notes).toEqual(['知识缺口'])
+  })
+
+  it('systemPrompt 注入多笔记正文与 wikilink 关系', async () => {
+    const provider = mockProvider([{ type: 'text', content: CLUSTER_JSON }])
+    await generateClusterQuestions(clusterNotes, provider)
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('费曼学习法（中心笔记）')
+    expect(systemPrompt).toContain('主动回忆')
+    expect(systemPrompt).toContain('知识缺口')
+  })
+
+  it('问题缺少 notes 字段时仍可解析（notes 可选）', async () => {
+    const provider = mockProvider([{ type: 'text', content: '{"questions":[{"level":"recognize","question":"什么是费曼学习法？"}]}' }])
+    const questions = await generateClusterQuestions(clusterNotes, provider)
+    expect(questions[0].notes).toBeUndefined()
+  })
+
+  it('LLM 返回非 JSON 时抛出错误', async () => {
+    const provider = mockProvider([{ type: 'text', content: '无法生成。' }])
+    await expect(generateClusterQuestions(clusterNotes, provider)).rejects.toThrow('复习出题失败')
+  })
+})
+
 describe('reviewFollowupStream', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -213,6 +292,27 @@ describe('reviewFollowupStream', () => {
       { role: 'user', content: '复习问题：问题A' },
       { role: 'user', content: '我的回答：回答B' },
     ])
+  })
+
+  it('提供簇上下文时反馈 prompt 注入簇笔记（P4-2）', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反馈' }])
+    for await (const _ of reviewFollowupStream('问题A', '回答B', note, provider, [note, relatedNote])) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('复习簇上下文')
+    expect(systemPrompt).toContain('工作记忆')
+  })
+
+  it('未提供簇上下文时注入单条占位文案', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反馈' }])
+    for await (const _ of reviewFollowupStream('问题A', '回答B', note, provider)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('单条笔记复习，无簇上下文')
   })
 
   it('provider 抛异常时输出 error chunk 而非抛出', async () => {

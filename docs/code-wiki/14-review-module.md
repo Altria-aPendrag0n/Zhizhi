@@ -222,6 +222,19 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **排序**（`collectOneHopNeighbors`）：按链接强度降序——双向（正+反）> 仅正向 > 仅反向；同强度按更新时间较新优先。`linkStrength(note, outgoing, incoming)` 为纯函数。
 - **测试**：`review-cluster.test.ts`（正向 / 反向 / 双向优先 / 强度排序 / 上限截断 / 无邻居退化单条 / 中心缺失 11 用例）。
 
+### 12.2 review-quiz 簇模式（P4-2）
+
+skill 输入扩展为多笔记，生成概念间**关系型问题**（联系 / 区别 / 因果 / 适用场景）：
+
+- **新 SKILL.md**（`src/skills/review-cluster/SKILL.md`）：输入 `{notes}`（2-5 条，首条为中心）+ `{relations}`（簇内 wikilink 指向）+ `{learner_profile}`；出题侧重概念间关系而非孤立事实；每道问题带 `notes` 标注涉及笔记标题（为 P4-4 缺口定位提供依据）。
+- **执行器扩展**（`review-quiz.ts`）：
+  - `serializeClusterNotes(notes)`：多笔记序列化（编号 + 中心标记 + 标签 + 正文，每条截断 1200 字防超长）。
+  - `serializeClusterRelations(notes)`：提取簇内互相指向的 wikilink，输出 `A → B`；无则占位。
+  - `generateClusterQuestions(notes, provider, learnerProfile?)`：非流式出题，返回 `ClusterReviewQuestion[]`（`ReviewQuestion` + 可选 `notes` 字段）；校验兼容缺省 notes 的问题。
+  - **单条模式保持兼容**：`generateReviewQuestions` 签名与行为不变。
+- **答案缺口定位**：`reviewFollowupStream(question, answer, note, provider, clusterNotes?)` 新增可选簇上下文——注入 `review-feedback` SKILL.md 新增的 `{cluster_notes}` 变量；SKILL.md 反馈要求第 6 条：结合整簇判断完整性，明确指出回答涉及/应涉及哪条笔记。
+- **测试**：`review-quiz.test.ts`（簇序列化 4 用例 + generateClusterQuestions 4 用例 + 反馈簇注入 2 用例）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)
