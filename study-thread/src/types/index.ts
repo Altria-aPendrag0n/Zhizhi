@@ -80,6 +80,14 @@ export interface ReviewTask {
   history: ReviewHistoryEntry[] // 复习评级历史（为后续 FSRS 式个性化调度预留）
 }
 
+// 复习出题相关类型（P2 AI 复习会话）
+export type ReviewQuestionLevel = 'recognize' | 'apply' | 'explain'
+
+export interface ReviewQuestion {
+  level: ReviewQuestionLevel
+  question: string
+}
+
 export interface NoteMeta {
   path: string
   title: string

@@ -1,6 +1,6 @@
 # 09 · Skill 系统
 
-> 本模块覆盖：SKILL.md 提示词模板的加载/变量替换，以及三个 LLM Skill 执行器（划线摘录 / 分支追问 / 学习者画像更新）。
+> 本模块覆盖：SKILL.md 提示词模板的加载/变量替换，以及四个 LLM Skill 执行器（划线摘录 / 分支追问 / 学习者画像更新 / 复习出题与反馈）。
 > 相关代码：`study-thread/src/skills/`、`study-thread/src/api/skills/`。
 
 ---
@@ -28,6 +28,8 @@
 | **extract-note** | 用户划线 → 点"生成笔记" | `api/skills/extract-note.ts` | `highlighted_text`、`session_context`、`user_title_block` | JSON `{title, description, tags}` |
 | **branch-followup** | 进入分支会话追问 | `api/skills/branch-followup.ts` | `fork_context`、`user_question`、`related_notes` | 流式 Markdown（回顾/深入解答/延伸思考） |
 | **update-learner** | 会话结束后生成画像 diff | `api/skills/update-learner.ts` | `session_transcript`、`existing_profile`、`new_notes` | JSON `ProfileDiff` |
+| **review-quiz** | 到期笔记开始复习 | `api/skills/review-quiz.ts` | `note_content`、`related_notes`、`learner_profile` | 出题 JSON `{questions[]}` + 反馈流式 Markdown |
+| **review-feedback** | 复习作答后反馈 | `api/skills/review-quiz.ts`（`reviewFollowupStream`） | `note_content` | 流式 Markdown（费曼式反馈） |
 
 ## 4. 执行器详解
 
@@ -87,6 +89,25 @@ interface ProfileDiff {
 
 > 注：V1 中 `update-learner` 执行器与 `DiffView` 组件已就绪，但主流程暂未自动触发（画像更新 UI 尚未接入会话结束流程）。
 
+### 4.4 `review-quiz.ts` — 复习出题与反馈（P2 AI 复习会话）
+
+```ts
+generateReviewQuestions(note, relatedNotes, provider, learnerProfile?): Promise<ReviewQuestion[]>
+reviewFollowupStream(question, answer, note, provider): AsyncIterable<StreamChunk>
+```
+
+流程（出题）：
+1. `getQuizSkill()` → `buildPrompt` 注入：`note_content`（`serializeNoteForReview`：标题/描述/类型/标签/正文，正文截断 4000 字）、`related_notes`（`serializeRelatedNotes`：每条截断 800 字，空则占位）、`learner_profile`（空则占位"按默认难度出题"）。
+2. `provider.chat` 收集完整响应（temperature 0.3，maxTokens 1024）。
+3. `extractJSON` + `JSON.parse` + `validateQuizResponse`（questions 非空、每条含合法 `level` 与 `question`）。
+4. 返回 `ReviewQuestion[]`（`{level: 'recognize'|'apply'|'explain', question}`）。
+
+流程（反馈）：`getFeedbackSkill()` → 注入 `note_content` → 以「复习问题/我的回答」两条 user 消息流式调用（temperature 0.5，maxTokens 2048），异常包装为 `error` chunk。
+
+**SKILL.md 要点**：
+- `review-quiz`（version 1.0.0）：复习伴读出题，3-5 个递进问题（识别→应用→解释），问题不透露答案，按画像调整难度分布。
+- `review-feedback`（version 1.0.0）：费曼式反馈，先肯定再指出缺口，用引导性问题让用户自己补齐，不重复基础概念。
+
 ## 5. 为什么 V1 不做动态 Skill 选择
 
 所有 Skill 触发点都是固定用户操作路径（点"生成笔记" / 进入分支 / 会话结束），没有"用户自由说话、LLM 自行判断用哪个 skill"的场景，因此直接由代码按路径加载对应 SKILL.md。V2 如需多能力动态路由再引入 manifest 模式。
@@ -97,6 +118,7 @@ interface ProfileDiff {
 MainChatPage.handleExtractNote ──► extractNote ──► noteStore.saveNote
 BranchChatPage.handleSend ──► branchFollowupStream ──► chatWithTools ──► CLIENT_TOOLS
 （会话结束）──► generateProfileUpdate ──► DiffView（确认/取消）
+（复习会话，P2）──► generateReviewQuestions ──► 逐题作答 ──► reviewFollowupStream ──► reviewStore.applyReview
 ```
 
 ## 7. 相关测试
