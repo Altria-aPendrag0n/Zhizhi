@@ -155,8 +155,9 @@ d:\work\Zhizhi\
 | 09 | Skill 系统 | [09-skills-system.md](./09-skills-system.md) | `src/skills/`、`src/api/skills/` | SKILL.md 模板加载 + 三个 LLM 执行器 |
 | 10 | Embedding 向量引擎 | [10-embedding-module.md](./10-embedding-module.md) | `src/embedding/`、`src/utils/knowledge-retrieval.ts` | 本地离线向量化、索引、相似检索、RAG 注入 |
 | 11 | 解析器与序列化工具 | [11-parsers-serializers.md](./11-parsers-serializers.md) | `src/parser/`、`src/utils/`（序列化/树/日期等） | frontmatter/wikilink 解析、会话与笔记序列化、分支树 |
-| 12 | Pinia 状态管理 | [12-stores.md](./12-stores.md) | `src/stores/` | 5 个 store 的状态、动作与持久化契约 |
+| 12 | Pinia 状态管理 | [12-stores.md](./12-stores.md) | `src/stores/` | 6 个 store（含复习队列）的状态、动作与持久化契约 |
 | 13 | Rust 后端 | [13-rust-backend.md](./13-rust-backend.md) | `src-tauri/` | Tauri 装配、10 个文件系统命令、文件监听 |
+| 14 | 间隔复习模块 | [14-review-module.md](./14-review-module.md) | `src/utils/review-scheduler.ts`、`src/stores/review.ts`、`src/components/review/` | SRS 间隔复习调度、`review-state.json` 队列、到期清单 UI |
 
 ---
 

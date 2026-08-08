@@ -15,6 +15,8 @@ import {
 } from '../utils/note-serializer'
 import { removeSessionReferences } from '../utils/session-linker'
 import { loadStoredValue, saveStoredValue } from '../utils/local-storage'
+import { createReviewTask } from '../utils/review-scheduler'
+import { useReviewStore } from './review'
 
 const LOCAL_NOTES_KEY = 'study-thread-extracted-notes'
 
@@ -148,11 +150,15 @@ export const useNoteStore = defineStore('notes', () => {
       const fileName = path.split(/[\\/]/).pop() || ''
       const meta = await readNoteMeta(path, fileName, content)
       const { body } = parseFrontmatter(content)
+      // 复习状态从复习队列镜像（权威数据在 review store 的 review-state.json）
+      const queued = useReviewStore().queue.find((item) => item.notePath === path)
       const note: Note = {
         ...meta,
         type: meta.type as Note['type'],
         confidence: 0,
-        review: { next: null, interval: 0, mastery: 0 },
+        review: queued
+          ? { next: queued.dueAt, interval: queued.interval, mastery: queued.mastery }
+          : { next: null, interval: 0, mastery: 0 },
         content: body,
       }
       noteIndex.value.set(path, note)
@@ -212,6 +218,12 @@ export const useNoteStore = defineStore('notes', () => {
       await writeFile(getNoteMetaPath(filePath), serializeNoteMeta(noteMeta, extractAllLinks(highlightSource)))
       upsertLocalNote(noteMeta)
       notes.value = sortNotes([...notes.value.filter((item) => item.path !== filePath), noteMeta])
+      // 新笔记进入复习队列（次日到期），失败不影响笔记保存
+      try {
+        await useReviewStore().enqueue(createReviewTask(filePath, note.title, note.type))
+      } catch (error) {
+        console.error('加入复习队列失败:', error)
+      }
       return filePath
     } catch (e) {
       console.error('保存笔记失败:', e)
@@ -245,6 +257,12 @@ export const useNoteStore = defineStore('notes', () => {
         } catch {
           // 引用清理失败不影响删除结果
         }
+      }
+      // 从复习队列级联移除，失败不影响删除结果
+      try {
+        await useReviewStore().removeFromQueue(path)
+      } catch {
+        // 复习队列清理失败不影响删除结果
       }
       // 通知聊天页等已挂载界面刷新引用（组件实例可能因路由 key 相同而复用，不会重新解析）
       lastDeletedNotePath.value = path

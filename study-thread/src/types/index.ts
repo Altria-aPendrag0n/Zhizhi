@@ -49,12 +49,35 @@ export interface Note {
     highlight: string
   }
   confidence: number
+  /** 复习进度（与 `.study-thread/review-state.json` 队列保持一致的镜像字段，权威数据在 review store） */
   review: {
+    /** 下次复习时间（ISO），null 表示未进入复习队列 */
     next: string | null
+    /** 当前间隔（天） */
     interval: number
+    /** 掌握度 0-1（由复习评级推进） */
     mastery: number
   }
   content: string
+}
+
+// 复习相关类型（P1 间隔复习调度层）
+export type ReviewRating = 'again' | 'hard' | 'good' | 'easy'
+
+export interface ReviewHistoryEntry {
+  at: string // ISO 时间
+  rating: ReviewRating
+}
+
+/** 复习队列中的一条任务，持久化于 `<vault>/.study-thread/review-state.json` */
+export interface ReviewTask {
+  notePath: string // notes/<标题>.md
+  title: string // 冗余标题，列表展示无需重读文件
+  type: string // concept | method | fact | question（决定间隔序列）
+  dueAt: string // ISO 时间，到期时间
+  interval: number // 当前间隔（天）
+  mastery: number // 掌握度 0-1
+  history: ReviewHistoryEntry[] // 复习评级历史（为后续 FSRS 式个性化调度预留）
 }
 
 export interface NoteMeta {

@@ -1,6 +1,7 @@
 # 12 · Pinia 状态管理
 
-> 本模块覆盖：前端全部 5 个 Pinia store 的状态、动作与持久化契约。
+> 本模块覆盖：前端 6 个 Pinia store（settings / vault / session / notes / references / review）的状态、动作与持久化契约。
+> 复习队列 store（`review`）由 [14-review-module.md](./14-review-module.md) 单独描述。
 > 相关代码：`study-thread/src/stores/`。
 
 ---

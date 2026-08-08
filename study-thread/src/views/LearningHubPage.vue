@@ -20,6 +20,17 @@
           >
             概念网络
           </button>
+          <button
+            class="hub-nav__item"
+            :class="{ active: currentView === 'review' }"
+            type="button"
+            @click="currentView = 'review'"
+          >
+            复习
+            <span v-if="reviewStore.dueCount > 0" class="hub-nav__badge">
+              {{ reviewStore.dueCount }}
+            </span>
+          </button>
         </nav>
       </aside>
 
@@ -134,6 +145,25 @@
       </div>
     </template>
 
+    <!-- 复习视图：到期间隔复习 -->
+    <template v-else-if="currentView === 'review'">
+      <section class="learning-hub__intro" aria-labelledby="review-title">
+        <div class="eyebrow">Spaced Repetition</div>
+        <h2 id="review-title" class="learning-hub__hero-title">复习 · 在间隔后重新提取</h2>
+        <p class="learning-hub__hero-desc">
+          到期笔记按遗忘优先级排列。复习后按记忆情况评级，系统据此安排下一次间隔。
+        </p>
+      </section>
+
+      <div class="learning-hub__section">
+        <ReviewDueList
+          :tasks="reviewStore.dueTasks"
+          @rate="handleRate"
+          @open="handleOpenReview"
+        />
+      </div>
+    </template>
+
     <!-- 概念关系网络视图 -->
     <template v-else-if="currentView === 'network'">
       <section class="learning-hub__intro" aria-labelledby="network-title">
@@ -218,20 +248,28 @@ import { ref, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
+import { useReviewStore } from '../stores/review'
+import { useVaultStore } from '../stores/vault'
+import { useToast } from '../composables/useToast'
 import { parseNoteDate } from '../utils/date'
+import type { ReviewRating, ReviewTask } from '../types'
 import type { SessionTreeNode } from '../utils/session-tree'
 import { BookOpen, FileText, MessageSquare } from '@lucide/vue'
 import BranchTree from '../components/chat/BranchTree.vue'
+import ReviewDueList from '../components/review/ReviewDueList.vue'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
+const reviewStore = useReviewStore()
+const vaultStore = useVaultStore()
+const toast = useToast()
 /** 知枝学习项目下新建会话（由 App 提供，避免跳转到无会话的空白聊天界面） */
 const createNewThread = inject<(projectId?: string) => void>('createNewThread', () => {})
 
 const sessionTree = ref<SessionTreeNode | null>(null)
 /** 当前视图：由左侧"学习地图切换管理栏"控制 */
-const currentView = ref<'overview' | 'network'>('overview')
+const currentView = ref<'overview' | 'network' | 'review'>('overview')
 
 interface ConceptRelation {
   id: string
@@ -275,6 +313,11 @@ onMounted(() => {
   stats.value.totalNotes = noteStore.noteCount
   stats.value.totalSessions = sessionStore.sessions.length
 
+  // 加载复习队列（vault 就绪时；未打开 vault 时队列为空）
+  if (vaultStore.vaultPath) {
+    reviewStore.loadQueue(vaultStore.vaultPath)
+  }
+
   // 最近活动
   const activities: ActivityItem[] = []
   for (const s of sessionStore.sessions) {
@@ -287,6 +330,29 @@ onMounted(() => {
   }
   recentActivities.value = activities.slice(0, 10)
 })
+
+/** 复习评级：回写复习队列并轻提示下一次间隔 */
+async function handleRate(task: ReviewTask, rating: ReviewRating) {
+  const updated = await reviewStore.applyReview(task.notePath, rating)
+  if (updated) {
+    toast.success(`已评级「${ratingLabel(rating)}」，${updated.interval} 天后再次复习`)
+  }
+}
+
+/** 打开笔记详情（从复习卡片跳转） */
+function handleOpenReview(task: ReviewTask) {
+  router.push(`/notes/${encodeURIComponent(task.notePath)}`)
+}
+
+function ratingLabel(rating: ReviewRating): string {
+  const labels: Record<ReviewRating, string> = {
+    again: '忘了',
+    hard: '模糊',
+    good: '记得',
+    easy: '熟练',
+  }
+  return labels[rating]
+}
 
 function handleSelectNode(nodeId: string) {
   // 跳转到对应会话（携带 thread 参数，避免进入无会话的空白聊天界面）
@@ -380,6 +446,21 @@ function formatRelativeTime(iso: string): string {
   border-radius: 2px;
   background: var(--brand);
   content: '';
+}
+
+.hub-nav__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--state-error);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .hub-content {
