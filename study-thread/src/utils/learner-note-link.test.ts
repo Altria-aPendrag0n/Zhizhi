@@ -18,6 +18,7 @@ import {
   matchConceptExact,
   matchConceptSemantic,
   linkConceptsToNotes,
+  collectWeakNotePaths,
   getLearnerLinkCache,
   setLearnerLinkCache,
   invalidateLearnerLinkCache,
@@ -179,6 +180,30 @@ describe('linkConceptsToNotes（主入口）', () => {
     const empty = profile([])
     const map = await linkConceptsToNotes(empty, notes)
     expect(map.size).toBe(0)
+  })
+})
+
+describe('collectWeakNotePaths（P3-3 提权信号提取）', () => {
+  it('low/medium 置信度概念对应笔记被纳入弱项集合', () => {
+    const p = profile(['弱概念', '强概念'])
+    p.known_concepts[0].confidence = 'low'
+    p.known_concepts[1].confidence = 'high'
+    const map = new Map<string, string[]>([
+      ['弱概念', ['/a.md', '/b.md']],
+      ['强概念', ['/c.md']],
+    ])
+
+    const weak = collectWeakNotePaths(p, map)
+    expect([...weak]).toEqual(['/a.md', '/b.md'])
+  })
+
+  it('无映射或没有弱项概念时返回空集合', () => {
+    const p = profile(['概念'])
+    p.known_concepts[0].confidence = 'high'
+    expect(collectWeakNotePaths(p, new Map())).toEqual(new Set())
+
+    const empty = profile([])
+    expect(collectWeakNotePaths(empty, new Map())).toEqual(new Set())
   })
 })
 

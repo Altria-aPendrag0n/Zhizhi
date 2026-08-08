@@ -179,6 +179,16 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **映射缓存**：`get/set/invalidateLearnerLinkCache(vaultPath)` 按 vault 缓存；笔记变更（`notes store` 的 updateNote / saveNote / deleteNote）时调用 `invalidateLearnerLinkCache` 使缓存失效，下次读取重新计算。
 - **测试**：`src/utils/learner-note-link.test.ts`（标题 / 标签 / 语义三种匹配路径、低相似度过滤、合并去重、缓存失效 18 用例）。
 
+### 11.2 低掌握度概念复习提权（P3-3）
+
+画像 low/medium 置信度概念对应的笔记在到期队列中优先安排：
+
+- **调度器**（`src/utils/review-scheduler.ts`）：新增 `priorityWithProfile(task, boostedPaths)`——命中提权集合的笔记优先级提升一档（`Math.max(0, base - 1)`），null/空集合时行为与 `priorityOf` 完全一致（无画像不改变原调度）；`buildDueList` 新增可选第三个参数 `boostedPaths`。
+- **提权信号提取**（`learner-note-link.ts`）：`collectWeakNotePaths(profile, map)` 从画像与概念→笔记映射中收集 low/medium 置信度概念对应笔记路径（high 置信度不计入弱项）。
+- **review store**（`src/stores/review.ts`）：新增 `boostedNotePaths` 状态；`loadQueue` 加载队列后调用 `refreshBoostedPaths(vaultPath)`——加载画像 → `linkConceptsToNotes` 计算映射 → `collectWeakNotePaths` 提取弱项；任何一步失败静默置空（无画像 / 引擎未就绪 / 笔记未加载都不影响复习）。`dueTasks` 排序时传入提权集合。
+- **UI 反馈**：`ReviewDueList` 新增可选 `boostedPaths` prop，命中笔记卡片显示「画像弱项」标记（琥珀色徽章）。
+- **测试**：`review-scheduler.test.ts`（提权一档 / 不低于 0 / 排序正确 / 无画像行为不变）、`learner-note-link.test.ts`（弱项提取）、`review.test.ts`（loadQueue 计算提权、失败置空、可单独刷新）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)

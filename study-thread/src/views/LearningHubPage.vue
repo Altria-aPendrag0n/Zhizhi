@@ -158,6 +158,7 @@
       <div class="learning-hub__section">
         <ReviewDueList
           :tasks="reviewStore.dueTasks"
+          :boosted-paths="reviewStore.boostedNotePaths"
           @rate="handleRate"
           @open="handleOpenReview"
           @start="handleStartReview"

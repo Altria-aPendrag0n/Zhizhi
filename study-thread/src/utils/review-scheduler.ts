@@ -100,13 +100,37 @@ export function priorityOf(task: ReviewTask): number {
 }
 
 /**
- * 到期任务列表：dueAt 已到者，按优先级升序（同优先级按到期时间先后）。
+ * 画像提权后的优先级（P3-3：低掌握度概念复习提权）：
+ * 关联到画像 low/medium 置信度概念的笔记优先级提升一档（更优先，且不低于 0）。
+ * boostedPaths 为提权笔记路径集合；null/空集合时行为与 priorityOf 完全一致。
  */
-export function buildDueList(tasks: ReviewTask[], now: Date = new Date()): ReviewTask[] {
+export function priorityWithProfile(
+  task: ReviewTask,
+  boostedPaths: ReadonlySet<string> | null | undefined,
+): number {
+  const base = priorityOf(task)
+  if (!boostedPaths || !boostedPaths.has(task.notePath)) return base
+  return Math.max(0, base - 1)
+}
+
+/**
+ * 到期任务列表：dueAt 已到者，按优先级升序（同优先级按到期时间先后）。
+ * boostedPaths（可选）：画像 low/medium 概念关联笔记的提权信号（P3-3），
+ * 缺省时不提权，保持原调度行为。
+ */
+export function buildDueList(
+  tasks: ReviewTask[],
+  now: Date = new Date(),
+  boostedPaths?: ReadonlySet<string>,
+): ReviewTask[] {
   const nowMs = now.getTime()
   return tasks
     .filter((task) => new Date(task.dueAt).getTime() <= nowMs)
-    .sort((a, b) => priorityOf(a) - priorityOf(b) || a.dueAt.localeCompare(b.dueAt))
+    .sort(
+      (a, b) =>
+        priorityWithProfile(a, boostedPaths) - priorityWithProfile(b, boostedPaths) ||
+        a.dueAt.localeCompare(b.dueAt),
+    )
 }
 
 /** 到期任务数量（学习地图徽标用） */

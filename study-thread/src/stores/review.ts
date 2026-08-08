@@ -3,6 +3,9 @@ import { ref, computed } from 'vue'
 import type { ReviewRating, ReviewTask } from '../types'
 import { createDir, readFile, writeFile } from '../utils/vault-fs'
 import { applyRating, buildDueList, countDue } from '../utils/review-scheduler'
+import { loadLearnerProfile } from '../utils/learner-profile'
+import { linkConceptsToNotes, collectWeakNotePaths } from '../utils/learner-note-link'
+import { useNoteStore } from './notes'
 
 /** 复习队列持久化路径：<vault>/.study-thread/review-state.json（DEVELOPMENT.md 已规划） */
 function reviewStatePath(vaultPath: string): string {
@@ -19,8 +22,13 @@ export const useReviewStore = defineStore('review', () => {
   const isLoading = ref(false)
   const currentVaultPath = ref<string | null>(null)
 
-  /** 到期任务（按优先级排序） */
-  const dueTasks = computed(() => buildDueList(queue.value))
+  /** 画像 low/medium 置信度概念对应笔记路径（复习提权信号，P3-3） */
+  const boostedNotePaths = ref<string[]>([])
+
+  /** 到期任务（按优先级排序；画像弱项笔记提权） */
+  const dueTasks = computed(() =>
+    buildDueList(queue.value, new Date(), new Set(boostedNotePaths.value)),
+  )
   /** 到期任务数量（学习地图徽标） */
   const dueCount = computed(() => countDue(queue.value))
 
@@ -47,6 +55,22 @@ export const useReviewStore = defineStore('review', () => {
       queue.value = []
     } finally {
       isLoading.value = false
+    }
+    // 画像弱项提权信号（失败不影响队列本身，静默置空）
+    await refreshBoostedPaths(vaultPath)
+  }
+
+  /**
+   * 加载画像 → 计算概念→笔记映射 → 提取 low/medium 置信度概念对应笔记路径（P3-3 提权信号）。
+   * 任何一步失败（无画像 / 引擎未就绪 / 笔记未加载）都静默置空，复习行为保持不变。
+   */
+  async function refreshBoostedPaths(vaultPath: string): Promise<void> {
+    try {
+      const profile = await loadLearnerProfile(vaultPath)
+      const map = await linkConceptsToNotes(profile, useNoteStore().notes)
+      boostedNotePaths.value = [...collectWeakNotePaths(profile, map)]
+    } catch {
+      boostedNotePaths.value = []
     }
   }
 
@@ -77,9 +101,11 @@ export const useReviewStore = defineStore('review', () => {
     queue,
     isLoading,
     currentVaultPath,
+    boostedNotePaths,
     dueTasks,
     dueCount,
     loadQueue,
+    refreshBoostedPaths,
     enqueue,
     applyReview,
     removeFromQueue,

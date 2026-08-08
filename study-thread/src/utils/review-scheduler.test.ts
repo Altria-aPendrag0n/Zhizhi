@@ -7,6 +7,7 @@ import {
   buildDueList,
   countDue,
   priorityOf,
+  priorityWithProfile,
   getIntervals,
 } from './review-scheduler'
 
@@ -117,5 +118,50 @@ describe('buildDueList / countDue', () => {
   it('无到期任务时返回空列表', () => {
     expect(buildDueList([task({ dueAt: '2026-08-12T00:00:00.000Z' })], NOW)).toEqual([])
     expect(countDue([], NOW)).toBe(0)
+  })
+})
+
+describe('priorityWithProfile（P3-3 画像提权）', () => {
+  it('提权笔记优先级提升一档（更优先）', () => {
+    const t = task({ mastery: 0.9, type: 'fact' })
+    const boosted = new Set(['notes/测试.md'])
+    expect(priorityOf(t)).toBe(5)
+    expect(priorityWithProfile(t, boosted)).toBe(4)
+  })
+
+  it('非提权笔记优先级不变', () => {
+    const t = task({ mastery: 0.9, type: 'fact' })
+    expect(priorityWithProfile(t, new Set(['notes/其他.md']))).toBe(priorityOf(t))
+  })
+
+  it('null 提权集合时行为与 priorityOf 一致', () => {
+    const t = task({ mastery: 0.9, type: 'fact' })
+    expect(priorityWithProfile(t, null)).toBe(priorityOf(t))
+  })
+
+  it('优先级不低于 0', () => {
+    const t = task({ mastery: 0.2 }) // 基础优先级 0
+    expect(priorityWithProfile(t, new Set(['notes/测试.md']))).toBe(0)
+  })
+})
+
+describe('buildDueList 画像提权排序', () => {
+  it('画像弱项笔记在同等条件下排到前面', () => {
+    // 同为高掌握度的 fact 笔记（优先级 5），画像弱项笔记被提升到 4
+    const weak = task({ notePath: 'notes/弱项.md', mastery: 0.9, type: 'fact', dueAt: '2026-08-08T06:00:00.000Z' })
+    const normal = task({ notePath: 'notes/普通.md', mastery: 0.9, type: 'fact', dueAt: '2026-08-08T05:00:00.000Z' })
+
+    const boosted = new Set(['notes/弱项.md'])
+    const due = buildDueList([normal, weak], NOW, boosted)
+    expect(due.map((t) => t.notePath)).toEqual(['notes/弱项.md', 'notes/普通.md'])
+  })
+
+  it('不传提权集合时排序与原来一致', () => {
+    const weak = task({ notePath: 'notes/弱项.md', mastery: 0.9, type: 'fact', dueAt: '2026-08-08T06:00:00.000Z' })
+    const normal = task({ notePath: 'notes/普通.md', mastery: 0.9, type: 'fact', dueAt: '2026-08-08T05:00:00.000Z' })
+
+    const due = buildDueList([weak, normal], NOW)
+    // 同优先级按到期时间先后：普通(05:00) 先于 弱项(06:00)
+    expect(due.map((t) => t.notePath)).toEqual(['notes/普通.md', 'notes/弱项.md'])
   })
 })

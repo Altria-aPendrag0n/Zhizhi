@@ -123,6 +123,19 @@ export async function linkConceptsToNotes(
 // 下次读取时重新计算（由 notes store 的变更动作触发失效）。
 // ---------------------------------------------------------------------------
 
+/**
+ * 从画像与概念→笔记映射中提取"画像弱项"笔记路径（P3-3 复习提权信号）：
+ * 仅保留关联到 low / medium 置信度概念的笔记（high 置信度概念不视为弱项）。
+ */
+export function collectWeakNotePaths(profile: LearnerProfile, map: ConceptNoteMap): Set<string> {
+  const weak = new Set<string>()
+  for (const concept of profile.known_concepts) {
+    if (concept.confidence !== 'low' && concept.confidence !== 'medium') continue
+    for (const path of map.get(concept.name) ?? []) weak.add(path)
+  }
+  return weak
+}
+
 /** 缓存：vaultPath → ConceptNoteMap */
 const linkCache = new Map<string, ConceptNoteMap>()
 

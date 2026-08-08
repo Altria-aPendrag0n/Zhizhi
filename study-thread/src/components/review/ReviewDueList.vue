@@ -14,6 +14,7 @@
       <div class="review-card__main">
         <div class="review-card__top">
           <span class="review-card__title">{{ task.title }}</span>
+          <span v-if="isBoosted(task)" class="review-card__boost">画像弱项</span>
           <span class="review-card__type" :class="`review-card__type--${task.type}`">
             {{ typeLabel(task.type) }}
           </span>
@@ -63,13 +64,18 @@
 <script setup lang="ts">
 import type { ReviewRating, ReviewTask } from '../../types'
 
-defineProps<{ tasks: ReviewTask[] }>()
+const props = defineProps<{ tasks: ReviewTask[]; boostedPaths?: string[] }>()
 
 defineEmits<{
   rate: [task: ReviewTask, rating: ReviewRating]
   open: [task: ReviewTask]
   start: [task: ReviewTask]
 }>()
+
+/** 该笔记是否关联到画像 low/medium 置信度概念（画像弱项，P3-3 提权标记） */
+function isBoosted(task: ReviewTask): boolean {
+  return props.boostedPaths?.includes(task.notePath) ?? false
+}
 
 const RATINGS: { value: ReviewRating; label: string; hint: string }[] = [
   { value: 'again', label: '忘了', hint: '完全没记住，回退间隔' },
@@ -171,6 +177,18 @@ function ratingLabel(rating: ReviewRating | null): string {
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 4px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.review-card__boost {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid #e6b656;
+  border-radius: 4px;
+  background: #fff8e6;
+  color: #a06a00;
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.04em;
