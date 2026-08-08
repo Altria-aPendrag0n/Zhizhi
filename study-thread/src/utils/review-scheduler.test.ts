@@ -8,6 +8,7 @@ import {
   countDue,
   priorityOf,
   priorityWithProfile,
+  summarizeReviewPerformance,
   getIntervals,
 } from './review-scheduler'
 
@@ -163,5 +164,60 @@ describe('buildDueList 画像提权排序', () => {
     const due = buildDueList([weak, normal], NOW)
     // 同优先级按到期时间先后：普通(05:00) 先于 弱项(06:00)
     expect(due.map((t) => t.notePath)).toEqual(['notes/普通.md', 'notes/弱项.md'])
+  })
+})
+
+describe('summarizeReviewPerformance（P3-5 复习表现序列化）', () => {
+  it('按最近 windowSize 次评级汇总分布与掌握度', () => {
+    const rated = task({
+      notePath: 'notes/费曼.md',
+      title: '费曼学习法',
+      mastery: 0.8,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'again' },
+        { at: '2026-08-04T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-07T00:00:00.000Z', rating: 'good' },
+      ],
+    })
+
+    const text = summarizeReviewPerformance([rated], ['notes/费曼.md'])
+
+    expect(text).toContain('费曼学习法')
+    expect(text).toContain('近 3 次评级')
+    expect(text).toContain('again × 1')
+    expect(text).toContain('good × 2')
+    expect(text).toContain('掌握度 80%')
+  })
+
+  it('超过 windowSize 的评级只取最近 N 次', () => {
+    const rated = task({
+      notePath: 'notes/a.md',
+      title: '笔记A',
+      history: Array.from({ length: 8 }, (_, i) => ({
+        at: `2026-08-0${i + 1}T00:00:00.000Z`,
+        rating: (i % 2 === 0 ? 'good' : 'easy') as ReviewTask['history'][number]['rating'],
+      })),
+    })
+
+    const text = summarizeReviewPerformance([rated], ['notes/a.md'], 3)
+    expect(text).toContain('近 3 次评级')
+    expect(text).toContain('easy × 2')
+    expect(text).toContain('good × 1')
+  })
+
+  it('无复习记录的笔记被忽略，全部无记录时返回空字符串', () => {
+    const fresh = task({ notePath: 'notes/新.md', title: '新笔记', history: [] })
+    const text = summarizeReviewPerformance([fresh], ['notes/新.md'])
+    expect(text).toBe('')
+  })
+
+  it('路径未命中的笔记被忽略', () => {
+    const rated = task({
+      notePath: 'notes/a.md',
+      title: '笔记A',
+      history: [{ at: '2026-08-01T00:00:00.000Z', rating: 'good' }],
+    })
+    const text = summarizeReviewPerformance([rated], ['notes/其他.md'])
+    expect(text).toBe('')
   })
 })

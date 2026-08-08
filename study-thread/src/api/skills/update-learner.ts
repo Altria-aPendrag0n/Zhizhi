@@ -118,6 +118,7 @@ function validateProfileDiff(data: unknown): data is ProfileDiff {
  * @param existingProfile - 现有 learner.md 内容
  * @param newNotes - 本次会话生成的笔记
  * @param provider - LLM 提供商
+ * @param reviewPerformance - 复习表现摘要（P3-5：近 N 次评级分布与掌握度，可空），供 confidence 升降档参考
  * @returns 画像更新 diff
  */
 export async function generateProfileUpdate(
@@ -125,12 +126,14 @@ export async function generateProfileUpdate(
   existingProfile: string,
   newNotes: Note[],
   provider: LLMProvider,
+  reviewPerformance?: string,
 ): Promise<ProfileDiff> {
   const skill = getSkill()
   const systemPrompt = buildPrompt(skill, {
     session_transcript: serializeSession(session),
     existing_profile: existingProfile || '（尚无现有画像）',
     new_notes: serializeNotes(newNotes),
+    review_performance: reviewPerformance && reviewPerformance.trim() ? reviewPerformance.trim() : '（暂无复习表现数据）',
   })
 
   const messages: Message[] = [

@@ -137,3 +137,32 @@ export function buildDueList(
 export function countDue(tasks: ReviewTask[], now: Date = new Date()): number {
   return buildDueList(tasks, now).length
 }
+
+/**
+ * 汇总指定笔记的复习表现文本（P3-5 复习评级回写画像）：
+ * 取每篇笔记最近 windowSize 次评级分布与当前掌握度，供 update-learner 作为升降档依据。
+ * 无复习记录（history 为空）或路径未命中时忽略该笔记；全部无记录时返回空字符串。
+ */
+export function summarizeReviewPerformance(
+  tasks: ReviewTask[],
+  notePaths: string[],
+  windowSize = 5,
+): string {
+  const lines: string[] = []
+  for (const path of notePaths) {
+    const task = tasks.find((t) => t.notePath === path)
+    if (!task || task.history.length === 0) continue
+    const recent = task.history.slice(-Math.max(1, windowSize))
+    const counts: Record<ReviewRating, number> = { again: 0, hard: 0, good: 0, easy: 0 }
+    for (const entry of recent) counts[entry.rating]++
+    const distribution = Object.entries(counts)
+      .filter(([, count]) => count > 0)
+      .map(([rating, count]) => `${rating} × ${count}`)
+      .join('、')
+    lines.push(
+      `- ${task.title}：近 ${recent.length} 次评级（${distribution}），当前掌握度 ${Math.round(task.mastery * 100)}%`,
+    )
+  }
+  if (lines.length === 0) return ''
+  return `复习表现（最近 ${windowSize} 次评级分布与掌握度，来自间隔复习系统）：\n${lines.join('\n')}`
+}

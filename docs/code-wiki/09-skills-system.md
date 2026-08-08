@@ -91,6 +91,7 @@ interface ProfileDiff {
 - 画像持久化于 `<vault>/.study-thread/learner.md`（YAML frontmatter：`known_concepts[{name, confidence, last_session}]`、`active_topics`、`total_sessions`、`total_notes`、`preferred_depth`、`preferred_style`），读写由 `src/utils/learner-profile.ts` 负责（`loadLearnerProfile` / `saveLearnerProfile` / `applyProfileDiff`）。
 - MainChatPage / BranchChatPage 在一次流式回答结束（`finalizeResponse`）时调用 `maybeTriggerLearnerUpdate()`：校验 vault 与 API Key、消息数 ≥ 3、每会话仅触发一次（`useLearnerUpdate` 模块级 Set 去重），组装本次新生成笔记后调 `triggerLearnerUpdate`。
 - `useLearnerUpdate`（`src/composables/useLearnerUpdate.ts`）编排：加载现有画像 → `generateProfileUpdate` 生成 diff → `LearnerProfileDialog`（复用 DiffView）展示 → 用户确认后 `applyProfileDiff` + `saveLearnerProfile`（`total_sessions` 自增）；生成失败静默关闭，不打断学习流程。
+- **复习表现回写（P3-5）**：`generateProfileUpdate` 第 5 参 `reviewPerformance`（`summarizeReviewPerformance` 汇总的最近 N 次评级分布 + 掌握度）注入 SKILL.md `{review_performance}`，由 AI 判断 confidence 升降档，仅通过 `updated_concepts` 输出建议、不直接改画像。
 
 ### 4.4 `review-quiz.ts` — 复习出题与反馈（P2 AI 复习会话）
 

@@ -17,6 +17,8 @@ import {
   applyProfileDiff,
   serializeLearnerProfile,
 } from '../utils/learner-profile'
+import { summarizeReviewPerformance } from '../utils/review-scheduler'
+import { useReviewStore } from '../stores/review'
 
 /** 已触发过画像更新的会话 id（每会话一次） */
 const updatedSessionIds = new Set<string>()
@@ -57,7 +59,12 @@ export function useLearnerUpdate() {
     try {
       const existing = await loadLearnerProfile(vaultPath)
       const existingText = existing.known_concepts.length > 0 ? serializeLearnerProfile(existing) : ''
-      diff.value = await generateProfileUpdate(session, existingText, newNotes, provider)
+      // P3-5：本次会话生成笔记的复习表现（评级分布 + 掌握度），供 confidence 升降档参考
+      const reviewPerformance = summarizeReviewPerformance(
+        useReviewStore().queue,
+        newNotes.map((note) => note.path),
+      )
+      diff.value = await generateProfileUpdate(session, existingText, newNotes, provider, reviewPerformance)
     } catch {
       // 生成失败静默关闭（不打断学习流程）
       diff.value = null

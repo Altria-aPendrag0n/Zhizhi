@@ -199,6 +199,16 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **SKILL.md**（`src/skills/review-quiz/SKILL.md`）：出题要求第 4 条细化难度映射——low/空 → recognize 为主；medium → recognize 与 apply 均衡；high → 减少 recognize 增加 explain；标注"可能已掌握"时只出 explain 挑战题或建议跳过。
 - **测试**：`review-quiz.test.ts`（画像字段注入 / 毕业引导注入 / shouldSuggestGraduation 判定 6 用例）、`learner-profile.test.ts`（describeLearnerProfile 3 用例）。
 
+### 11.4 复习评级回写画像（P3-5）
+
+复习评级表现作为下一次画像更新时 confidence 升降档的依据：
+
+- **评级统计**（`review-scheduler.ts`）：`summarizeReviewPerformance(tasks, notePaths, windowSize = 5)` 按笔记汇总最近 N 次评级分布（again/hard/good/easy 计数）与当前掌握度，无复习记录时忽略，全部无记录返回空字符串。
+- **回写机制**（`update-learner.ts`）：`generateProfileUpdate(session, existingProfile, newNotes, provider, reviewPerformance?)` 新增第 5 参——复习表现摘要注入 SKILL.md 的 `{review_performance}` 变量（空时占位"（暂无复习表现数据）"），由 AI 综合判断是否升降档，不直接修改画像。
+- **触发链路**（`useLearnerUpdate.ts`）：`trigger` 生成 diff 前，取本次会话生成笔记路径，用 `useReviewStore().queue` 计算 `summarizeReviewPerformance` 后传入 `generateProfileUpdate`。
+- **SKILL.md**（`src/skills/update-learner/SKILL.md`）：输入新增 `{review_performance}`；分析要求第 6 条——连续 good/easy 或掌握度高 → 对应概念升档；多次 again 或掌握度低 → 降档；表现为空时仅依据会话内容；只通过 updated_concepts 输出建议。
+- **测试**：`review-scheduler.test.ts`（评级分布汇总 / windowSize 截取 / 无记录忽略 4 用例）、`update-learner.test.ts`（新增：复习表现注入与默认占位 5 用例）。
+
 ---
 
 > 上一模块 → [13 Rust 后端](./13-rust-backend.md)
