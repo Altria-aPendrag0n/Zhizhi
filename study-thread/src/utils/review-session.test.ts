@@ -1,0 +1,139 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Note, ReviewQuestion } from '../types'
+import { serializeSession } from './session-serializer'
+import { parseFrontmatter } from '../parser/frontmatter'
+import { parseMessages } from './branch-context'
+
+const readFile = vi.hoisted(() => vi.fn())
+vi.mock('../utils/vault-fs', () => ({ readFile }))
+
+import { createReviewSession, buildReviewRelatedNotes, loadReviewSession, getReviewSessionFilePath } from './review-session'
+
+const note: Note = {
+  path: 'notes/费曼学习法.md',
+  title: '费曼学习法',
+  description: '用教别人来检验自己是否真正理解',
+  type: 'concept',
+  tags: ['学习方法', '元认知'],
+  created: '2026-08-01T00:00:00.000Z',
+  updated: '2026-08-01T00:00:00.000Z',
+  confidence: 0.5,
+  review: { next: null, interval: 0, mastery: 0 },
+  content: '费曼学习法通过向他人解释来暴露知识缺口。参见 [[工作记忆]]。',
+}
+
+const questions: ReviewQuestion[] = [
+  { level: 'recognize', question: '什么是费曼学习法？' },
+  { level: 'explain', question: '为什么费曼法能暴露知识缺口？' },
+]
+
+function makeNote(partial: Partial<Note>): Note {
+  return {
+    ...note,
+    path: 'notes/其他.md',
+    title: '其他笔记',
+    tags: [],
+    content: '',
+    ...partial,
+  }
+}
+
+describe('createReviewSession', () => {
+  it('创建独立复习会话：kind=review + reviewed_note + 首条问题消息', () => {
+    const now = new Date('2026-08-10T08:00:00.000Z')
+    const session = createReviewSession(note, questions, now)
+
+    expect(session.kind).toBe('review')
+    expect(session.reviewed_note).toBe('notes/费曼学习法.md')
+    expect(session.title).toBe('复习：费曼学习法')
+    expect(session.id).toMatch(/^review_/)
+    expect(session.parent_session).toBeNull()
+    expect(session.tags).toContain('复习')
+    expect(session.messages).toHaveLength(1)
+    expect(session.messages[0].content).toContain('## 复习目标\n费曼学习法')
+    expect(session.messages[0].content).toContain('1. 什么是费曼学习法？')
+    expect(session.messages[0].content).toContain('2. 为什么费曼法能暴露知识缺口？')
+  })
+})
+
+describe('序列化 round-trip', () => {
+  it('serializeSession 输出 kind/reviewed_note/review_questions 到 frontmatter', () => {
+    const session = createReviewSession(note, questions)
+    const markdown = serializeSession(session)
+    const { meta } = parseFrontmatter(markdown)
+
+    expect(meta.kind).toBe('review')
+    expect(meta.reviewed_note).toBe('notes/费曼学习法.md')
+    expect(meta.review_questions).toEqual(questions)
+  })
+
+  it('正文消息可解析 round-trip', () => {
+    const session = createReviewSession(note, questions)
+    const markdown = serializeSession(session)
+    const { body } = parseFrontmatter(markdown)
+    const messages = parseMessages(body, Number.MAX_SAFE_INTEGER)
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0].role).toBe('assistant')
+    expect(messages[0].content).toContain('1. 什么是费曼学习法？')
+  })
+})
+
+describe('loadReviewSession', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('解析复习会话文件并恢复 kind/reviewed_note/questions/消息', async () => {
+    const session = createReviewSession(note, questions)
+    readFile.mockResolvedValue(serializeSession(session))
+
+    const loaded = await loadReviewSession('/vault', session.id)
+
+    expect(loaded).not.toBeNull()
+    expect(loaded!.kind).toBe('review')
+    expect(loaded!.reviewed_note).toBe('notes/费曼学习法.md')
+    expect(loaded!.review_questions).toEqual(questions)
+    expect(loaded!.messages).toHaveLength(1)
+  })
+
+  it('文件缺失时返回 null', async () => {
+    readFile.mockRejectedValue(new Error('ENOENT'))
+    const loaded = await loadReviewSession('/vault', 'review_1')
+    expect(loaded).toBeNull()
+  })
+
+  it('文件路径使用 review- 前缀', () => {
+    expect(getReviewSessionFilePath('/vault', 'review_123')).toBe('/vault/sessions/review-review_123.md')
+  })
+})
+
+describe('buildReviewRelatedNotes', () => {
+  it('优先 wikilink 目标笔记', () => {
+    const linked = makeNote({ path: 'notes/工作记忆.md', title: '工作记忆' })
+    const unrelated = makeNote({ path: 'notes/无关.md', title: '无关', tags: ['编程'] })
+    const result = buildReviewRelatedNotes(note, [unrelated, linked])
+
+    expect(result.map((n) => n.title)).toEqual(['工作记忆'])
+  })
+
+  it('无 wikilink 时按同标签补充，并排除自身', () => {
+    const tagged = makeNote({ path: 'notes/间隔重复.md', title: '间隔重复', tags: ['学习方法'] })
+    const result = buildReviewRelatedNotes(note, [note, tagged])
+
+    expect(result.map((n) => n.title)).toEqual(['间隔重复'])
+  })
+
+  it('超过上限时截断', () => {
+    const others = Array.from({ length: 6 }, (_, i) =>
+      makeNote({ path: `notes/笔记${i}.md`, title: `笔记${i}`, tags: ['学习方法'] }),
+    )
+    const result = buildReviewRelatedNotes(note, others)
+    expect(result).toHaveLength(4)
+  })
+
+  it('无任何关联时返回空数组', () => {
+    const unrelated = makeNote({ path: 'notes/无关.md', title: '无关', tags: ['编程'] })
+    expect(buildReviewRelatedNotes(note, [unrelated])).toEqual([])
+  })
+})

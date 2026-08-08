@@ -49,6 +49,18 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     // 划线文本可能含引号/特殊字符，用 JSON 字符串保证 YAML 解析安全
     lines.push(`fork_highlight: ${JSON.stringify(session.fork_highlight)}`)
   }
+  // 复习会话标记：kind + 被复习笔记路径 + 出题结果（P2 复习会话）
+  if (session.kind) {
+    lines.push(`kind: ${session.kind}`)
+  }
+  if (session.reviewed_note) {
+    // 路径可能含引号/特殊字符，用 JSON 字符串保证 YAML 解析安全
+    lines.push(`reviewed_note: ${JSON.stringify(session.reviewed_note)}`)
+  }
+  if (session.review_questions && session.review_questions.length > 0) {
+    // 出题结果以 JSON 字符串序列化，重新打开复习会话时无需重新出题
+    lines.push(`review_questions: ${JSON.stringify(session.review_questions)}`)
+  }
   lines.push('---')
   lines.push('')
 
@@ -82,10 +94,12 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
  * @param vaultPath vault 根目录路径
  * @param session 会话数据
  * @param isBranch 是否为分支会话
+ * @param isReview 是否为复习会话（文件名前缀 review-，独立根会话）
  */
-export function getSessionFilePath(vaultPath: string, sessionId: string, isBranch = false): string {
+export function getSessionFilePath(vaultPath: string, sessionId: string, isBranch = false, isReview = false): string {
   const sessionsDir = `${vaultPath}/sessions`
-  const fileName = isBranch ? `branch-${sanitizeFileName(sessionId)}.md` : `${sanitizeFileName(sessionId)}.md`
+  const safeId = sanitizeFileName(sessionId)
+  const fileName = isReview ? `review-${safeId}.md` : isBranch ? `branch-${safeId}.md` : `${safeId}.md`
   return `${sessionsDir}/${fileName}`
 }
 
@@ -94,9 +108,10 @@ export async function saveSessionToVault(
   session: Session,
   isBranch = false,
   noteRefs: NoteReference[] = [],
+  isReview = false,
 ): Promise<string> {
   const sessionsDir = `${vaultPath}/sessions`
-  const filePath = getSessionFilePath(vaultPath, session.id, isBranch)
+  const filePath = getSessionFilePath(vaultPath, session.id, isBranch, isReview)
 
   // 确保目录存在
   await createDir(sessionsDir)

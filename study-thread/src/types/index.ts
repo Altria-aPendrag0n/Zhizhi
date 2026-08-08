@@ -25,6 +25,12 @@ export interface Session {
   fork_context?: string
   /** 划线文本（DOM 选择），供分叉点上下文渲染后高亮定位；仅分支会话持久化到 frontmatter */
   fork_highlight?: string
+  /** 会话种类：'review' 为复习会话（独立根会话，不进入分支树）；学习会话不设置 */
+  kind?: 'review'
+  /** 复习会话关联的被复习笔记路径（kind=review 时存在），持久化到 frontmatter */
+  reviewed_note?: string
+  /** 复习会话的出题结果（持久化到 frontmatter，重新打开时无需重新出题） */
+  review_questions?: ReviewQuestion[]
 }
 
 export interface Message {

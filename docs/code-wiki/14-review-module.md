@@ -125,10 +125,30 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 ## 8. 相关测试
 
 - `src/utils/review-scheduler.test.ts`：间隔序列、createReviewTask、评级推进（含边界夹取/连错/未知类型）、优先级、到期过滤与排序。
+- `src/utils/review-session.test.ts`：复习会话创建、序列化 round-trip、frontmatter 标记解析、关联笔记装载。
 
-## 9. 后续扩展（本阶段不含）
+## 9. P2 AI 复习会话（进行中）
 
-- P2：AI 复习会话（`review-quiz` skill）——复习源即笔记，AI 提问→用户作答→反馈→划线摘录新笔记闭环。
+### 9.1 review-quiz skill（已完成，见 [09-skills-system.md](./09-skills-system.md#44-reviewquizts--复习出题与反馈p2-ai-复习会话)）
+
+- `generateReviewQuestions`：基于笔记 + 关联笔记 + 画像生成 3-5 个递进问题（recognize/apply/explain）。
+- `reviewFollowupStream`：对作答做费曼式反馈（对照笔记原文指出缺口）。
+
+### 9.2 复习会话模型与上下文装载（`src/utils/review-session.ts`）
+
+- **会话模型**：复习会话是**独立根会话**——`Session.kind === 'review'` + `reviewed_note`（被复习笔记路径），不进入 `session-tree.json`、不占用分支深度（≤3）。
+- **出题结果持久化**：`review_questions` 序列化到 frontmatter（YAML flow 序列/JSON 字符串双形态兼容），重新打开复习会话无需重新出题。
+- **文件命名**：`sessions/review-<id>.md`（`getReviewSessionFilePath` / `saveSessionToVault(..., isReview)`）。
+- **序列化扩展**（`session-serializer.ts`）：frontmatter 新增 `kind` / `reviewed_note` / `review_questions`。
+- **装载工具**：
+  - `createReviewSession(note, questions)`：构建复习会话，首条 assistant 消息为"复习目标 + 问题列表"。
+  - `buildReviewRelatedNotes(note, allNotes)`：wikilink 目标优先、同标签补充，去重截断（上限 4 条；P3 可扩展 RAG）。
+  - `loadReviewSession(vaultPath, sessionId)`：解析复习会话文件 → Session（含出题结果与消息）。
+- **协作链路**：`LearningHub 开始复习 → generateReviewQuestions → createReviewSession → saveSessionToVault(isReview) → 复习会话页 → 逐题 reviewFollowupStream → reviewStore.applyReview`
+
+## 10. 后续扩展（本阶段不含）
+
+- P2 剩余：复习会话交互 UI（提问→作答→反馈→划线摘录→自评评级）、无 API Key 兜底。
 - P3：学习者画像驱动——`update-learner` 接入会话结束流程，画像 low/medium 概念对应笔记提权、复习难度个性化。
 - P4：图谱簇复习——按 wikilink 网络整簇提问（关系型问题）。
 - 间隔算法演进：`history` 字段已预留，可升级为 FSRS 式个性化遗忘预测。
