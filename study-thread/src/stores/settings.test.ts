@@ -17,6 +17,7 @@ describe('settings store', () => {
     expect(store.enableWebSearch).toBe(true)
     expect(store.autoGenerateNoteTitle).toBe(true)
     expect(store.autoGenerateNoteTags).toBe(true)
+    expect(store.reviewAlgorithm).toBe('classic')
     expect(store.recentVaults).toEqual([])
   })
 
@@ -29,6 +30,7 @@ describe('settings store', () => {
     store.enableWebSearch = false
     store.autoGenerateNoteTitle = false
     store.autoGenerateNoteTags = false
+    store.reviewAlgorithm = 'fsrs'
     store.saveSettings()
 
     const raw = localStorage.getItem('study-thread-settings')
@@ -41,6 +43,7 @@ describe('settings store', () => {
     expect(data.enableWebSearch).toBe(false)
     expect(data.autoGenerateNoteTitle).toBe(false)
     expect(data.autoGenerateNoteTags).toBe(false)
+    expect(data.reviewAlgorithm).toBe('fsrs')
   })
 
   it('loadSettings 从 localStorage 恢复设置', () => {
@@ -52,6 +55,7 @@ describe('settings store', () => {
       enableWebSearch: false,
       autoGenerateNoteTitle: false,
       autoGenerateNoteTags: false,
+      reviewAlgorithm: 'fsrs',
     }))
 
     const store = useSettingsStore()
@@ -62,6 +66,13 @@ describe('settings store', () => {
     expect(store.enableWebSearch).toBe(false)
     expect(store.autoGenerateNoteTitle).toBe(false)
     expect(store.autoGenerateNoteTags).toBe(false)
+    expect(store.reviewAlgorithm).toBe('fsrs')
+  })
+
+  it('loadSettings 处理无效的 reviewAlgorithm 回退 classic', () => {
+    localStorage.setItem('study-thread-settings', JSON.stringify({ reviewAlgorithm: 'unknown' }))
+    const store = useSettingsStore()
+    expect(store.reviewAlgorithm).toBe('classic')
   })
 
   it('loadSettings 处理无效 JSON 使用默认值', () => {

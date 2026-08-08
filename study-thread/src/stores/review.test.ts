@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useReviewStore } from './review'
+import { useSettingsStore } from './settings'
 import type { ReviewTask } from '../types'
 
 const { vaultFs, loadProfile, link, collectWeak } = vi.hoisted(() => ({
@@ -163,5 +164,33 @@ describe('review store（P1 增强 毕业机制）', () => {
     expect(store.queue[0].mastery).toBe(1)
     expect(store.queue[0].graduated).toBe(true)
     expect(store.graduatedTasks).toHaveLength(1)
+  })
+
+  it('applyReview 在 fsrs 算法下输出个性化间隔（默认 classic 不变）', async () => {
+    const store = useReviewStore()
+    const rated = {
+      ...QUEUE[0],
+      interval: 14,
+      mastery: 0.8,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' as const },
+        { at: '2026-08-04T00:00:00.000Z', rating: 'good' as const },
+      ],
+    }
+    vaultFs.readFile.mockResolvedValue(JSON.stringify({ version: 1, queue: [rated] }))
+    await store.loadQueue('/vault')
+
+    // 默认 classic：good 在 concept 序列 14 → 30
+    await store.applyReview('/vault/notes/a.md', 'good', new Date('2026-08-08T12:00:00.000Z'))
+    expect(store.queue[0].interval).toBe(30)
+
+    // 切到 fsrs：基于 base=60 × (0.5+1.0) ≈ 90，明显大于经典
+    const settings = useSettingsStore()
+    settings.reviewAlgorithm = 'fsrs'
+    await store.applyReview('/vault/notes/a.md', 'good', new Date('2026-08-08T12:00:00.000Z'))
+    expect(store.queue[0].interval).toBeGreaterThan(30)
+    expect(store.queue[0].interval).toBeLessThanOrEqual(365)
+
+    settings.reviewAlgorithm = 'classic' // 还原，避免影响其他用例
   })
 })

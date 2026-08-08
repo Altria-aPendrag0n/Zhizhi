@@ -103,6 +103,18 @@
         <p class="form-hint">划线摘录笔记时，允许 LLM 根据内容自动生成标签；关闭后统一使用「未分类」标签，跳过 LLM 生成环节。两者都关闭时，摘录笔记将完全不调用 LLM。</p>
       </div>
 
+      <!-- 复习间隔算法 -->
+      <div class="form-group">
+        <label class="form-label" for="review-algorithm">复习间隔算法</label>
+        <select id="review-algorithm" v-model="reviewAlgorithm" class="form-select">
+          <option value="classic">经典间隔序列（默认）</option>
+          <option value="fsrs">FSRS 个性化（基于评级历史拟合遗忘曲线）</option>
+        </select>
+        <p class="form-hint">
+          经典模式按笔记类型使用固定间隔序列推进；FSRS 模式根据你的历史评级表现动态调整每次间隔，评级历史不足时自动回退经典模式。
+        </p>
+      </div>
+
       <!-- 按钮组 -->
       <div class="form-actions">
         <button class="btn btn-primary" @click="handleSave">保存设置</button>
@@ -136,6 +148,7 @@ import { useSettingsStore } from '../stores/settings'
 import { PROVIDER_PRESETS } from '../api/openai-compat'
 import { createProvider } from '../api/provider-factory'
 import VaultSettings from '../components/vault/VaultSettings.vue'
+import type { ReviewAlgorithm } from '../types'
 
 const settingsStore = useSettingsStore()
 
@@ -146,6 +159,7 @@ const model = ref('gpt-4o')
 const enableWebSearch = ref(true)
 const autoGenerateNoteTitle = ref(true)
 const autoGenerateNoteTags = ref(true)
+const reviewAlgorithm = ref<ReviewAlgorithm>('classic')
 const showKey = ref(false)
 const testing = ref(false)
 const saved = ref(false)
@@ -181,6 +195,7 @@ function handleSave() {
   settingsStore.enableWebSearch = enableWebSearch.value
   settingsStore.autoGenerateNoteTitle = autoGenerateNoteTitle.value
   settingsStore.autoGenerateNoteTags = autoGenerateNoteTags.value
+  settingsStore.reviewAlgorithm = reviewAlgorithm.value
   settingsStore.saveSettings()
   saved.value = true
   testResult.value = null
@@ -231,6 +246,7 @@ onMounted(() => {
   enableWebSearch.value = settingsStore.enableWebSearch
   autoGenerateNoteTitle.value = settingsStore.autoGenerateNoteTitle
   autoGenerateNoteTags.value = settingsStore.autoGenerateNoteTags
+  reviewAlgorithm.value = settingsStore.reviewAlgorithm
 
   // 根据当前配置推断选中服务商
   if (settingsStore.activeProvider === 'anthropic') {

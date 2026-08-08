@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { ProviderType, ProviderConfig } from '../types'
+import type { ProviderType, ProviderConfig, ReviewAlgorithm } from '../types'
 
 const STORAGE_KEY = 'study-thread-settings'
 const RECENT_VAULTS_KEY = 'study-thread-recent-vaults'
@@ -13,6 +13,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const enableWebSearch = ref(true)
   const autoGenerateNoteTitle = ref(true)
   const autoGenerateNoteTags = ref(true)
+  /** 复习间隔算法（P1 增强）：classic 经典间隔序列（默认） / fsrs 个性化遗忘曲线 */
+  const reviewAlgorithm = ref<ReviewAlgorithm>('classic')
   const recentVaults = ref<string[]>([])
 
   function saveSettings() {
@@ -24,6 +26,7 @@ export const useSettingsStore = defineStore('settings', () => {
       enableWebSearch: enableWebSearch.value,
       autoGenerateNoteTitle: autoGenerateNoteTitle.value,
       autoGenerateNoteTags: autoGenerateNoteTags.value,
+      reviewAlgorithm: reviewAlgorithm.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   }
@@ -40,6 +43,7 @@ export const useSettingsStore = defineStore('settings', () => {
         enableWebSearch.value = data.enableWebSearch !== false
         autoGenerateNoteTitle.value = data.autoGenerateNoteTitle !== false
         autoGenerateNoteTags.value = data.autoGenerateNoteTags !== false
+        reviewAlgorithm.value = data.reviewAlgorithm === 'fsrs' ? 'fsrs' : 'classic'
       } catch {
         // 解析失败则使用默认值
       }
@@ -78,6 +82,7 @@ export const useSettingsStore = defineStore('settings', () => {
     enableWebSearch,
     autoGenerateNoteTitle,
     autoGenerateNoteTags,
+    reviewAlgorithm,
     recentVaults,
     saveSettings,
     loadSettings,

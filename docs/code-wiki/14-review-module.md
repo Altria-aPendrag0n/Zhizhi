@@ -124,6 +124,19 @@ interface ReviewTask {
 - **UI**：`ReviewDueList` 底部新增可折叠「已毕业」区块（绿色虚线卡片，显示掌握度与间隔），每条笔记提供「重新激活」按钮；`LearningHubPage @reactivate` 调用 store 并 Toast 反馈。
 - **测试**：`review-scheduler.test.ts`（毕业判定阈值/连续次数/中断、applyRating 自动毕业、again/hard 取消、到期清单过滤、reactivateTask、旧字段兼容）+ `review.test.ts`（graduatedTasks 计算、reactivate 持久化与未命中、applyReview 达标毕业）。
 
+## 6.2 间隔算法向 FSRS 演进（P1 增强）
+
+基于 `ReviewTask.history`（评级时间与结果）拟合个性化遗忘曲线，动态调整间隔；数据不足时回退经典类型化间隔序列。
+
+- **轻量模型**（`src/utils/fsrs-scheduler.ts`，纯函数无依赖）：
+  - 表现分：again=0 / hard=0.5 / good=1 / easy=1.5，近 `FSRS_HISTORY_WINDOW=6` 次加权平均（越新权重越高）`estimatePerformance`；
+  - 难度：评级序列标准差 `estimateDifficulty`（波动越大 → 掌握越不稳定 → 难度越高）；
+  - 间隔 = 类型基础间隔（经典序列最大值）× (0.5 + 表现分) × (1 − 0.4 × 难度)；最近一次或本次 again → 减半；夹在 `[1, 365]` 天；
+  - 冷启动：历史 < `FSRS_MIN_HISTORY=2` 次 → `computeFsrsInterval` 返回 null，由调用方回退经典调度。
+- **调度集成**（`review-scheduler.ts`）：`applyRatingWithAlgorithm(task, rating, now, algorithm)`——`classic`（默认）走经典序列（等价 `applyRating`）；`fsrs` 历史足够时输出个性化间隔，其余（掌握度/历史/dueAt/毕业标记）与经典路径一致。
+- **配置**：settings store 新增 `reviewAlgorithm: 'classic' | 'fsrs'`（默认 classic，localStorage 持久化，无效值回退 classic）；设置页「复习间隔算法」下拉切换；`reviewStore.applyReview` 评级时读取当前设置即时生效。
+- **测试**：`fsrs-scheduler.test.ts`（表现分加权、难度、冷启动 null、良好历史间隔较长、again 遗忘冲击、波动压缩、边界夹取 12 用例）+ `review-scheduler.test.ts`（classic 等价、缺省参数、fsrs 冷启动回退、个性化间隔、fsrs 毕业）+ `review.test.ts`（fsrs 算法下输出个性化间隔）+ `settings.test.ts`（默认值/持久化/无效值回退）。
+
 ## 7. 协作链路
 
 ```

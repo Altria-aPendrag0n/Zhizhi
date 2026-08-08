@@ -5,7 +5,8 @@
  * 与 Anki 的四档评级（again/hard/good/easy），为知枝提供"何时复习"的本地调度基础。
  * 权威数据存于 `<vault>/.study-thread/review-state.json`（见 `stores/review.ts`）。
  */
-import type { ReviewRating, ReviewTask } from '../types'
+import type { ReviewAlgorithm, ReviewRating, ReviewTask } from '../types'
+import { computeFsrsInterval } from './fsrs-scheduler'
 
 /** 按笔记类型差异化间隔序列（单位：天），顺序即推进方向 */
 export const REVIEW_INTERVALS: Record<string, number[]> = {
@@ -114,6 +115,45 @@ export function isGraduationCandidate(task: ReviewTask): boolean {
   const recent = task.history.slice(-GRADUATION_CONSECUTIVE_GOOD)
   if (recent.length < GRADUATION_CONSECUTIVE_GOOD) return false
   return recent.every((entry) => entry.rating === 'good' || entry.rating === 'easy')
+}
+
+/**
+ * 按所选算法应用评级（P1 增强 FSRS 演进）：
+ * - classic（默认）：走经典类型化间隔序列（applyRating）；
+ * - fsrs：基于 history 拟合个性化遗忘曲线计算间隔；历史数据不足（冷启动）时回退经典调度。
+ * 掌握度/评级历史/dueAt 更新与 applyRating 一致，仅间隔计算方式不同。
+ */
+export function applyRatingWithAlgorithm(
+  task: ReviewTask,
+  rating: ReviewRating,
+  now: Date = new Date(),
+  algorithm: ReviewAlgorithm = 'classic',
+): ReviewTask {
+  if (algorithm === 'fsrs') {
+    const intervals = getIntervals(task.type)
+    const base = intervals[intervals.length - 1]
+    const fsrsInterval = computeFsrsInterval(task, rating, base)
+    if (fsrsInterval !== null) {
+      const { masteryDelta } = RATING_DELTAS[rating]
+      const mastery = clamp01(task.mastery + masteryDelta)
+      const history = [...task.history, { at: toIso(now), rating }]
+      let graduated: boolean | undefined
+      if (rating === 'again' || rating === 'hard') {
+        graduated = false
+      } else {
+        graduated = isGraduationCandidate({ ...task, interval: fsrsInterval, mastery, history, graduated: undefined })
+      }
+      return {
+        ...task,
+        interval: fsrsInterval,
+        mastery,
+        dueAt: toIso(addDays(now, fsrsInterval)),
+        history,
+        ...(graduated ? { graduated: true } : graduated === false ? { graduated: false } : {}),
+      }
+    }
+  }
+  return applyRating(task, rating, now)
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   getIntervals,
   isGraduationCandidate,
   reactivateTask,
+  applyRatingWithAlgorithm,
   GRADUATION_MASTERY_THRESHOLD,
 } from './review-scheduler'
 
@@ -90,6 +91,68 @@ describe('applyRating', () => {
   it('未知类型的间隔按默认序列推进', () => {
     const updated = applyRating(task({ type: 'unknown', interval: 3 }), 'good', NOW)
     expect(updated.interval).toBe(7)
+  })
+})
+
+describe('applyRatingWithAlgorithm（P1 增强 FSRS 演进）', () => {
+  it('classic（默认）与 applyRating 行为一致', () => {
+    const classic = applyRatingWithAlgorithm(task({ interval: 3 }), 'good', NOW, 'classic')
+    const base = applyRating(task({ interval: 3 }), 'good', NOW)
+    expect(classic.interval).toBe(base.interval)
+    expect(classic.mastery).toBe(base.mastery)
+    expect(classic.history).toEqual(base.history)
+  })
+
+  it('缺省算法参数时走经典调度', () => {
+    const updated = applyRatingWithAlgorithm(task({ interval: 3 }), 'good', NOW)
+    expect(updated.interval).toBe(7)
+  })
+
+  it('fsrs 冷启动（历史不足）回退经典调度', () => {
+    const fresh = task({ interval: 3 }) // history 为空
+    const updated = applyRatingWithAlgorithm(fresh, 'good', NOW, 'fsrs')
+    expect(updated.interval).toBe(7) // 经典 concept: 3 → 7
+  })
+
+  it('fsrs 历史足够时输出个性化间隔（good 历史间隔较长）', () => {
+    const rated = task({
+      interval: 14,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-04T00:00:00.000Z', rating: 'good' },
+      ],
+    })
+    const updated = applyRatingWithAlgorithm(rated, 'good', NOW, 'fsrs')
+    // FSRS 基于 base=60 × (0.5+1.0) = 90 → 夹在 [1,365]，明显大于经典 good 的 30
+    expect(updated.interval).toBeGreaterThan(30)
+    expect(updated.history).toHaveLength(3)
+  })
+
+  it('fsrs 消极评级（again）间隔缩短且掌握度下降', () => {
+    const rated = task({
+      interval: 14,
+      mastery: 0.8,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-04T00:00:00.000Z', rating: 'good' },
+      ],
+    })
+    const updated = applyRatingWithAlgorithm(rated, 'again', NOW, 'fsrs')
+    expect(updated.mastery).toBeCloseTo(0.6)
+    expect(updated.interval).toBeLessThanOrEqual(90) // 遗忘冲击减半
+  })
+
+  it('fsrs 路径同样触发毕业标记', () => {
+    const rated = task({
+      mastery: 0.8,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-04T00:00:00.000Z', rating: 'good' },
+      ],
+    })
+    const updated = applyRatingWithAlgorithm(rated, 'easy', NOW, 'fsrs')
+    expect(updated.mastery).toBe(1)
+    expect(updated.graduated).toBe(true)
   })
 })
 

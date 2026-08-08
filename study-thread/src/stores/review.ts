@@ -2,10 +2,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ReviewRating, ReviewTask } from '../types'
 import { createDir, readFile, writeFile } from '../utils/vault-fs'
-import { applyRating, buildDueList, countDue, reactivateTask } from '../utils/review-scheduler'
+import { buildDueList, countDue, reactivateTask, applyRatingWithAlgorithm } from '../utils/review-scheduler'
 import { loadLearnerProfile } from '../utils/learner-profile'
 import { linkConceptsToNotes, collectWeakNotePaths } from '../utils/learner-note-link'
 import { useNoteStore } from './notes'
+import { useSettingsStore } from './settings'
 
 /** 复习队列持久化路径：<vault>/.study-thread/review-state.json（DEVELOPMENT.md 已规划） */
 function reviewStatePath(vaultPath: string): string {
@@ -83,11 +84,12 @@ export const useReviewStore = defineStore('review', () => {
     await persist()
   }
 
-  /** 复习评级：推进间隔与掌握度并回写队列 */
+  /** 复习评级：按所选间隔算法（classic/fsrs）推进间隔与掌握度并回写队列（P1 增强） */
   async function applyReview(notePath: string, rating: ReviewRating, now: Date = new Date()): Promise<ReviewTask | null> {
     const index = queue.value.findIndex((item) => item.notePath === notePath)
     if (index < 0) return null
-    queue.value[index] = applyRating(queue.value[index], rating, now)
+    const algorithm = useSettingsStore().reviewAlgorithm
+    queue.value[index] = applyRatingWithAlgorithm(queue.value[index], rating, now, algorithm)
     await persist()
     return queue.value[index]
   }

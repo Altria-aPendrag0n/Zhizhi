@@ -72,6 +72,9 @@ export interface Note {
 // 复习相关类型（P1 间隔复习调度层）
 export type ReviewRating = 'again' | 'hard' | 'good' | 'easy'
 
+/** 复习间隔算法（P1 增强）：classic 经典类型化间隔序列；fsrs 基于 history 的个性化遗忘曲线调度 */
+export type ReviewAlgorithm = 'classic' | 'fsrs'
+
 export interface ReviewHistoryEntry {
   at: string // ISO 时间
   rating: ReviewRating
