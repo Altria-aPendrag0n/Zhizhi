@@ -58,19 +58,57 @@
         </button>
       </div>
     </div>
+
+    <!-- 已毕业（P1 增强）：移出到期清单，可重新激活 -->
+    <div v-if="graduatedList.length > 0" class="review-graduated">
+      <button
+        type="button"
+        class="review-graduated__toggle"
+        :aria-expanded="graduatedOpen"
+        @click="graduatedOpen = !graduatedOpen"
+      >
+        <span class="review-graduated__summary">
+          已毕业 · {{ graduatedList.length }} 条（移出到期清单）
+        </span>
+        <span class="review-graduated__caret">{{ graduatedOpen ? '收起' : '展开' }}</span>
+      </button>
+      <ul v-if="graduatedOpen" class="review-graduated__list">
+        <li v-for="task in graduatedList" :key="task.notePath" class="review-graduated__item">
+          <div class="review-graduated__main">
+            <span class="review-graduated__title">{{ task.title }}</span>
+            <span class="review-graduated__meta">
+              掌握度 {{ Math.round(task.mastery * 100) }}% · 间隔 {{ task.interval }} 天
+            </span>
+          </div>
+          <button
+            class="review-graduated__reactivate"
+            type="button"
+            @click="$emit('reactivate', task)"
+          >
+            重新激活
+          </button>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import type { ReviewRating, ReviewTask } from '../../types'
 
-const props = defineProps<{ tasks: ReviewTask[]; boostedPaths?: string[] }>()
+const props = defineProps<{ tasks: ReviewTask[]; boostedPaths?: string[]; graduatedTasks?: ReviewTask[] }>()
 
 defineEmits<{
   rate: [task: ReviewTask, rating: ReviewRating]
   open: [task: ReviewTask]
   start: [task: ReviewTask]
+  reactivate: [task: ReviewTask]
 }>()
+
+const graduatedOpen = ref(false)
+/** 已毕业任务（prop 可选，缺省为空列表） */
+const graduatedList = computed(() => props.graduatedTasks ?? [])
 
 /** 该笔记是否关联到画像 low/medium 置信度概念（画像弱项，P3-3 提权标记） */
 function isBoosted(task: ReviewTask): boolean {
@@ -312,5 +350,96 @@ function ratingLabel(rating: ReviewRating | null): string {
   .review-card__actions {
     justify-content: flex-end;
   }
+}
+
+/* ---- 已毕业区块（P1 增强）---- */
+.review-graduated {
+  margin-top: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.review-graduated__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.review-graduated__toggle:hover {
+  background: var(--surface-2);
+}
+
+.review-graduated__summary {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--state-success);
+}
+
+.review-graduated__caret {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.review-graduated__list {
+  margin: 0;
+  padding: 0 14px 10px;
+  list-style: none;
+}
+
+.review-graduated__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.review-graduated__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-graduated__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.review-graduated__meta {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.review-graduated__reactivate {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--brand);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--brand);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.review-graduated__reactivate:hover {
+  background: var(--brand);
+  color: var(--brand-ink);
 }
 </style>

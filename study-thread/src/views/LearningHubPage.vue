@@ -159,9 +159,11 @@
         <ReviewDueList
           :tasks="reviewStore.dueTasks"
           :boosted-paths="reviewStore.boostedNotePaths"
+          :graduated-tasks="reviewStore.graduatedTasks"
           @rate="handleRate"
           @open="handleOpenReview"
           @start="handleStartReview"
+          @reactivate="handleReactivate"
         />
       </div>
     </template>
@@ -352,6 +354,16 @@ async function handleRate(task: ReviewTask, rating: ReviewRating) {
 /** 打开笔记详情（从复习卡片跳转） */
 function handleOpenReview(task: ReviewTask) {
   router.push(`/notes/${encodeURIComponent(task.notePath)}`)
+}
+
+/** 重新激活已毕业任务（P1 增强）：回到到期清单，立即安排复习 */
+async function handleReactivate(task: ReviewTask) {
+  const updated = await reviewStore.reactivate(task.notePath)
+  if (updated) {
+    toast.success(`已重新激活「${task.title}」，已回到到期清单`)
+  } else {
+    toast.error('重新激活失败：任务不在复习队列')
+  }
 }
 
 /**

@@ -112,6 +112,18 @@ interface ReviewTask {
 - `src/components/review/ReviewDueList.vue`：到期卡片列表。卡片展示标题、类型徽标、间隔、上次评级、掌握度进度条；底部四档评级按钮（忘了/模糊/记得/熟练）。空状态提示"今日无到期复习"。
 - `src/views/LearningHubPage.vue`：左侧管理栏新增「复习」入口（带到期数徽标），新增 `review` 视图；`onMounted` 时 vault 就绪则 `loadQueue`；评级后 Toast 提示下一次间隔；点击卡片跳转笔记详情（`/notes/<path>`）。
 
+## 6.1 毕业机制（P1 增强）
+
+掌握度达标后**移出到期清单**，减少重复复习；保留在 `review-state.json` 中，可手动重新激活。
+
+- **毕业判定**（`review-scheduler.ts`）：
+  - `GRADUATION_MASTERY_THRESHOLD = 0.9` + `GRADUATION_CONSECUTIVE_GOOD = 2`：掌握度 ≥ 0.9 且最近连续 2 次评级均为 good/easy → `isGraduationCandidate` 为真。
+  - `applyRating`：积极评级（good/easy）且达标 → 自动标记 `graduated: true`；消极评级（again/hard）→ 清除 `graduated` 回到活跃队列。
+- **调度行为**：`buildDueList` / `countDue` 过滤 `graduated` 任务（移出到期清单）；`ReviewTask` 新增可选 `graduated?: boolean`，旧队列无该字段时行为不变（持久化兼容）。
+- **重新激活**：`reactivateTask(task)` 清除毕业标记并立即到期（`dueAt = now`）；store 层 `reviewStore.reactivate(notePath)` 回写队列。
+- **UI**：`ReviewDueList` 底部新增可折叠「已毕业」区块（绿色虚线卡片，显示掌握度与间隔），每条笔记提供「重新激活」按钮；`LearningHubPage @reactivate` 调用 store 并 Toast 反馈。
+- **测试**：`review-scheduler.test.ts`（毕业判定阈值/连续次数/中断、applyRating 自动毕业、again/hard 取消、到期清单过滤、reactivateTask、旧字段兼容）+ `review.test.ts`（graduatedTasks 计算、reactivate 持久化与未命中、applyReview 达标毕业）。
+
 ## 7. 协作链路
 
 ```

@@ -86,6 +86,8 @@ export interface ReviewTask {
   interval: number // 当前间隔（天）
   mastery: number // 掌握度 0-1
   history: ReviewHistoryEntry[] // 复习评级历史（为后续 FSRS 式个性化调度预留）
+  /** 已毕业（P1 增强）：掌握度达标且连续 good/easy 后标记，移出到期清单但保留在队列，可手动重新激活 */
+  graduated?: boolean
 }
 
 // 复习出题相关类型（P2 AI 复习会话）

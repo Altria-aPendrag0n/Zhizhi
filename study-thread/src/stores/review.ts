@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ReviewRating, ReviewTask } from '../types'
 import { createDir, readFile, writeFile } from '../utils/vault-fs'
-import { applyRating, buildDueList, countDue } from '../utils/review-scheduler'
+import { applyRating, buildDueList, countDue, reactivateTask } from '../utils/review-scheduler'
 import { loadLearnerProfile } from '../utils/learner-profile'
 import { linkConceptsToNotes, collectWeakNotePaths } from '../utils/learner-note-link'
 import { useNoteStore } from './notes'
@@ -31,6 +31,8 @@ export const useReviewStore = defineStore('review', () => {
   )
   /** 到期任务数量（学习地图徽标） */
   const dueCount = computed(() => countDue(queue.value))
+  /** 已毕业任务（P1 增强）：移出到期清单，保留在队列，可手动重新激活 */
+  const graduatedTasks = computed(() => queue.value.filter((item) => item.graduated))
 
   function persist(): Promise<void> {
     const vaultPath = currentVaultPath.value
@@ -97,6 +99,15 @@ export const useReviewStore = defineStore('review', () => {
     if (queue.value.length !== before) await persist()
   }
 
+  /** 重新激活已毕业任务（P1 增强）：清除毕业标记并立即到期，回到到期清单 */
+  async function reactivate(notePath: string): Promise<ReviewTask | null> {
+    const index = queue.value.findIndex((item) => item.notePath === notePath)
+    if (index < 0) return null
+    queue.value[index] = reactivateTask(queue.value[index])
+    await persist()
+    return queue.value[index]
+  }
+
   return {
     queue,
     isLoading,
@@ -104,10 +115,12 @@ export const useReviewStore = defineStore('review', () => {
     boostedNotePaths,
     dueTasks,
     dueCount,
+    graduatedTasks,
     loadQueue,
     refreshBoostedPaths,
     enqueue,
     applyReview,
     removeFromQueue,
+    reactivate,
   }
 })

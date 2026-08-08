@@ -26,6 +26,11 @@ const RATING_DELTAS: Record<ReviewRating, { step: number; masteryDelta: number }
   easy: { step: 2, masteryDelta: 0.4 },
 }
 
+/** 毕业掌握度阈值（P1 增强）：掌握度 ≥ 0.9 且连续 good/easy 达到次数即毕业 */
+export const GRADUATION_MASTERY_THRESHOLD = 0.9
+/** 毕业所需的最近连续 good/easy 次数 */
+export const GRADUATION_CONSECUTIVE_GOOD = 2
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
@@ -62,7 +67,9 @@ export function createReviewTask(notePath: string, title: string, type: string, 
 /**
  * 复习评级 → 推进间隔与掌握度。
  * - 评级映射间隔序列下标位移（again 回退两档、easy 前进两档），夹在序列边界内；
- * - 掌握度按评级增减并夹在 [0, 1]。
+ * - 掌握度按评级增减并夹在 [0, 1]；
+ * - 毕业（P1 增强）：good/easy 且掌握度 ≥ 阈值且最近连续 good/easy 达标 → 标记 graduated；
+ *   again/hard 清除毕业标记（回到活跃队列）。
  */
 export function applyRating(task: ReviewTask, rating: ReviewRating, now: Date = new Date()): ReviewTask {
   const { step, masteryDelta } = RATING_DELTAS[rating]
@@ -76,13 +83,45 @@ export function applyRating(task: ReviewTask, rating: ReviewRating, now: Date = 
   index = Math.max(0, Math.min(maxIndex, index + step))
 
   const interval = intervals[index]
+  const mastery = clamp01(task.mastery + masteryDelta)
+  const history = [...task.history, { at: toIso(now), rating }]
+
+  // 毕业标记：仅在积极评级时评估（again/hard 直接清除毕业回到活跃）
+  let graduated: boolean | undefined
+  if (rating === 'again' || rating === 'hard') {
+    graduated = false
+  } else {
+    graduated = isGraduationCandidate({ ...task, interval, mastery, history, graduated: undefined })
+  }
+
   return {
     ...task,
     interval,
-    mastery: clamp01(task.mastery + masteryDelta),
+    mastery,
     dueAt: toIso(addDays(now, interval)),
-    history: [...task.history, { at: toIso(now), rating }],
+    history,
+    ...(graduated ? { graduated: true } : graduated === false ? { graduated: false } : {}),
   }
+}
+
+/**
+ * 毕业判定（P1 增强）：
+ * 掌握度 ≥ GRADUATION_MASTERY_THRESHOLD，且最近 GRADUATION_CONSECUTIVE_GOOD 次评级均为 good/easy。
+ * 纯函数，供调度器评级后自动标记与测试校验。
+ */
+export function isGraduationCandidate(task: ReviewTask): boolean {
+  if (task.mastery < GRADUATION_MASTERY_THRESHOLD) return false
+  const recent = task.history.slice(-GRADUATION_CONSECUTIVE_GOOD)
+  if (recent.length < GRADUATION_CONSECUTIVE_GOOD) return false
+  return recent.every((entry) => entry.rating === 'good' || entry.rating === 'easy')
+}
+
+/**
+ * 重新激活已毕业任务（P1 增强）：
+ * 清除毕业标记并立即到期（dueAt = now），使其重新出现在到期清单。
+ */
+export function reactivateTask(task: ReviewTask, now: Date = new Date()): ReviewTask {
+  return { ...task, graduated: false, dueAt: toIso(now) }
 }
 
 /**
@@ -115,6 +154,7 @@ export function priorityWithProfile(
 
 /**
  * 到期任务列表：dueAt 已到者，按优先级升序（同优先级按到期时间先后）。
+ * 已毕业任务（graduated: true）移出到期清单，保留在队列中可手动重新激活（P1 增强）。
  * boostedPaths（可选）：画像 low/medium 概念关联笔记的提权信号（P3-3），
  * 缺省时不提权，保持原调度行为。
  */
@@ -125,6 +165,7 @@ export function buildDueList(
 ): ReviewTask[] {
   const nowMs = now.getTime()
   return tasks
+    .filter((task) => !task.graduated)
     .filter((task) => new Date(task.dueAt).getTime() <= nowMs)
     .sort(
       (a, b) =>

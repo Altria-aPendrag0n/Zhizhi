@@ -10,6 +10,9 @@ import {
   priorityWithProfile,
   summarizeReviewPerformance,
   getIntervals,
+  isGraduationCandidate,
+  reactivateTask,
+  GRADUATION_MASTERY_THRESHOLD,
 } from './review-scheduler'
 
 const NOW = new Date('2026-08-08T12:00:00.000Z')
@@ -119,6 +122,99 @@ describe('buildDueList / countDue', () => {
   it('无到期任务时返回空列表', () => {
     expect(buildDueList([task({ dueAt: '2026-08-12T00:00:00.000Z' })], NOW)).toEqual([])
     expect(countDue([], NOW)).toBe(0)
+  })
+})
+
+describe('毕业机制（P1 增强）', () => {
+  it('掌握度达标且连续 good/easy 达到次数即毕业', () => {
+    const t = task({
+      mastery: 1,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-05T00:00:00.000Z', rating: 'easy' },
+      ],
+    })
+    expect(isGraduationCandidate(t)).toBe(true)
+  })
+
+  it('掌握度未达阈值不毕业', () => {
+    const t = task({
+      mastery: GRADUATION_MASTERY_THRESHOLD - 0.01,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-05T00:00:00.000Z', rating: 'good' },
+      ],
+    })
+    expect(isGraduationCandidate(t)).toBe(false)
+  })
+
+  it('连续次数不足不毕业', () => {
+    const t = task({
+      mastery: 1,
+      history: [{ at: '2026-08-01T00:00:00.000Z', rating: 'good' }],
+    })
+    expect(isGraduationCandidate(t)).toBe(false)
+  })
+
+  it('中间出现非 good/easy 评级则不满足连续条件', () => {
+    const t = task({
+      mastery: 1,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-05T00:00:00.000Z', rating: 'hard' },
+        { at: '2026-08-08T00:00:00.000Z', rating: 'easy' },
+      ],
+    })
+    expect(isGraduationCandidate(t)).toBe(false)
+  })
+
+  it('applyRating 积极评级达标后自动标记毕业', () => {
+    const t = task({
+      mastery: 0.8,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' },
+        { at: '2026-08-05T00:00:00.000Z', rating: 'good' },
+      ],
+    })
+    const updated = applyRating(t, 'easy', NOW) // mastery 0.8 → 1.0
+    expect(updated.mastery).toBe(1)
+    expect(updated.graduated).toBe(true)
+  })
+
+  it('applyRating 未达标时保持未毕业', () => {
+    const t = task({ mastery: 0.6, history: [{ at: '2026-08-01T00:00:00.000Z', rating: 'good' }] })
+    const updated = applyRating(t, 'good', NOW) // mastery 0.8，连续 1 次不足
+    expect(updated.graduated).toBeFalsy()
+  })
+
+  it('again/hard 清除毕业标记回到活跃队列', () => {
+    const t = task({ mastery: 1, graduated: true, history: [] })
+    const again = applyRating(t, 'again', NOW)
+    expect(again.graduated).toBe(false)
+    const hard = applyRating(t, 'hard', NOW)
+    expect(hard.graduated).toBe(false)
+  })
+
+  it('已毕业任务移出到期清单，但仍在队列可重新激活', () => {
+    const graduated = task({ notePath: 'notes/毕业.md', mastery: 1, graduated: true, dueAt: '2026-08-01T00:00:00.000Z' })
+    const due = task({ notePath: 'notes/到期.md', mastery: 0.4, dueAt: '2026-08-08T00:00:00.000Z' })
+    expect(buildDueList([graduated, due], NOW).map((t) => t.notePath)).toEqual(['notes/到期.md'])
+    expect(countDue([graduated, due], NOW)).toBe(1)
+  })
+
+  it('reactivateTask 清除毕业标记并立即到期', () => {
+    const graduated = task({ graduated: true, dueAt: '2026-01-01T00:00:00.000Z' })
+    const reactivated = reactivateTask(graduated, NOW)
+    expect(reactivated.graduated).toBe(false)
+    expect(reactivated.dueAt).toBe(NOW.toISOString())
+    expect(buildDueList([reactivated], NOW)).toHaveLength(1)
+  })
+
+  it('持久化字段兼容：旧队列无 graduated 字段时行为不变', () => {
+    const legacy = task({ dueAt: '2026-08-08T00:00:00.000Z' })
+    expect('graduated' in legacy).toBe(false)
+    expect(buildDueList([legacy], NOW)).toHaveLength(1)
+    expect(isGraduationCandidate(legacy)).toBe(false)
   })
 })
 

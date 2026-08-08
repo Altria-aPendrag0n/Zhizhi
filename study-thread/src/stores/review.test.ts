@@ -99,3 +99,69 @@ describe('review store（P3-3 画像提权信号）', () => {
     expect(store.boostedNotePaths).toEqual(['/vault/notes/b.md'])
   })
 })
+
+describe('review store（P1 增强 毕业机制）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    vi.clearAllMocks()
+    vaultFs.writeFile.mockResolvedValue(undefined)
+    vaultFs.createDir.mockResolvedValue(undefined)
+  })
+
+  it('graduatedTasks 只包含已毕业任务，且移出到期清单', async () => {
+    const store = useReviewStore()
+    const graduated = { ...QUEUE[0], notePath: '/vault/notes/g.md', graduated: true }
+    vaultFs.readFile.mockResolvedValue(JSON.stringify({ version: 1, queue: [graduated] }))
+
+    await store.loadQueue('/vault')
+
+    expect(store.graduatedTasks.map((t) => t.notePath)).toEqual(['/vault/notes/g.md'])
+    expect(store.dueTasks).toHaveLength(0)
+    expect(store.dueCount).toBe(0)
+  })
+
+  it('reactivate 清除毕业标记并立即回到到期清单', async () => {
+    const store = useReviewStore()
+    const graduated = { ...QUEUE[0], graduated: true, dueAt: '2026-01-01T00:00:00.000Z' }
+    vaultFs.readFile.mockResolvedValue(JSON.stringify({ version: 1, queue: [graduated] }))
+
+    await store.loadQueue('/vault')
+    await store.reactivate('/vault/notes/a.md')
+
+    expect(store.queue[0].graduated).toBe(false)
+    expect(store.graduatedTasks).toHaveLength(0)
+    expect(store.dueTasks.map((t) => t.notePath)).toContain('/vault/notes/a.md')
+  })
+
+  it('reactivate 未命中任务时返回 null 且不改变队列', async () => {
+    const store = useReviewStore()
+    vaultFs.readFile.mockResolvedValue(queueFile())
+
+    await store.loadQueue('/vault')
+    const result = await store.reactivate('/vault/notes/不存在.md')
+
+    expect(result).toBeNull()
+    expect(store.queue).toHaveLength(1)
+  })
+
+  it('applyReview 达标后自动标记毕业', async () => {
+    const store = useReviewStore()
+    const rated = {
+      ...QUEUE[0],
+      mastery: 0.8,
+      history: [
+        { at: '2026-08-01T00:00:00.000Z', rating: 'good' as const },
+        { at: '2026-08-05T00:00:00.000Z', rating: 'good' as const },
+      ],
+    }
+    vaultFs.readFile.mockResolvedValue(JSON.stringify({ version: 1, queue: [rated] }))
+
+    await store.loadQueue('/vault')
+    await store.applyReview('/vault/notes/a.md', 'easy', new Date('2026-08-08T12:00:00.000Z'))
+
+    expect(store.queue[0].mastery).toBe(1)
+    expect(store.queue[0].graduated).toBe(true)
+    expect(store.graduatedTasks).toHaveLength(1)
+  })
+})
