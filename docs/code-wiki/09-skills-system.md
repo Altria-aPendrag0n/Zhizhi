@@ -87,7 +87,10 @@ interface ProfileDiff {
 
 **SKILL.md 要点**（version 1.0.0）：学习者画像分析师角色，只标注用户"能解释的"概念（严格区分听过与掌握）；置信度 high（能独立解释）/ medium（能识别不完整）/ low（刚接触）；标注概念关系；推荐 2-3 个主题；规则强调**宁漏勿虚**、未变化的概念不放入 updated_concepts。
 
-> 注：V1 中 `update-learner` 执行器与 `DiffView` 组件已就绪，但主流程暂未自动触发（画像更新 UI 尚未接入会话结束流程）。
+**画像文件与自动触发（P3）**：
+- 画像持久化于 `<vault>/.study-thread/learner.md`（YAML frontmatter：`known_concepts[{name, confidence, last_session}]`、`active_topics`、`total_sessions`、`total_notes`、`preferred_depth`、`preferred_style`），读写由 `src/utils/learner-profile.ts` 负责（`loadLearnerProfile` / `saveLearnerProfile` / `applyProfileDiff`）。
+- MainChatPage / BranchChatPage 在一次流式回答结束（`finalizeResponse`）时调用 `maybeTriggerLearnerUpdate()`：校验 vault 与 API Key、消息数 ≥ 3、每会话仅触发一次（`useLearnerUpdate` 模块级 Set 去重），组装本次新生成笔记后调 `triggerLearnerUpdate`。
+- `useLearnerUpdate`（`src/composables/useLearnerUpdate.ts`）编排：加载现有画像 → `generateProfileUpdate` 生成 diff → `LearnerProfileDialog`（复用 DiffView）展示 → 用户确认后 `applyProfileDiff` + `saveLearnerProfile`（`total_sessions` 自增）；生成失败静默关闭，不打断学习流程。
 
 ### 4.4 `review-quiz.ts` — 复习出题与反馈（P2 AI 复习会话）
 
@@ -117,7 +120,7 @@ reviewFollowupStream(question, answer, note, provider): AsyncIterable<StreamChun
 ```
 MainChatPage.handleExtractNote ──► extractNote ──► noteStore.saveNote
 BranchChatPage.handleSend ──► branchFollowupStream ──► chatWithTools ──► CLIENT_TOOLS
-（会话结束）──► generateProfileUpdate ──► DiffView（确认/取消）
+（会话结束，P3）──► maybeTriggerLearnerUpdate ──► generateProfileUpdate ──► LearnerProfileDialog（DiffView 确认/取消）──► applyProfileDiff + saveLearnerProfile
 （复习会话，P2）──► generateReviewQuestions ──► 逐题作答 ──► reviewFollowupStream ──► reviewStore.applyReview
 ```
 

@@ -31,6 +31,13 @@
       @close="closeAddToNote"
       @confirm="confirmAddToNote"
     />
+    <LearnerProfileDialog
+      :visible="learnerVisible"
+      :diff="learnerDiff"
+      :loading="learnerLoading"
+      @confirm="confirmLearnerUpdate"
+      @cancel="cancelLearnerUpdate"
+    />
   </div>
 </template>
 
@@ -42,6 +49,7 @@ import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
 import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
+import { useLearnerUpdate } from '../composables/useLearnerUpdate'
 import { createProvider } from '../api/provider-factory'
 import { extractNote } from '../api/skills/extract-note'
 import { chatWithTools } from '../api/chat-loop'
@@ -58,6 +66,7 @@ import { resolveMessageIndex } from '../utils/message-locator'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 import AddToNoteDialog from '../components/notes/AddToNoteDialog.vue'
+import LearnerProfileDialog from '../components/learner/LearnerProfileDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -66,6 +75,14 @@ const vaultStore = useVaultStore()
 const noteStore = useNoteStore()
 const toast = useToast()
 const updateThreadTitle = inject<(id: string, title: string) => void>('updateThreadTitle', () => {})
+const {
+  diff: learnerDiff,
+  loading: learnerLoading,
+  visible: learnerVisible,
+  trigger: triggerLearnerUpdate,
+  confirm: confirmLearnerUpdate,
+  cancel: cancelLearnerUpdate,
+} = useLearnerUpdate()
 
 const messages = ref<Message[]>([])
 const isStreaming = ref(false)
@@ -359,6 +376,8 @@ async function handleSend(content: string) {
     streamingThinking.value = ''
     toolStatus.value = ''
     await saveCurrentSession(threadId)
+    // 回答完成后触发学习者画像更新建议（每会话一次，P3）
+    void maybeTriggerLearnerUpdate()
   }
 
   try {
@@ -445,6 +464,38 @@ async function saveCurrentSession(threadId: string): Promise<string | null> {
     messages: messages.value,
   }
   return vaultStore.saveCurrentSession(session, false, extractedNotes.value)
+}
+
+/**
+ * 会话回答结束后触发学习者画像更新建议（P3）
+ * 由 finalizeResponse 调用；每会话最多触发一次（useLearnerUpdate 内部去重）
+ */
+async function maybeTriggerLearnerUpdate() {
+  if (!vaultStore.vaultPath) return
+  const config = settingsStore.getProviderConfig()
+  if (!config.apiKey) return
+  const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
+  if (!threadId || messages.value.length < 3) return
+
+  // 本次会话生成的笔记
+  const newNotes = []
+  for (const ref of extractedNotes.value) {
+    if (ref.kind === 'note') {
+      const note = await noteStore.loadNote(ref.path)
+      if (note) newNotes.push(note)
+    }
+  }
+
+  const session: Session = {
+    id: threadId,
+    title: generateSessionTitle(messages.value),
+    created: new Date().toISOString(),
+    parent_session: null,
+    fork_point: null,
+    tags: [],
+    messages: [...messages.value],
+  }
+  await triggerLearnerUpdate(session, newNotes, createProvider(config), vaultStore.vaultPath, noteStore.noteCount)
 }
 
 async function handleExtractNote(highlightedText: string, domMessageIndex: number | null = null) {

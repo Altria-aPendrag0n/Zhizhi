@@ -56,6 +56,14 @@
       @close="closeAddToNote"
       @confirm="confirmAddToNote"
     />
+
+    <LearnerProfileDialog
+      :visible="learnerVisible"
+      :diff="learnerDiff"
+      :loading="learnerLoading"
+      @confirm="confirmLearnerUpdate"
+      @cancel="cancelLearnerUpdate"
+    />
   </div>
 </template>
 
@@ -83,11 +91,13 @@ import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
 import { wrapHighlightInDOM, unwrapHighlight } from '../utils/highlight-dom'
 import { preprocessMarkdownForRendering } from '../utils/markdown-preprocess'
 import { useToast } from '../composables/useToast'
+import { useLearnerUpdate } from '../composables/useLearnerUpdate'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 import BranchBreadcrumb, { type BreadcrumbItem } from '../components/chat/BranchBreadcrumb.vue'
 import ExtractNoteDialog from '../components/notes/ExtractNoteDialog.vue'
 import AddToNoteDialog from '../components/notes/AddToNoteDialog.vue'
+import LearnerProfileDialog from '../components/learner/LearnerProfileDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -96,6 +106,14 @@ const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
 const toast = useToast()
+const {
+  diff: learnerDiff,
+  loading: learnerLoading,
+  visible: learnerVisible,
+  trigger: triggerLearnerUpdate,
+  confirm: confirmLearnerUpdate,
+  cancel: cancelLearnerUpdate,
+} = useLearnerUpdate()
 
 const messages = ref<Message[]>([])
 const forkMessages = ref<Message[]>([])
@@ -255,6 +273,33 @@ async function saveCurrentSession(): Promise<string | null> {
   return vaultStore.saveCurrentSession(getCurrentSession(), true, extractedNotes.value)
 }
 
+/**
+ * 会话回答结束后触发学习者画像更新建议（P3）
+ * 由 finalizeResponse 调用；每会话最多触发一次（useLearnerUpdate 内部去重）
+ */
+async function maybeTriggerLearnerUpdate() {
+  if (!vaultStore.vaultPath) return
+  const config = settingsStore.getProviderConfig()
+  if (!config.apiKey || messages.value.length < 3) return
+
+  // 本次会话生成的笔记
+  const newNotes = []
+  for (const ref of extractedNotes.value) {
+    if (ref.kind === 'note') {
+      const note = await noteStore.loadNote(ref.path)
+      if (note) newNotes.push(note)
+    }
+  }
+
+  await triggerLearnerUpdate(
+    getCurrentSession(),
+    newNotes,
+    createProvider(config),
+    vaultStore.vaultPath,
+    noteStore.noteCount,
+  )
+}
+
 async function handleSend(content: string) {
   if (!content.trim() || isStreaming.value) return
 
@@ -289,6 +334,7 @@ async function handleSend(content: string) {
     streamingText.value = ''
     streamingThinking.value = ''
     await saveCurrentSession()
+    void maybeTriggerLearnerUpdate()
   }
 
   try {

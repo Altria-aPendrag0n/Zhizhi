@@ -152,7 +152,7 @@ d:\work\Zhizhi\
 | 06 | 知识图谱模块 | [06-graph-module.md](./06-graph-module.md) | `src/components/graph/LocalGraph.vue` | D3 力导向的笔记局部关系图 |
 | 07 | Vault 模块 | [07-vault-module.md](./07-vault-module.md) | `src/stores/vault.ts`、`src/components/vault/`、`src/utils/vault-fs.ts` | Vault 打开/关闭、文件树、索引构建编排 |
 | 08 | LLM API 适配层 | [08-llm-api-layer.md](./08-llm-api-layer.md) | `src/api/`（不含 `skills/`） | 双协议 Provider、流式解析、工具调用循环、read_reference 工具 |
-| 09 | Skill 系统 | [09-skills-system.md](./09-skills-system.md) | `src/skills/`、`src/api/skills/` | SKILL.md 模板加载 + 三个 LLM 执行器 |
+| 09 | Skill 系统 | [09-skills-system.md](./09-skills-system.md) | `src/skills/`、`src/api/skills/` | SKILL.md 模板加载 + 四个 LLM 执行器 |
 | 10 | Embedding 向量引擎 | [10-embedding-module.md](./10-embedding-module.md) | `src/embedding/`、`src/utils/knowledge-retrieval.ts` | 本地离线向量化、索引、相似检索、RAG 注入 |
 | 11 | 解析器与序列化工具 | [11-parsers-serializers.md](./11-parsers-serializers.md) | `src/parser/`、`src/utils/`（序列化/树/日期等） | frontmatter/wikilink 解析、会话与笔记序列化、分支树 |
 | 12 | Pinia 状态管理 | [12-stores.md](./12-stores.md) | `src/stores/` | 6 个 store（含复习队列）的状态、动作与持久化契约 |

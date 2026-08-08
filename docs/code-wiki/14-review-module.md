@@ -157,9 +157,17 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 
 ## 10. 后续扩展（本阶段不含）
 
-- P3：学习者画像驱动——`update-learner` 接入会话结束流程，画像 low/medium 概念对应笔记提权、复习难度个性化。
 - P4：图谱簇复习——按 wikilink 网络整簇提问（关系型问题）。
 - 间隔算法演进：`history` 字段已预留，可升级为 FSRS 式个性化遗忘预测。
+
+## 11. P3 学习者画像闭环（已完成 P3-1）
+
+画像为复习提权（P3-3）与难度个性化（P3-4）提供输入，本阶段先打通"会话 → 画像"闭环：
+
+- **画像文件**：`<vault>/.study-thread/learner.md`（YAML frontmatter），读写与 diff 应用由 `src/utils/learner-profile.ts` 负责（`loadLearnerProfile` / `saveLearnerProfile` / `serializeLearnerProfile` / `applyProfileDiff`：added→新增、updated→更新置信度、removed→移除、suggested_topics→并入 active_topics，`total_sessions` 自增）。
+- **自动触发**：MainChatPage / BranchChatPage 的 `finalizeResponse`（一次流式回答结束）调用 `maybeTriggerLearnerUpdate()`——校验 vault / API Key / 消息数 ≥ 3 / 每会话一次（`useLearnerUpdate` 模块级 Set 去重）后，加载现有画像 + 本次新生成笔记调 `generateProfileUpdate`。
+- **确认 UI**：`useLearnerUpdate` 编排 diff 生成与确认；`LearnerProfileDialog`（`src/components/learner/`，复用 DiffView）展示画像变更，用户确认 → `applyProfileDiff` + `saveLearnerProfile`；取消或生成失败 → 静默关闭，不打断学习流程。
+- **测试**：`src/utils/learner-profile.test.ts`（路径 / 空画像 / round-trip / load-save / diff 应用 8 用例）。
 
 ---
 
