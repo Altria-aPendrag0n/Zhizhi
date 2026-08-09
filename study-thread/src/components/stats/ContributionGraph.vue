@@ -117,7 +117,7 @@ const WEEKDAY_COL_WIDTH = 30 // 星期标签列宽（--cg-weekday-col）
 const ROW_GAP = 8 // 月份行 / 格子行内 星期列与格子的间距
 const CELL_GAP = 3 // 格子间间距
 const MIN_CELL = 8 // 格子尺寸下限（超窄容器兜底）
-const MAX_CELL = 48 // 格子尺寸上限（当月视图放大极限，避免窄窗口下格子过大）
+const MAX_CELL = 28 // 格子尺寸上限（适中大小：横向自然铺开，纵向不超高）
 
 /** 根容器引用：用于测量可用宽度 */
 const rootRef = ref<HTMLElement | null>(null)
