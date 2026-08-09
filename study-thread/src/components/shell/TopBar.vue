@@ -19,7 +19,7 @@
       >
         <PanelLeft :size="18" :stroke-width="1.75" />
       </button>
-      <PanelLeft v-else :size="18" :stroke-width="1.75" class="top-bar__crumb-icon" />
+      <PanelLeft v-else-if="showCrumbIcon !== false" :size="18" :stroke-width="1.75" class="top-bar__crumb-icon" />
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
         <span v-if="index > 0" aria-hidden="true" class="top-bar__separator">/</span>
         <span
@@ -139,6 +139,8 @@ const props = defineProps<{
   showBack?: boolean
   /** 小窗口模式下是否显示"展开会话列表"按钮（替换装饰性 PanelLeft 图标） */
   showThreadsToggle?: boolean
+  /** 是否显示面包屑前置的装饰性 PanelLeft 图标（主界面等无需边栏语义的界面可隐藏） */
+  showCrumbIcon?: boolean
   /** 会话界面是否显示"收起/展开会话栏"按钮（路由未隐藏且非小窗口模式） */
   showCollapseThreads?: boolean
   /** 会话栏当前是否被手动收起（决定收起按钮图标方向） */

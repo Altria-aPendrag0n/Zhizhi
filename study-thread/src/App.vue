@@ -36,7 +36,8 @@
       <TopBar
         :breadcrumbs="displayedBreadcrumbs"
         :show-back="showBack"
-        :show-threads-toggle="isCompact"
+        :show-threads-toggle="isCompact && !isHome"
+        :show-crumb-icon="!isHome"
         :show-collapse-threads="showCollapseThreads"
         :threads-collapsed="threadsCollapsed"
         :menu-items="contextMenuItems"
