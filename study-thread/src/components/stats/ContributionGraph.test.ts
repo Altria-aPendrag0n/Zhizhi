@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ContributionGraph from './ContributionGraph.vue'
 import { toDateKey } from '../../utils/learning-stats'
 
@@ -76,5 +77,32 @@ describe('ContributionGraph', () => {
     const wrapper = mountGraph({}, 26)
     await wrapper.findAll('.cg__view-btn')[1].trigger('click')
     expect(wrapper.findAll('.cg__cell')).toHaveLength(26 * 7)
+  })
+
+  it('格子尺寸按容器宽度自适应：容器变宽时放大以填满（未测量时兜底 10px）', async () => {
+    // 模拟容器宽度 800px（当月视图列数少 → 格子放大到上限）
+    const proto = HTMLElement.prototype
+    const original = Object.getOwnPropertyDescriptor(proto, 'clientWidth')
+    Object.defineProperty(proto, 'clientWidth', {
+      configurable: true,
+      get: () => 800,
+    })
+
+    const wrapper = mount(ContributionGraph, { props: { daily: {} } })
+    await nextTick()
+
+    Object.defineProperty(proto, 'clientWidth', original ?? { configurable: true, value: 0 })
+
+    const style = (wrapper.element as HTMLElement).style
+    const size = parseInt(style.getPropertyValue('--cg-cell'), 10)
+    expect(size).toBeGreaterThan(10)
+  })
+
+  afterEach(() => {
+    // 恢复 clientWidth 原型，避免影响其他用例
+    const proto = HTMLElement.prototype
+    if (proto.clientWidth === 800) {
+      Object.defineProperty(proto, 'clientWidth', { configurable: true, value: 0 })
+    }
   })
 })

@@ -1,5 +1,5 @@
 <template>
-  <div class="cg">
+  <div class="cg" ref="rootRef" :style="{ '--cg-cell': `${cellSize}px` }">
     <!-- 视图切换：当月 / 全年 -->
     <div class="cg__toolbar">
       <div class="cg__view-toggle" role="group" aria-label="时间范围">
@@ -88,13 +88,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { toDateKey, type DailyCounts } from '../../utils/learning-stats'
 
 /**
  * GitHub 风格学习频率格子图：
  * 每格表示一天，当天学习次数（问答/复习/笔记总和）越多颜色越深（绿色分层），悬停显示当日明细。
  * - 默认「当月」视图：只显示当月日期；可切换到「全年」（53 周）。
+ * - 格子尺寸按容器宽度自适应：列数少（当月）时放大填满，列数多（全年）时自动收缩，两种视图均尽量铺满容器。
  * - 纵轴（周一/周三/周五）与横轴（月份）文字与格子严格对齐。
  */
 
@@ -110,6 +111,41 @@ const props = withDefaults(
 
 const WEEKDAY_LABELS = ['周一', '周三', '周五']
 const DAYS_PER_WEEK = 7
+
+/* 布局尺寸常量（与 style 中对应值保持一致） */
+const WEEKDAY_COL_WIDTH = 30 // 星期标签列宽（--cg-weekday-col）
+const ROW_GAP = 8 // 月份行 / 格子行内 星期列与格子的间距
+const CELL_GAP = 3 // 格子间间距
+const MIN_CELL = 8 // 格子尺寸下限（超窄容器兜底）
+const MAX_CELL = 48 // 格子尺寸上限（当月视图放大极限，避免窄窗口下格子过大）
+
+/** 根容器引用：用于测量可用宽度 */
+const rootRef = ref<HTMLElement | null>(null)
+/** 根容器当前内容宽度（px） */
+const gridWidth = ref(0)
+let resizeObserver: ResizeObserver | null = null
+
+function measure() {
+  if (!rootRef.value) return
+  const width = rootRef.value.clientWidth
+  if (typeof width === 'number') gridWidth.value = width
+}
+
+onMounted(() => {
+  measure()
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => measure())
+    if (rootRef.value) resizeObserver.observe(rootRef.value)
+  } else {
+    window.addEventListener('resize', measure)
+  }
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  window.removeEventListener('resize', measure)
+})
 
 /** 当前视图：默认当月，可切换全年 */
 const viewMode = ref<'month' | 'year'>('month')
@@ -221,6 +257,20 @@ const columnCount = computed<number>(() => {
   return props.weekCount
 })
 
+/**
+ * 格子边长：按容器可用宽度均分填满，限制在 [MIN_CELL, MAX_CELL]。
+ * 当月视图列数少 → 格子放大铺满；全年视图列数多 → 自动收缩。
+ * 未测量到宽度（如测试环境）时回退 10px。
+ */
+const cellSize = computed(() => {
+  const width = gridWidth.value
+  if (!width || width <= 0) return 10
+  const cols = columnCount.value
+  const gridArea = width - WEEKDAY_COL_WIDTH - ROW_GAP
+  const cell = (gridArea - (cols - 1) * CELL_GAP) / cols
+  return Math.min(MAX_CELL, Math.max(MIN_CELL, Math.floor(cell)))
+})
+
 /** 月份标签：列首天所在月份变化处显示（当月视图仅一个标签，全年视图逐月分布） */
 const monthLabels = computed<string[]>(() => {
   const labels: string[] = []
@@ -297,8 +347,9 @@ const monthLabels = computed<string[]>(() => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* 表格主体：月份行 + 格子行，两行共享同一左列宽度 */
+/* 表格主体：月份行 + 格子行，两行共享同一左列宽度；整体按内容宽度居中，留白均匀分布 */
 .cg__table {
+  align-self: center;
   display: flex;
   flex-direction: column;
   gap: 4px;
