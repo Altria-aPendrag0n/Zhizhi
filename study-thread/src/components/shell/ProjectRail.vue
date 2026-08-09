@@ -4,8 +4,8 @@
       class="project-rail__brand"
       :class="{ 'is-active': brandActive }"
       type="button"
-      aria-label="主界面"
-      title="主界面"
+      aria-label="知枝"
+      title="知枝"
       @click="$emit('brand')"
     >
       <Sprout :size="22" :stroke-width="1.75" />
