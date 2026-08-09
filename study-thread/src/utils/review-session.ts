@@ -14,11 +14,10 @@ import { readFile } from './vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import { extractAllLinks } from '../parser/wikilink'
 import { parseMessages } from './branch-context'
+import { normalizeQuizQuestion } from '../review/question-registry'
 
 /** 复习会话关联笔记的最大数量 */
 export const MAX_REVIEW_RELATED_NOTES = 4
-
-const REVIEW_LEVELS: ReviewQuestion['level'][] = ['recognize', 'apply', 'explain']
 
 function toString(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -28,7 +27,10 @@ function toTags(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : []
 }
 
-/** 从 frontmatter 解析复习问题（兼容 YAML 解析为数组 / JSON 字符串两种形态） */
+/**
+ * 从 frontmatter 解析复习问题（兼容 YAML 解析为数组 / JSON 字符串两种形态）。
+ * 逐题经 normalizeQuizQuestion 规范化：旧会话缺失 type 的题目自动降级 short_answer（P5 兼容）。
+ */
 function parseReviewQuestions(value: unknown): ReviewQuestion[] | undefined {
   let parsed: unknown = value
   if (typeof value === 'string' && value) {
@@ -38,19 +40,9 @@ function parseReviewQuestions(value: unknown): ReviewQuestion[] | undefined {
       return undefined
     }
   }
-  if (
-    Array.isArray(parsed) &&
-    parsed.every(
-      (q) =>
-        q !== null &&
-        typeof q === 'object' &&
-        typeof (q as Record<string, unknown>).question === 'string' &&
-        REVIEW_LEVELS.includes((q as Record<string, unknown>).level as ReviewQuestion['level']),
-    )
-  ) {
-    return parsed as ReviewQuestion[]
-  }
-  return undefined
+  if (!Array.isArray(parsed)) return undefined
+  const questions = parsed.map(normalizeQuizQuestion).filter((q): q is ReviewQuestion => q !== null)
+  return questions.length > 0 ? questions : undefined
 }
 
 /**

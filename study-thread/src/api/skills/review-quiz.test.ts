@@ -79,10 +79,29 @@ describe('generateReviewQuestions', () => {
     const provider = mockProvider([{ type: 'text', content: QUIZ_JSON }])
     const questions = await generateReviewQuestions(note, [], provider)
 
+    // LLM 响应未带 type（旧格式）时逐题降级为 short_answer（P5 兼容），level/question 原样保留
     expect(questions).toEqual([
-      { level: 'recognize', question: '什么是费曼学习法？' },
-      { level: 'apply', question: '如何用费曼法检验自己是否理解？' },
-      { level: 'explain', question: '为什么费曼法能暴露解释中的跳步？' },
+      { level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' },
+      { level: 'apply', type: 'short_answer', question: '如何用费曼法检验自己是否理解？' },
+      { level: 'explain', type: 'short_answer', question: '为什么费曼法能暴露解释中的跳步？' },
+    ])
+  })
+
+  it('LLM 响应带题型字段时透传（choice options / ordering steps / debate position）', async () => {
+    const typedJson = JSON.stringify({
+      questions: [
+        { level: 'recognize', type: 'choice', question: '费曼法的核心是什么？', options: ['向他人解释', '死记硬背', '题海战术', '闭卷考试'] },
+        { level: 'apply', type: 'ordering', question: '排出正确步骤', steps: ['a', 'b', 'c'] },
+        { level: 'explain', type: 'debate', question: '辩题', position: '我方观点', maxRounds: 4 },
+      ],
+    })
+    const provider = mockProvider([{ type: 'text', content: typedJson }])
+    const questions = await generateReviewQuestions(note, [], provider)
+
+    expect(questions).toEqual([
+      { level: 'recognize', type: 'choice', question: '费曼法的核心是什么？', options: ['向他人解释', '死记硬背', '题海战术', '闭卷考试'] },
+      { level: 'apply', type: 'ordering', question: '排出正确步骤', steps: ['a', 'b', 'c'] },
+      { level: 'explain', type: 'debate', question: '辩题', position: '我方观点', maxRounds: 4 },
     ])
   })
 

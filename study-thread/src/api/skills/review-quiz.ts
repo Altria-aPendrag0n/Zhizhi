@@ -12,6 +12,7 @@ import { parseSkill, buildPrompt } from '../../skills/loader'
 import type { LearnerProfile } from '../../utils/learner-profile'
 import { matchConceptExact } from '../../utils/learner-note-link'
 import { extractAllLinks } from '../../parser/wikilink'
+import { normalizeQuizQuestion } from '../../review/question-registry'
 
 // SKILL.md 内容（构建时内联）
 import skillRaw from '../../skills/review-quiz/SKILL.md?raw'
@@ -83,24 +84,27 @@ function extractJSON(text: string): string {
   return text.trim()
 }
 
-/** LLM 出题响应的内部结构 */
-interface QuizResponse {
-  questions: { level: string; question: string }[]
-}
-
-const LEVELS: ReviewQuestion['level'][] = ['recognize', 'apply', 'explain']
-
-function validateQuizResponse(data: unknown): data is QuizResponse {
-  if (!data || typeof data !== 'object') return false
+/**
+ * 从 LLM 响应中提取并规范化复习问题（P5 接入题型注册表）。
+ *
+ * 逐题经 normalizeQuizQuestion 规范化：type 缺省/未知降级 short_answer，
+ * level 非法或 choice/ordering 字段不满足约束时丢弃该题；全部丢弃则抛错（LLM 输出完全无效）。
+ */
+function parseQuizResponse(data: unknown): ReviewQuestion[] {
+  if (!data || typeof data !== 'object') {
+    throw new Error('复习出题失败: 响应不是合法对象')
+  }
   const d = data as Record<string, unknown>
-  if (!Array.isArray(d.questions) || d.questions.length === 0) return false
-  return d.questions.every(
-    (q) =>
-      q !== null &&
-      typeof q === 'object' &&
-      typeof (q as Record<string, unknown>).question === 'string' &&
-      LEVELS.includes((q as Record<string, unknown>).level as ReviewQuestion['level']),
-  )
+  if (!Array.isArray(d.questions)) {
+    throw new Error('复习出题失败: 响应缺少 questions 数组')
+  }
+  const questions = d.questions
+    .map(normalizeQuizQuestion)
+    .filter((q): q is ReviewQuestion => q !== null)
+  if (questions.length === 0) {
+    throw new Error('复习出题失败: questions 中没有合法题目')
+  }
+  return questions
 }
 
 /**
@@ -165,11 +169,7 @@ export async function generateReviewQuestions(
     throw new Error(`复习出题失败: 无法解析 LLM 响应为 JSON\n响应内容: ${fullResponse.slice(0, 200)}`)
   }
 
-  if (!validateQuizResponse(parsed)) {
-    throw new Error(`复习出题失败: 响应缺少合法的 questions 字段\n响应内容: ${JSON.stringify(parsed).slice(0, 200)}`)
-  }
-
-  return parsed.questions.map((q) => ({ level: q.level as ReviewQuestion['level'], question: q.question }))
+  return parseQuizResponse(parsed)
 }
 
 /** 簇模式问题：额外携带涉及笔记标题（P4-4 缺口定位依据） */
@@ -177,21 +177,32 @@ export interface ClusterReviewQuestion extends ReviewQuestion {
   notes?: string[]
 }
 
-/** 簇模式下问题响应的内部结构（notes 为可选字段） */
-interface ClusterQuizResponse {
-  questions: { level: string; question: string; notes?: string[] }[]
-}
-
-function validateClusterQuizResponse(data: unknown): data is ClusterQuizResponse {
-  if (!data || typeof data !== 'object') return false
+/**
+ * 从 LLM 响应中提取并规范化簇模式问题（P5 接入题型注册表）。
+ * 在单题规范化基础上，透传可选 notes 字段（涉及笔记标题列表）。
+ */
+function parseClusterQuizResponse(data: unknown): ClusterReviewQuestion[] {
+  if (!data || typeof data !== 'object') {
+    throw new Error('复习出题失败: 响应不是合法对象')
+  }
   const d = data as Record<string, unknown>
-  if (!Array.isArray(d.questions) || d.questions.length === 0) return false
-  return d.questions.every((q) => {
-    if (!q || typeof q !== 'object') return false
-    const item = q as Record<string, unknown>
-    if (typeof item.question !== 'string' || !LEVELS.includes(item.level as ReviewQuestion['level'])) return false
-    return item.notes === undefined || (Array.isArray(item.notes) && item.notes.every((n) => typeof n === 'string'))
-  })
+  if (!Array.isArray(d.questions)) {
+    throw new Error('复习出题失败: 响应缺少 questions 数组')
+  }
+  const questions: ClusterReviewQuestion[] = []
+  for (const raw of d.questions) {
+    const q = normalizeQuizQuestion(raw)
+    if (!q) continue
+    const r = raw as Record<string, unknown>
+    if (Array.isArray(r.notes) && r.notes.every((n) => typeof n === 'string')) {
+      ;(q as ClusterReviewQuestion).notes = r.notes as string[]
+    }
+    questions.push(q as ClusterReviewQuestion)
+  }
+  if (questions.length === 0) {
+    throw new Error('复习出题失败: questions 中没有合法题目')
+  }
+  return questions
 }
 
 /**
@@ -268,15 +279,7 @@ export async function generateClusterQuestions(
     throw new Error(`复习出题失败: 无法解析 LLM 响应为 JSON\n响应内容: ${fullResponse.slice(0, 200)}`)
   }
 
-  if (!validateClusterQuizResponse(parsed)) {
-    throw new Error(`复习出题失败: 响应缺少合法的 questions 字段\n响应内容: ${JSON.stringify(parsed).slice(0, 200)}`)
-  }
-
-  return parsed.questions.map((q) => ({
-    level: q.level as ReviewQuestion['level'],
-    question: q.question,
-    notes: q.notes,
-  }))
+  return parseClusterQuizResponse(parsed)
 }
 
 /**

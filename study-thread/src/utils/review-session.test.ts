@@ -23,8 +23,13 @@ const note: Note = {
 }
 
 const questions: ReviewQuestion[] = [
-  { level: 'recognize', question: '什么是费曼学习法？' },
-  { level: 'explain', question: '为什么费曼法能暴露知识缺口？' },
+  {
+    level: 'recognize',
+    type: 'choice',
+    question: '什么是费曼学习法？',
+    options: ['教学相长', '死记硬背', '题海战术', '闭门造车'],
+  },
+  { level: 'explain', type: 'short_answer', question: '为什么费曼法能暴露知识缺口？' },
 ]
 
 function makeNote(partial: Partial<Note>): Note {
@@ -101,6 +106,25 @@ describe('loadReviewSession', () => {
     readFile.mockRejectedValue(new Error('ENOENT'))
     const loaded = await loadReviewSession('/vault', 'review_1')
     expect(loaded).toBeNull()
+  })
+
+  it('旧会话（无 type）的问题加载后降级为 short_answer（P5 兼容）', async () => {
+    const raw = [
+      '---',
+      'kind: review',
+      'reviewed_note: notes/费曼学习法.md',
+      'review_questions:',
+      '  - level: recognize',
+      '    question: 旧题',
+      '---',
+      '正文内容',
+    ].join('\n')
+    readFile.mockResolvedValue(raw)
+    const loaded = await loadReviewSession('/vault', 'review_legacy')
+    expect(loaded).not.toBeNull()
+    expect(loaded!.review_questions).toHaveLength(1)
+    expect(loaded!.review_questions![0].type).toBe('short_answer')
+    expect(loaded!.review_questions![0].question).toBe('旧题')
   })
 
   it('文件路径使用 review- 前缀', () => {

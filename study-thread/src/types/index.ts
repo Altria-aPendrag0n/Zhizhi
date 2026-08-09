@@ -96,9 +96,24 @@ export interface ReviewTask {
 // 复习出题相关类型（P2 AI 复习会话）
 export type ReviewQuestionLevel = 'recognize' | 'apply' | 'explain'
 
+/** 复习题型（P5 扩展）：choice 选择 / true_false 判对错 / fill_blank 填空 / ordering 排序 / short_answer 简答 / debate 辩论 */
+export type ReviewQuestionType = 'choice' | 'true_false' | 'fill_blank' | 'ordering' | 'short_answer' | 'debate'
+
 export interface ReviewQuestion {
   level: ReviewQuestionLevel
+  /** 题型（P5）：LLM 缺省/非法时由出题校验降级为 short_answer，保证会话不中断 */
+  type: ReviewQuestionType
   question: string
+  /** choice：选项列表（题干不含 A/B/C/D 字母，前端渲染） */
+  options?: string[]
+  /** ordering：乱序步骤列表，前端重排后作答 */
+  steps?: string[]
+  /** fill_blank：填空数量（默认 1，题干用 ____ 标注空位） */
+  blanks?: number
+  /** debate：AI 持方观点（辩论初始立场） */
+  position?: string
+  /** debate：最大辩论轮次（默认 3） */
+  maxRounds?: number
 }
 
 export interface NoteMeta {

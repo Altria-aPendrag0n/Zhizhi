@@ -106,8 +106,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     kind: 'review',
     reviewed_note: 'notes/费曼学习法.md',
     review_questions: [
-      { level: 'recognize', question: '什么是费曼学习法？' },
-      { level: 'explain', question: '为什么费曼法能暴露知识缺口？' },
+      { level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' },
+      { level: 'explain', type: 'short_answer', question: '为什么费曼法能暴露知识缺口？' },
     ],
     ...overrides,
   }
