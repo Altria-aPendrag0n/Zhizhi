@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import HomePage from './HomePage.vue'
-import type { LearningStats } from '../utils/learning-stats'
+import { toDateKey, type LearningStats } from '../utils/learning-stats'
 
 const state = vi.hoisted(() => ({
   routerPush: vi.fn(),
   collectLearningStats: vi.fn(),
   createNewThread: vi.fn(),
+  syncQueueWithNotes: vi.fn().mockResolvedValue(undefined),
 }))
 
 interface HomePageGlobals {
@@ -37,13 +38,21 @@ vi.mock('../stores/notes', () => {
   }
 })
 
+vi.mock('../stores/review', () => ({
+  useReviewStore: () => ({
+    dueCount: 2,
+    syncQueueWithNotes: state.syncQueueWithNotes,
+  }),
+}))
+
 vi.mock('../utils/learning-stats', async () => {
   const actual = await vi.importActual<typeof import('../utils/learning-stats')>('../utils/learning-stats')
   return { ...actual, collectLearningStats: state.collectLearningStats }
 })
 
 const SAMPLE_STATS: LearningStats = {
-  daily: new Map([['2026-08-09', { qa: 3, review: 1, note: 2 }]]),
+  // 用运行当天作为日期键，供「今日学习进度」读取
+  daily: new Map([[toDateKey(new Date()), { qa: 3, review: 1, note: 2 }]]),
   totalQa: 3,
   totalReview: 1,
   totalNote: 2,
@@ -100,6 +109,28 @@ describe('HomePage 主界面', () => {
 
     await wrapper.findAll('.quick-btn')[0].trigger('click')
     expect(state.createNewThread).toHaveBeenCalledWith('1')
+  })
+
+  it('渲染今日学习进度：今日问答/今日笔记/已复习/待复习', async () => {
+    const g = globalThis as unknown as HomePageGlobals
+    g.__homeVaultPath!.value = '/vault'
+
+    const wrapper = mountHome()
+    await flushPromises()
+
+    // 复习队列加载被触发（供「待复习」计数）
+    expect(state.syncQueueWithNotes).toHaveBeenCalledWith('/vault')
+
+    const items = wrapper.findAll('.home-today__item')
+    expect(items).toHaveLength(4)
+    expect(items[0].text()).toContain('今日问答')
+    expect(items[0].text()).toContain('3')
+    expect(items[1].text()).toContain('今日笔记')
+    expect(items[1].text()).toContain('2')
+    expect(items[2].text()).toContain('已复习')
+    expect(items[2].text()).toContain('1')
+    expect(items[3].text()).toContain('待复习')
+    expect(items[3].text()).toContain('2')
   })
 
   it('统计加载失败时静默显示空态，不阻断页面', async () => {

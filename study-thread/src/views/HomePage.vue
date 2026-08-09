@@ -42,6 +42,37 @@
         </div>
       </div>
 
+      <!-- 今日学习进度 -->
+      <section class="home-today" aria-label="今日学习进度">
+        <div class="home-today__item">
+          <MessageSquare :size="16" class="home-today__icon" />
+          <span class="home-today__label">今日问答</span>
+          <strong class="home-today__value">{{ todayCounts.qa }}</strong>
+        </div>
+        <div class="home-today__item">
+          <FileText :size="16" class="home-today__icon" />
+          <span class="home-today__label">今日笔记</span>
+          <strong class="home-today__value">{{ todayCounts.note }}</strong>
+        </div>
+        <div class="home-today__item">
+          <RefreshCw :size="16" class="home-today__icon" />
+          <span class="home-today__label">已复习</span>
+          <strong class="home-today__value">{{ todayCounts.review }}</strong>
+        </div>
+        <div
+          class="home-today__item home-today__item--due"
+          role="button"
+          tabindex="0"
+          :title="'点击前往学习地图查看到期复习'"
+          @click="router.push('/hub')"
+          @keydown.enter="router.push('/hub')"
+        >
+          <CalendarClock :size="16" class="home-today__icon" />
+          <span class="home-today__label">待复习</span>
+          <strong class="home-today__value">{{ reviewStore.dueCount }}</strong>
+        </div>
+      </section>
+
       <!-- 学习频率格子图 -->
       <section class="home-section" aria-labelledby="frequency-title">
         <div class="home-section__header">
@@ -80,15 +111,17 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Sprout, MessageSquare, FileText, Map } from '@lucide/vue'
+import { Sprout, MessageSquare, FileText, Map, RefreshCw, CalendarClock } from '@lucide/vue'
 import ContributionGraph from '../components/stats/ContributionGraph.vue'
 import { useVaultStore } from '../stores/vault'
 import { useNoteStore } from '../stores/notes'
-import { collectLearningStats, type DailyCounts, type LearningStats } from '../utils/learning-stats'
+import { useReviewStore } from '../stores/review'
+import { collectLearningStats, toDateKey, type DailyCounts, type LearningStats } from '../utils/learning-stats'
 
 const router = useRouter()
 const vaultStore = useVaultStore()
 const noteStore = useNoteStore()
+const reviewStore = useReviewStore()
 /** 知枝学习项目下新建会话（由 App 提供） */
 const createNewThread = inject<(projectId?: string) => void>('createNewThread', () => {})
 
@@ -99,6 +132,12 @@ const loading = ref(false)
 const dailyMap = computed<Record<string, DailyCounts>>(() => {
   if (!stats.value) return {}
   return Object.fromEntries(stats.value.daily)
+})
+
+/** 今日学习次数（问答/笔记/复习），无记录时为 0 */
+const todayCounts = computed<DailyCounts>(() => {
+  const counts = stats.value?.daily.get(toDateKey(new Date()))
+  return counts ?? { qa: 0, review: 0, note: 0 }
 })
 
 onMounted(async () => {
@@ -114,6 +153,8 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  // 加载复习队列（含存量笔记补录），供「待复习」计数
+  void reviewStore.syncQueueWithNotes(vaultStore.vaultPath)
 })
 
 function startNewChat() {
@@ -248,6 +289,52 @@ function startNewChat() {
   color: var(--ink-3);
 }
 
+/* 今日学习进度 */
+.home-today {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 30px;
+}
+
+.home-today__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.home-today__item--due {
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.home-today__item--due:hover {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.home-today__icon {
+  color: var(--brand);
+  flex-shrink: 0;
+}
+
+.home-today__label {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.home-today__value {
+  margin-left: auto;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--brand);
+  font-family: Georgia, 'Songti SC', serif;
+}
+
 /* 学习频率区 */
 .home-section {
   margin-bottom: 30px;
@@ -351,6 +438,9 @@ function startNewChat() {
   .home-stats {
     grid-template-columns: repeat(3, 1fr);
   }
+  .home-today {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 700px) {
@@ -358,6 +448,9 @@ function startNewChat() {
     padding: 24px 20px 56px;
   }
   .home-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .home-today {
     grid-template-columns: repeat(2, 1fr);
   }
   .home-quick {
