@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ReviewChatPage from './ReviewChatPage.vue'
-import type { Session, Note } from '../types'
+import type { Session, Note, ReviewQuestion } from '../types'
 
 const mocks = vi.hoisted(() => ({
   route: { params: { sessionId: 'review_1' } },
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
   extractNoteRefsFromSession: vi.fn(() => []),
   reviewFollowupStream: vi.fn(),
+  reviewDebateStream: vi.fn(),
   extractNote: vi.fn(),
   parseMentionedNotes: vi.fn(),
 }))
@@ -59,7 +60,10 @@ vi.mock('../utils/vault-fs', () => ({ readFile: mocks.readFile }))
 vi.mock('../utils/session-linker', () => ({
   extractNoteRefsFromSession: mocks.extractNoteRefsFromSession,
 }))
-vi.mock('../api/skills/review-quiz', () => ({ reviewFollowupStream: mocks.reviewFollowupStream }))
+vi.mock('../api/skills/review-quiz', () => ({
+  reviewFollowupStream: mocks.reviewFollowupStream,
+  reviewDebateStream: mocks.reviewDebateStream,
+}))
 vi.mock('../api/skills/extract-note', () => ({ extractNote: mocks.extractNote }))
 vi.mock('../utils/review-gap', () => ({ parseMentionedNotes: mocks.parseMentionedNotes }))
 vi.mock('../api/provider-factory', () => ({ createProvider: () => ({}) }))
@@ -202,6 +206,71 @@ describe('ReviewChatPage', () => {
     )
     expect(mocks.saveSessionToVault).toHaveBeenCalled()
     expect(wrapper.text()).toContain('1 / 2')
+  })
+
+  it('辩论题：多轮对答，未达轮次不推进题号，末轮总结后推进（P5-5）', async () => {
+    const debateQ: ReviewQuestion = {
+      level: 'explain',
+      type: 'debate',
+      question: '辩题：死记硬背毫无价值',
+      position: '反对该观点',
+      maxRounds: 3,
+    }
+    mocks.loadReviewSession.mockResolvedValue(makeSession({ review_questions: [debateQ] }))
+    mocks.reviewDebateStream.mockReturnValue((async function* () {
+      yield { type: 'text', content: '反驳你的论点。' }
+    })())
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    // 活跃题为辩论：渲染轮次指示 1/3 与 AI 持方
+    expect(wrapper.text()).toContain('1 / 3')
+    expect(wrapper.text()).toContain('AI 持方：反对该观点')
+
+    // 轮 1：调用 reviewDebateStream（round=1, maxRounds=3），未达轮次不推进
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '我的立场一')
+    await flushPromises()
+    expect(mocks.reviewDebateStream).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'debate' }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      1,
+      3,
+    )
+    expect(wrapper.text()).toContain('2 / 3')
+
+    // 轮 2：仍不推进
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '我的立场二')
+    await flushPromises()
+    expect(mocks.reviewDebateStream).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'debate' }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      2,
+      3,
+    )
+    expect(wrapper.text()).toContain('3 / 3')
+
+    // 轮 3：末轮 → 总结并推进，无更多问题
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '我的立场三')
+    await flushPromises()
+    expect(mocks.reviewDebateStream).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'debate' }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      3,
+      3,
+    )
+    // 末轮总结后推进题号（questions 只有 1 题 → 进度 1/1），辩论指示消失
+    expect(wrapper.text()).toContain('1 / 1')
+    expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(true)
   })
 
   it('簇模式：加载 review_cluster 展示簇面板并高亮当前笔记', async () => {

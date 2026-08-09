@@ -140,43 +140,56 @@
         </div>
       </template>
     </div>
-    <!-- 结构化题型作答组件（P5-4：选择/判对错/填空/排序；辩论与简答走 Composer 文本输入） -->
-    <div
-      v-else-if="activeQuestion && isStructuredAnswer"
-      class="review-chat-page__answer"
-    >
-      <ChoiceAnswer
-        v-if="activeQuestion.type === 'choice'"
-        :options="activeQuestion.options ?? []"
-        :disabled="isStreaming"
-        @submit="handleStructuredAnswer"
+    <template v-else>
+      <!-- 辩论题轮次指示（P5-5）：活跃题为 debate 时展示当前轮次与 AI 持方，仍走 Composer 文本作答 -->
+      <div
+        v-if="activeQuestion && activeQuestion.type === 'debate'"
+        class="review-chat-page__debate"
+      >
+        <DebateView
+          :round="debateRound"
+          :max-rounds="activeQuestion.maxRounds ?? DEFAULT_MAX_ROUNDS"
+          :position="activeQuestion.position"
+        />
+      </div>
+      <!-- 结构化题型作答组件（P5-4：选择/判对错/填空/排序） -->
+      <div
+        v-if="activeQuestion && isStructuredAnswer"
+        class="review-chat-page__answer"
+      >
+        <ChoiceAnswer
+          v-if="activeQuestion.type === 'choice'"
+          :options="activeQuestion.options ?? []"
+          :disabled="isStreaming"
+          @submit="handleStructuredAnswer"
+        />
+        <TrueFalseAnswer
+          v-else-if="activeQuestion.type === 'true_false'"
+          :disabled="isStreaming"
+          @submit="handleStructuredAnswer"
+        />
+        <FillBlankAnswer
+          v-else-if="activeQuestion.type === 'fill_blank'"
+          :blanks="activeQuestion.blanks ?? 1"
+          :disabled="isStreaming"
+          @submit="handleStructuredAnswer"
+        />
+        <OrderingAnswer
+          v-else-if="activeQuestion.type === 'ordering'"
+          :steps="activeQuestion.steps ?? []"
+          :disabled="isStreaming"
+          @submit="handleStructuredAnswer"
+        />
+      </div>
+      <Composer
+        v-if="!isStructuredAnswer"
+        :is-streaming="isStreaming"
+        :disabled="isStreaming || !hasQuestions || showRating || rated"
+        :placeholder="composerPlaceholder"
+        @send="handleSend"
+        @stop="handleStop"
       />
-      <TrueFalseAnswer
-        v-else-if="activeQuestion.type === 'true_false'"
-        :disabled="isStreaming"
-        @submit="handleStructuredAnswer"
-      />
-      <FillBlankAnswer
-        v-else-if="activeQuestion.type === 'fill_blank'"
-        :blanks="activeQuestion.blanks ?? 1"
-        :disabled="isStreaming"
-        @submit="handleStructuredAnswer"
-      />
-      <OrderingAnswer
-        v-else-if="activeQuestion.type === 'ordering'"
-        :steps="activeQuestion.steps ?? []"
-        :disabled="isStreaming"
-        @submit="handleStructuredAnswer"
-      />
-    </div>
-    <Composer
-      v-else
-      :is-streaming="isStreaming"
-      :disabled="isStreaming || !hasQuestions || showRating || rated"
-      :placeholder="composerPlaceholder"
-      @send="handleSend"
-      @stop="handleStop"
-    />
+    </template>
 
     <AddToNoteDialog
       :visible="addToNoteDialog.visible"
@@ -200,8 +213,8 @@ import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
 import { useToast } from '../composables/useToast'
 import { createProvider } from '../api/provider-factory'
-import { reviewFollowupStream } from '../api/skills/review-quiz'
-import { serializeAnswer } from '../review/question-registry'
+import { reviewFollowupStream, reviewDebateStream } from '../api/skills/review-quiz'
+import { DEFAULT_MAX_ROUNDS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
 import { extractNote } from '../api/skills/extract-note'
 import { loadReviewSession, getReviewSessionFilePath } from '../utils/review-session'
 import { parseMentionedNotes } from '../utils/review-gap'
@@ -217,6 +230,7 @@ import ChoiceAnswer from '../components/review/ChoiceAnswer.vue'
 import TrueFalseAnswer from '../components/review/TrueFalseAnswer.vue'
 import FillBlankAnswer from '../components/review/FillBlankAnswer.vue'
 import OrderingAnswer from '../components/review/OrderingAnswer.vue'
+import DebateView from '../components/review/DebateView.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -244,6 +258,9 @@ const currentQuestionIndex = ref(0)
 const showRating = ref(false)
 const rated = ref(false)
 const extractedNotes = ref<NoteReference[]>([])
+/** 辩论状态（P5-5）：round 为用户第几次发言（1 起）；turns 为同题历史论点（含 AI 开场/反驳） */
+const debateRound = ref(1)
+const debateTurns = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
 const addToNoteDialog = reactive({
   visible: false,
   highlightedText: '',
@@ -359,33 +376,70 @@ async function handleSend(content: string) {
   abortController = controller
   try {
     const provider = createProvider(config)
-    for await (const chunk of reviewFollowupStream(
-      question,
-      content,
-      note.value,
-      provider,
-      hasCluster.value ? clusterNotes.value : undefined,
-    )) {
-      if (chunk.type === 'text') {
-        streamingText.value += chunk.content
-      } else if (chunk.type === 'thinking') {
-        streamingThinking.value += chunk.content
-      } else if (chunk.type === 'error') {
-        error.value = chunk.content
-        messages.value.pop()
-        isStreaming.value = false
-        streamingText.value = ''
-        streamingThinking.value = ''
-        return
+    const clusterCtx = hasCluster.value ? clusterNotes.value : undefined
+    if (question.type === 'debate') {
+      // P5-5 辩论：多轮对答，未达 maxRounds 不推进题号；达轮次后总结并进入下一题
+      const maxRounds = question.maxRounds ?? DEFAULT_MAX_ROUNDS
+      debateTurns.value.push({ role: 'user', content })
+      const isFinal = shouldEndDebate('debate', debateRound.value, maxRounds)
+      for await (const chunk of reviewDebateStream(
+        question,
+        debateTurns.value,
+        note.value,
+        provider,
+        clusterCtx,
+        debateRound.value,
+        maxRounds,
+      )) {
+        if (chunk.type === 'text') {
+          streamingText.value += chunk.content
+        } else if (chunk.type === 'thinking') {
+          streamingThinking.value += chunk.content
+        } else if (chunk.type === 'error') {
+          error.value = chunk.content
+          messages.value.pop()
+          isStreaming.value = false
+          streamingText.value = ''
+          streamingThinking.value = ''
+          return
+        }
       }
+      aiMessage.content = streamingText.value
+      aiMessage.thinking = streamingThinking.value || undefined
+      debateTurns.value.push({ role: 'assistant', content: streamingText.value })
+      if (hasCluster.value) {
+        gapPaths.value = new Set(parseMentionedNotes(aiMessage.content, clusterNotes.value))
+      }
+      if (isFinal) {
+        debateRound.value = 1
+        debateTurns.value = []
+        currentQuestionIndex.value++
+      } else {
+        debateRound.value++
+      }
+    } else {
+      for await (const chunk of reviewFollowupStream(question, content, note.value, provider, clusterCtx)) {
+        if (chunk.type === 'text') {
+          streamingText.value += chunk.content
+        } else if (chunk.type === 'thinking') {
+          streamingThinking.value += chunk.content
+        } else if (chunk.type === 'error') {
+          error.value = chunk.content
+          messages.value.pop()
+          isStreaming.value = false
+          streamingText.value = ''
+          streamingThinking.value = ''
+          return
+        }
+      }
+      aiMessage.content = streamingText.value
+      aiMessage.thinking = streamingThinking.value || undefined
+      // P4-4 缺口定位：从 AI 反馈解析被标注的簇内缺口笔记（回答涉及/应涉及的笔记）
+      if (hasCluster.value) {
+        gapPaths.value = new Set(parseMentionedNotes(aiMessage.content, clusterNotes.value))
+      }
+      currentQuestionIndex.value++
     }
-    aiMessage.content = streamingText.value
-    aiMessage.thinking = streamingThinking.value || undefined
-    // P4-4 缺口定位：从 AI 反馈解析被标注的簇内缺口笔记（回答涉及/应涉及的笔记）
-    if (hasCluster.value) {
-      gapPaths.value = new Set(parseMentionedNotes(aiMessage.content, clusterNotes.value))
-    }
-    currentQuestionIndex.value++
     await persist()
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
