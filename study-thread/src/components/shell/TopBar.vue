@@ -135,6 +135,8 @@ export interface TopBarMenuItem {
 
 const props = defineProps<{
   breadcrumbs: string[]
+  /** 是否为品牌首标题（主界面）：当前标题以品牌字体/颜色放大展示 */
+  brandTitle?: boolean
   /** 是否显示返回按钮（笔记/会话/设置界面） */
   showBack?: boolean
   /** 小窗口模式下是否显示"展开会话列表"按钮（替换装饰性 PanelLeft 图标） */
@@ -294,6 +296,15 @@ watch(
   gap: 4px;
   color: var(--ink);
   font-weight: 590;
+}
+
+/* 品牌首标题（主界面「知枝」）：衬线大字 + 品牌绿，呼应页面 hero 标题 */
+.top-bar__crumb--brand {
+  font-family: Georgia, 'Songti SC', serif;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--brand);
 }
 
 .top-bar__title-text {

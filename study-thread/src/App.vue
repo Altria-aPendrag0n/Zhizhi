@@ -35,6 +35,7 @@
     <template #toolbar>
       <TopBar
         :breadcrumbs="displayedBreadcrumbs"
+        :brand-title="isHome"
         :show-back="showBack"
         :show-threads-toggle="isCompact && !isHome"
         :show-crumb-icon="!isHome"
@@ -225,7 +226,7 @@ const showBack = computed(() =>
   route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings' || route.path === '/hub' || route.path.startsWith('/review'),
 )
 const displayedBreadcrumbs = computed(() => {
-  if (route.path === '/home') return ['主界面']
+  if (route.path === '/home') return ['知枝']
   if (route.path === '/settings') return ['设置']
   if (route.path === '/hub') return ['学习地图']
   if (route.path === '/notes') return ['资料库']
