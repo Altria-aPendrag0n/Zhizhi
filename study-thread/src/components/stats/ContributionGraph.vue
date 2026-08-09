@@ -27,7 +27,7 @@
             <span
               v-for="(label, index) in WEEKDAY_LABELS"
               :key="label"
-              :style="{ gridRow: index + 1 }"
+              :style="{ gridRow: index * 2 + 1 }"
             >{{ label }}</span>
           </div>
           <div class="cg__grid" :style="{ gridTemplateColumns: `repeat(${columnCount}, var(--cg-cell))` }">
@@ -257,10 +257,9 @@ const monthLabels = computed<string[]>(() => {
   gap: 4px;
 }
 
-/* 横向滚动容器：窄窗口下月份与星期标签随格子一起滚动，保持对齐 */
+/* 横向容器：不显示滚动条（格子尺寸自适应已尽量适配容器宽度，极端窄窗口裁剪而非滚动） */
 .cg__scroll {
-  overflow-x: auto;
-  padding-bottom: 2px;
+  overflow: hidden;
 }
 
 .cg__months-row,

@@ -65,6 +65,17 @@ describe('ContributionGraph', () => {
     expect(tips[0].text()).toBe('无学习记录')
   })
 
+  it('星期标签与格子行严格对齐：周一/周三/周五分别位于第 1/3/5 行', () => {
+    const wrapper = mountGraph({})
+    const spans = wrapper.findAll('.cg__weekday-col span')
+    expect(spans).toHaveLength(3)
+    const rows = spans.map((span) => span.attributes('style'))
+    // 第 1/3/5 行 = gridRow 1/3/5
+    expect(rows[0]).toContain('grid-row: 1')
+    expect(rows[1]).toContain('grid-row: 3')
+    expect(rows[2]).toContain('grid-row: 5')
+  })
+
   it('自定义周数时按 周数×7 渲染', () => {
     const wrapper = mountGraph({}, 26)
     expect(wrapper.findAll('.cg__cell')).toHaveLength(26 * 7)
