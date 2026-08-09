@@ -1,7 +1,7 @@
 ---
 name: review-quiz
-description: 基于原子笔记生成 3-5 个递进复习问题（识别→应用→解释）
-version: 1.0.0
+description: 基于原子笔记生成 3-5 个递进复习问题（识别→应用→解释，题型多样：选择/判对错/填空/排序/简答/辩论）
+version: 1.1.0
 ---
 
 # 角色定义
@@ -19,6 +19,9 @@ version: 1.0.0
 ## 学习者画像（用户知识状态，可能为空）
 {learner_profile}
 
+## 掌握度与复习曲线信号（卡片实时掌握度，可能为空）
+{difficulty_signal}
+
 # 出题要求
 
 1. 生成 3-5 个问题，按认知深度递进：
@@ -27,12 +30,23 @@ version: 1.0.0
    - `explain`：解释题——为什么、机制是什么、能否用自己的话讲清楚
 2. 问题必须基于笔记原文生成，禁止在问题中直接给出答案。
 3. 每道问题都能独立回答，不依赖上一题的答案。
-4. 结合学习者画像调整难度分布：
-   - 画像显示掌握度高（high）→ 减少 recognize 题，增加 explain 题
-   - 画像显示掌握度低（low）或画像为空 → 以 recognize 题为主
-   - 画像显示中等（medium）→ recognize 与 apply 均衡
-   - 画像中若标注该笔记"可能已掌握/建议毕业"（high 置信度且复习掌握度高）→ 只出 1-2 道 explain 挑战题，检验是否仍有理解缺口；若用户确认已掌握，可输出"建议跳过本次复习"。
-5. 问题用词具体、聚焦单点，避免空泛（不要问"这篇笔记讲了什么"这类大而全的问题）。
+4. **题型选择**（当前支持六类，未来可扩展；分类不绝对，可跨类型组合，由你自主判断，但难度必须与掌握度信号匹配）：
+   - `choice` 选择题：给 2-4 个选项（题干不含字母）；适合概念辨析、事实记忆
+   - `true_false` 判对错：给一个陈述让用户判断对错；适合概念辨析
+   - `fill_blank` 填空题：题干用 `____` 标注空位（默认 1 个，可多个）；适合关键术语/步骤缺失
+   - `ordering` 排序题：给出乱序步骤让用户重排；适合 how-to/流程类
+   - `short_answer` 简答题：自由作答；适合解释机制/应用场景
+   - `debate` 辩论：给出 position（你的持方观点），与用户多轮辩论；适合高掌握度批判性检验
+   - 笔记类型引导（非硬约束）：method/how-to → 排序、填空、简答；concept → 选择、判对错、辩论；fact → 选择、判对错；question → 简答、辩论
+5. **难度适配（强制约束）**：结合掌握度信号定档，并配合学习者画像——
+   - 掌握度低（<30%）或画像为空 → 以 choice/true_false 为主，偶见填空（识别层为主）
+   - 掌握度中（30%-60%）→ 填空/排序为主，穿插选择题（识别与浅层应用均衡）
+   - 掌握度高（≥60%）→ 简答/辩论为主（深层解释与迁移）
+   - 掌握度 ≥90% 且连续 good/easy（毕业候选）→ 只出 1-2 道 explain 挑战题（简答/辩论），若用户确认已掌握可建议跳过
+   - 复习曲线信号微调：classic 信号标注"间隔位于序列后半段" → 题单首题放 1 道识别题校验记忆是否衰减；fsrs 信号标注"波动大" → 补 1 道低难度题稳定信心
+   - 学习者画像 high → 减少 recognize 增加 explain；medium → 均衡
+6. **支架式回忆（避免裸默写）**：对概念类简答题，掌握度低时在题干中给出线索（关键词/结构框架提示），掌握度高时才要求完整默写。答不出不是问题——反馈环节会给出线索追问，不会直接给答案。
+7. 问题用词具体、聚焦单点，避免空泛（不要问"这篇笔记讲了什么"这类大而全的问题）。
 
 # 输出格式
 
@@ -41,9 +55,20 @@ version: 1.0.0
 ```json
 {
   "questions": [
-    { "level": "recognize", "question": "问题1" },
-    { "level": "apply", "question": "问题2" },
-    { "level": "explain", "question": "问题3" }
+    { "level": "recognize", "type": "choice", "question": "问题1", "options": ["选项A", "选项B", "选项C", "选项D"] },
+    { "level": "apply", "type": "ordering", "question": "问题2", "steps": ["乱序步骤1", "乱序步骤2", "乱序步骤3"] },
+    { "level": "apply", "type": "fill_blank", "question": "问题3（含____）", "blanks": 1 },
+    { "level": "explain", "type": "short_answer", "question": "问题4" },
+    { "level": "explain", "type": "debate", "question": "问题5", "position": "你的持方观点", "maxRounds": 3 }
   ]
 }
 ```
+
+字段说明：
+- `level`：recognize | apply | explain（必填）
+- `type`：choice | true_false | fill_blank | ordering | short_answer | debate（可缺省，缺省按简答处理）
+- `options`：choice 必填，2-4 个字符串选项（题干不含 A/B/C/D，由前端渲染字母）
+- `steps`：ordering 必填，乱序步骤字符串数组
+- `blanks`：fill_blank 可选，填空数量（默认 1，题干用 `____` 标注）
+- `position`：debate 建议提供，你的持方观点（辩论初始立场）
+- `maxRounds`：debate 可选，最大辩论轮次（默认 3）

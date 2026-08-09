@@ -262,6 +262,7 @@ import type { SessionTreeNode } from '../utils/session-tree'
 import { createProvider } from '../api/provider-factory'
 import { generateReviewQuestions, generateClusterQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
 import { loadLearnerProfile, describeLearnerProfile } from '../utils/learner-profile'
+import { describeDifficultyContext } from '../utils/review-difficulty'
 import { buildReviewRelatedNotes, createReviewSession } from '../utils/review-session'
 import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
@@ -401,9 +402,11 @@ async function handleStartReview(task: ReviewTask) {
       // P3-4 难度个性化：加载画像注入出题 prompt；高置信度 + 高掌握度时附毕业引导
       const profile = await loadLearnerProfile(vaultPath)
       const learnerProfile = describeLearnerProfile(profile)
+      // P5-2 难度信号：卡片掌握度 + 复习曲线（classic 间隔档位 / fsrs 表现分·波动）→ 注入出题 prompt
+      const difficultyContext = describeDifficultyContext(task, settingsStore.reviewAlgorithm)
       if (clusterMode) {
         // P4 簇模式：按簇上下文出关系型问题（涉及笔记标注，供 P4-4 缺口回写）
-        questions = await generateClusterQuestions(cluster, createProvider(config), learnerProfile)
+        questions = await generateClusterQuestions(cluster, createProvider(config), learnerProfile, difficultyContext)
       } else {
         let graduationHint = ''
         if (shouldSuggestGraduation(note, profile, task.mastery)) {
@@ -418,6 +421,7 @@ async function handleStartReview(task: ReviewTask) {
           createProvider(config),
           learnerProfile,
           graduationHint,
+          difficultyContext,
         )
       }
     } catch (e) {

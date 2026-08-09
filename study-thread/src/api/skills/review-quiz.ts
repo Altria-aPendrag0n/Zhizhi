@@ -128,7 +128,8 @@ export function shouldSuggestGraduation(note: Note, profile: LearnerProfile, mas
  * @param provider - LLM 提供商
  * @param learnerProfile - 学习者画像文本（可空，用于调节难度分布）
  * @param graduationHint - 毕业引导提示（可空，由调用方根据画像 confidence 与掌握度计算）
- * @returns 递进问题列表（recognize → apply → explain）
+ * @param difficultySignal - 卡片掌握度/复习曲线难度信号（P5-2 可空，按默认难度出题）
+ * @returns 递进问题列表（recognize → apply → explain，含题型 type 与结构化字段）
  */
 export async function generateReviewQuestions(
   note: Note,
@@ -136,6 +137,7 @@ export async function generateReviewQuestions(
   provider: LLMProvider,
   learnerProfile?: string,
   graduationHint?: string,
+  difficultySignal?: string,
 ): Promise<ReviewQuestion[]> {
   const skill = getQuizSkill()
   const profileText = learnerProfile && learnerProfile.trim() ? learnerProfile.trim() : '（暂无学习者画像，按默认难度出题）'
@@ -144,6 +146,10 @@ export async function generateReviewQuestions(
     note_content: serializeNoteForReview(note),
     related_notes: serializeRelatedNotes(relatedNotes),
     learner_profile: learnerSection,
+    difficulty_signal:
+      difficultySignal && difficultySignal.trim()
+        ? difficultySignal.trim()
+        : '（暂无卡片掌握度信号，按默认难度出题）',
   })
 
   const messages: Message[] = [{ role: 'user', content: '请为上述笔记生成复习问题。' }]
@@ -242,18 +248,24 @@ export function serializeClusterRelations(notes: Note[]): string {
  * @param notes - 复习簇笔记（首条为中心笔记）
  * @param provider - LLM 提供商
  * @param learnerProfile - 学习者画像文本（可空）
+ * @param difficultySignal - 卡片掌握度/复习曲线难度信号（P5-2 可空，按默认难度出题）
  * @returns 关系型问题列表（含涉及笔记标注）
  */
 export async function generateClusterQuestions(
   notes: Note[],
   provider: LLMProvider,
   learnerProfile?: string,
+  difficultySignal?: string,
 ): Promise<ClusterReviewQuestion[]> {
   const skill = getClusterQuizSkill()
   const systemPrompt = buildPrompt(skill, {
     notes: serializeClusterNotes(notes),
     relations: serializeClusterRelations(notes),
     learner_profile: learnerProfile && learnerProfile.trim() ? learnerProfile.trim() : '（暂无学习者画像，按默认难度出题）',
+    difficulty_signal:
+      difficultySignal && difficultySignal.trim()
+        ? difficultySignal.trim()
+        : '（暂无卡片掌握度信号，按默认难度出题）',
   })
 
   const messages: Message[] = [{ role: 'user', content: '请为上述复习簇生成关系型复习问题。' }]

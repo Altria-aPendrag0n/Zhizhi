@@ -1,7 +1,7 @@
 ---
 name: review-cluster-quiz
-description: 基于知识网络中的一组笔记（复习簇）生成关系型复习问题（联系/区别/因果/适用场景）
-version: 1.0.0
+description: 基于知识网络中的一组笔记（复习簇）生成关系型复习问题（联系/区别/因果/适用场景，题型多样）
+version: 1.1.0
 ---
 
 # 角色定义
@@ -19,6 +19,9 @@ version: 1.0.0
 ## 学习者画像（用户知识状态，可能为空）
 {learner_profile}
 
+## 掌握度与复习曲线信号（卡片实时掌握度，可能为空）
+{difficulty_signal}
+
 # 出题要求
 
 1. 生成 3-5 个问题，侧重**关系型**（概念之间），而非孤立事实：
@@ -29,7 +32,10 @@ version: 1.0.0
 2. 问题基于簇内笔记原文生成，禁止在问题中直接给出答案。
 3. 每道问题独立回答，不依赖上一题的答案。
 4. 每道问题末尾用 `[涉及笔记: <标题>]` 标注该问题主要涉及的笔记标题（可多条，用逗号分隔），方便后续定位知识缺口。
-5. 结合学习者画像调节难度（low/空 → 偏识别与浅层联系；high → 偏深层机制与迁移）。
+5. **题型选择**（当前支持六类，未来可扩展；分类不绝对，由你自主判断，但难度必须与掌握度信号匹配）：关系型题目天然倾向 choice（概念辨析）、ordering（流程/依赖排序）、short_answer（区别/因果解释）、debate（价值取舍/批判），可跨类型组合。
+6. **难度适配（强制约束）**：结合掌握度信号定档——低（<30%）或画像为空 → 浅层联系为主（choice/true_false）；中（30%-60%）→ 均衡（填空/排序/简答）；高（≥60%）→ 深层机制与迁移（简答/辩论）；毕业候选 → 只出 1-2 道 explain 挑战题。classic 信号间隔久 → 首题放识别题；fsrs 信号波动大 → 补低难度题稳定信心。
+7. **支架式回忆（避免裸默写）**：掌握度低时在简答题干中给出线索（关键词/结构框架提示），掌握度高时才要求完整作答。
+8. 问题用词具体、聚焦单点，避免空泛（不要问"这些笔记讲了什么"这类大而全的问题）。
 
 # 输出格式
 
@@ -38,9 +44,18 @@ version: 1.0.0
 ```json
 {
   "questions": [
-    { "level": "recognize", "question": "问题1", "notes": ["笔记A", "笔记B"] },
-    { "level": "apply", "question": "问题2", "notes": ["笔记A"] },
-    { "level": "explain", "question": "问题3", "notes": ["笔记B", "笔记C"] }
+    { "level": "recognize", "type": "choice", "question": "问题1", "options": ["选项A", "选项B", "选项C", "选项D"], "notes": ["笔记A", "笔记B"] },
+    { "level": "apply", "type": "ordering", "question": "问题2", "steps": ["乱序步骤1", "乱序步骤2"], "notes": ["笔记A"] },
+    { "level": "explain", "type": "short_answer", "question": "问题3", "notes": ["笔记B", "笔记C"] }
   ]
 }
 ```
+
+字段说明：
+- `level`：recognize | apply | explain（必填）
+- `type`：choice | true_false | fill_blank | ordering | short_answer | debate（可缺省，缺省按简答处理）
+- `options`：choice 必填，2-4 个字符串选项（题干不含字母）
+- `steps`：ordering 必填，乱序步骤字符串数组
+- `blanks`：fill_blank 可选，填空数量（默认 1，题干用 `____` 标注）
+- `position` / `maxRounds`：debate 可选（持方观点 / 最大轮次，默认 3）
+- `notes`：可选，该问题主要涉及的笔记标题数组
