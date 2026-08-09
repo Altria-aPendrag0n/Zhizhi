@@ -140,6 +140,35 @@
         </div>
       </template>
     </div>
+    <!-- 结构化题型作答组件（P5-4：选择/判对错/填空/排序；辩论与简答走 Composer 文本输入） -->
+    <div
+      v-else-if="activeQuestion && isStructuredAnswer"
+      class="review-chat-page__answer"
+    >
+      <ChoiceAnswer
+        v-if="activeQuestion.type === 'choice'"
+        :options="activeQuestion.options ?? []"
+        :disabled="isStreaming"
+        @submit="handleStructuredAnswer"
+      />
+      <TrueFalseAnswer
+        v-else-if="activeQuestion.type === 'true_false'"
+        :disabled="isStreaming"
+        @submit="handleStructuredAnswer"
+      />
+      <FillBlankAnswer
+        v-else-if="activeQuestion.type === 'fill_blank'"
+        :blanks="activeQuestion.blanks ?? 1"
+        :disabled="isStreaming"
+        @submit="handleStructuredAnswer"
+      />
+      <OrderingAnswer
+        v-else-if="activeQuestion.type === 'ordering'"
+        :steps="activeQuestion.steps ?? []"
+        :disabled="isStreaming"
+        @submit="handleStructuredAnswer"
+      />
+    </div>
     <Composer
       v-else
       :is-streaming="isStreaming"
@@ -164,7 +193,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { Message, Note, ReviewRating, ReviewQuestion, Session } from '../types'
+import type { Message, Note, ReviewQuestion, ReviewQuestionType, ReviewRating, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
 import { useNoteStore } from '../stores/notes'
@@ -172,6 +201,7 @@ import { useReviewStore } from '../stores/review'
 import { useToast } from '../composables/useToast'
 import { createProvider } from '../api/provider-factory'
 import { reviewFollowupStream } from '../api/skills/review-quiz'
+import { serializeAnswer } from '../review/question-registry'
 import { extractNote } from '../api/skills/extract-note'
 import { loadReviewSession, getReviewSessionFilePath } from '../utils/review-session'
 import { parseMentionedNotes } from '../utils/review-gap'
@@ -183,6 +213,10 @@ import { readFile } from '../utils/vault-fs'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 import AddToNoteDialog from '../components/notes/AddToNoteDialog.vue'
+import ChoiceAnswer from '../components/review/ChoiceAnswer.vue'
+import TrueFalseAnswer from '../components/review/TrueFalseAnswer.vue'
+import FillBlankAnswer from '../components/review/FillBlankAnswer.vue'
+import OrderingAnswer from '../components/review/OrderingAnswer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -221,13 +255,19 @@ let abortController: AbortController | null = null
 const sessionId = computed(() => String(route.params.sessionId || ''))
 const questions = computed<ReviewQuestion[]>(() => session.value?.review_questions ?? [])
 const hasQuestions = computed(() => questions.value.length > 0)
+/** 当前待作答问题（P5-4） */
+const activeQuestion = computed<ReviewQuestion | undefined>(() => questions.value[currentQuestionIndex.value])
+/** 结构化题型（渲染专属组件替代文本输入框；辩论/简答走 Composer） */
+const STRUCTURED_TYPES: ReviewQuestionType[] = ['choice', 'true_false', 'fill_blank', 'ordering']
+const isStructuredAnswer = computed(() => {
+  const q = activeQuestion.value
+  return !!q && STRUCTURED_TYPES.includes(q.type)
+})
 /** 簇模式：簇内笔记超过 1 条时进入逐条评级 */
 const hasCluster = computed(() => clusterNotes.value.length > 1)
 const noteRefs = computed(() => extractedNotes.value)
 const composerPlaceholder = computed(() =>
-  questions.value[currentQuestionIndex.value]
-    ? `回答第 ${currentQuestionIndex.value + 1} 题…`
-    : '继续输入…',
+  activeQuestion.value ? `回答第 ${currentQuestionIndex.value + 1} 题…` : '继续输入…',
 )
 
 const RATINGS: { value: ReviewRating; label: string; hint: string }[] = [
@@ -378,6 +418,16 @@ function handleRetry() {
     }
     void handleSend(lastUserMsg.content)
   }
+}
+
+/**
+ * 结构化题型作答（P5-4）：组件 payload 经注册表序列化为消息文本，复用 handleSend 流程。
+ * 选择/判对错/填空/排序 → 对应组件；序列化约定见 serializeAnswer。
+ */
+function handleStructuredAnswer(payload: unknown) {
+  const q = activeQuestion.value
+  if (!q) return
+  handleSend(serializeAnswer(q.type, payload))
 }
 
 async function handleRate(notePath: string, rating: ReviewRating) {
