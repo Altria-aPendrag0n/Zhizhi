@@ -302,12 +302,12 @@ watch(
   font-weight: 590;
 }
 
-/* 品牌首标题（主界面「知枝」）：衬线大字 + 品牌绿 + 柔光阴影，呼应页面 hero 标题 */
+/* 品牌首标题（主界面「知枝」）：衬线大字 + 品牌绿 + 柔光阴影，字距拉开呼应 hero 标题 */
 .top-bar__crumb--brand {
   font-family: Georgia, 'Songti SC', serif;
   font-size: 30px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.14em;
   color: var(--brand);
   text-shadow:
     0 2px 16px rgba(36, 92, 77, 0.3),
