@@ -1,27 +1,5 @@
 <template>
   <div class="cg" ref="rootRef" :style="{ '--cg-cell': `${cellSize}px` }">
-    <!-- 视图切换：当月 / 全年 -->
-    <div class="cg__toolbar">
-      <div class="cg__view-toggle" role="group" aria-label="时间范围">
-        <button
-          class="cg__view-btn"
-          :class="{ 'is-active': viewMode === 'month' }"
-          type="button"
-          @click="viewMode = 'month'"
-        >
-          当月
-        </button>
-        <button
-          class="cg__view-btn"
-          :class="{ 'is-active': viewMode === 'year' }"
-          type="button"
-          @click="viewMode = 'year'"
-        >
-          全年
-        </button>
-      </div>
-    </div>
-
     <div class="cg__table">
       <!-- 月份行 + 格子行放入同一横向滚动容器：窄窗口滚动时标签与格子保持对齐 -->
       <div class="cg__scroll">
@@ -93,9 +71,8 @@ import { toDateKey, type DailyCounts } from '../../utils/learning-stats'
 
 /**
  * GitHub 风格学习频率格子图：
- * 每格表示一天，当天学习次数（问答/复习/笔记总和）越多颜色越深（绿色分层），悬停显示当日明细。
- * - 默认「当月」视图：只显示当月日期；可切换到「全年」（53 周）。
- * - 格子尺寸按容器宽度自适应：列数少（当月）时放大填满，列数多（全年）时自动收缩，两种视图均尽量铺满容器。
+ * 近一年（53 周）× 7 天，每格表示一天，当天学习次数（问答/复习/笔记总和）越多颜色越深（绿色分层），悬停显示当日明细。
+ * - 格子尺寸按容器宽度自适应：尽量填满容器宽度，纵向保持紧凑。
  * - 纵轴（周一/周三/周五）与横轴（月份）文字与格子严格对齐。
  */
 
@@ -146,9 +123,6 @@ onUnmounted(() => {
   resizeObserver = null
   window.removeEventListener('resize', measure)
 })
-
-/** 当前视图：默认当月，可切换全年 */
-const viewMode = ref<'month' | 'year'>('month')
 
 interface GraphCell {
   key: string
@@ -217,49 +191,23 @@ function buildCell(date: Date, column: number): GraphCell {
 
 const today = new Date()
 
-/** 当月视图：当月 1 号 ~ 月末（含），从当月 1 号所在周的周一起排列 */
-const monthCells = computed<GraphCell[]>(() => {
-  const first = new Date(today.getFullYear(), today.getMonth(), 1)
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
-  const firstWeekMonday = mondayOfWeek(first)
-  const cells: GraphCell[] = []
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(today.getFullYear(), today.getMonth(), day)
-    const column = Math.floor((date.getTime() - firstWeekMonday.getTime()) / (24 * 60 * 60 * 1000 * DAYS_PER_WEEK))
-    cells.push(buildCell(date, column))
-  }
-  return cells
-})
-
 /** 全年视图：今天所在周的周一往前推 (周数-1) 周起，连续 周数×7 天 */
-const yearCells = computed<GraphCell[]>(() => {
+const cells = computed<GraphCell[]>(() => {
   const firstDate = mondayOfWeek(today)
   firstDate.setDate(firstDate.getDate() - (props.weekCount - 1) * DAYS_PER_WEEK)
-  const cells: GraphCell[] = []
+  const list: GraphCell[] = []
   for (let i = 0; i < props.weekCount * DAYS_PER_WEEK; i++) {
     const date = addDays(firstDate, i)
-    cells.push(buildCell(date, Math.floor(i / DAYS_PER_WEEK)))
+    list.push(buildCell(date, Math.floor(i / DAYS_PER_WEEK)))
   }
-  return cells
+  return list
 })
 
-const cells = computed<GraphCell[]>(() => (viewMode.value === 'month' ? monthCells.value : yearCells.value))
-
-/** 列数：当月视图为当月跨过的周数；全年视图为 weekCount */
-const columnCount = computed<number>(() => {
-  if (viewMode.value === 'month') {
-    const first = new Date(today.getFullYear(), today.getMonth(), 1)
-    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    const firstWeekMonday = mondayOfWeek(first)
-    const lastWeekMonday = mondayOfWeek(last)
-    return Math.floor((lastWeekMonday.getTime() - firstWeekMonday.getTime()) / (24 * 60 * 60 * 1000 * DAYS_PER_WEEK)) + 1
-  }
-  return props.weekCount
-})
+/** 列数：展示周数 */
+const columnCount = computed<number>(() => props.weekCount)
 
 /**
  * 格子边长：按容器可用宽度均分填满，限制在 [MIN_CELL, MAX_CELL]。
- * 当月视图列数少 → 格子放大铺满；全年视图列数多 → 自动收缩。
  * 未测量到宽度（如测试环境）时回退 10px。
  */
 const cellSize = computed(() => {
@@ -271,22 +219,14 @@ const cellSize = computed(() => {
   return Math.min(MAX_CELL, Math.max(MIN_CELL, Math.floor(cell)))
 })
 
-/** 月份标签：列首天所在月份变化处显示（当月视图仅一个标签，全年视图逐月分布） */
+/** 月份标签：列首天所在月份变化处显示（GitHub 风格，逐月分布） */
 const monthLabels = computed<string[]>(() => {
   const labels: string[] = []
   let lastMonth = -1
+  const firstDate = mondayOfWeek(today)
+  firstDate.setDate(firstDate.getDate() - (props.weekCount - 1) * DAYS_PER_WEEK)
   for (let col = 0; col < columnCount.value; col++) {
-    let monthDate: Date
-    if (viewMode.value === 'month') {
-      const first = new Date(today.getFullYear(), today.getMonth(), 1)
-      const firstWeekMonday = mondayOfWeek(first)
-      monthDate = addDays(firstWeekMonday, col * DAYS_PER_WEEK)
-    } else {
-      const firstDate = mondayOfWeek(today)
-      firstDate.setDate(firstDate.getDate() - (props.weekCount - 1) * DAYS_PER_WEEK)
-      monthDate = addDays(firstDate, col * DAYS_PER_WEEK)
-    }
-    const month = monthDate.getMonth()
+    const month = addDays(firstDate, col * DAYS_PER_WEEK).getMonth()
     if (month !== lastMonth) {
       labels.push(`${month + 1}月`)
       lastMonth = month
@@ -307,44 +247,6 @@ const monthLabels = computed<string[]>(() => {
   gap: 10px;
   font-size: 11px;
   color: var(--ink-3, #7a8a84);
-}
-
-/* 视图切换 */
-.cg__toolbar {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.cg__view-toggle {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--line, #e4e2da);
-  border-radius: 7px;
-  background: var(--surface-2, #f0eee7);
-}
-
-.cg__view-btn {
-  padding: 3px 10px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ink-2, #52635d);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.cg__view-btn:hover {
-  color: var(--ink);
-}
-
-.cg__view-btn.is-active {
-  background: var(--surface, #ffffff);
-  color: var(--brand, #1f5a45);
-  font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* 表格主体：月份行 + 格子行，两行共享同一左列宽度；整体按内容宽度居中，留白均匀分布 */

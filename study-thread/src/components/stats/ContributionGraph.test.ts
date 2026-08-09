@@ -17,19 +17,12 @@ function mountGraph(daily: Record<string, { qa: number; review: number; note: nu
 }
 
 describe('ContributionGraph', () => {
-  it('默认「当月」视图：只渲染当月天数个格子', () => {
+  it('默认渲染 53 周 × 7 天 = 371 个格子', () => {
     const wrapper = mountGraph({})
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
-    expect(wrapper.findAll('.cg__cell')).toHaveLength(daysInMonth)
-  })
-
-  it('切换到「全年」视图渲染 53 周 × 7 天 = 371 个格子', async () => {
-    const wrapper = mountGraph({})
-    await wrapper.findAll('.cg__view-btn')[1].trigger('click')
     expect(wrapper.findAll('.cg__cell')).toHaveLength(371)
   })
 
-  it('有学习记录的日期渲染对应层级，无记录为 lvl0（全年视图）', async () => {
+  it('有学习记录的日期渲染对应层级，无记录为 lvl0', () => {
     const wrapper = mountGraph(
       {
         [dateKeyAt(0)]: { qa: 1, review: 0, note: 0 },
@@ -37,7 +30,6 @@ describe('ContributionGraph', () => {
       },
       53,
     )
-    await wrapper.findAll('.cg__view-btn')[1].trigger('click')
 
     const labelAt = (daysAgo: number) => {
       const d = new Date()
@@ -58,7 +50,7 @@ describe('ContributionGraph', () => {
     expect(cells.length).toBe(371)
   })
 
-  it('hover 提示包含三类明细（当月视图）', () => {
+  it('hover 提示包含三类明细', () => {
     const wrapper = mountGraph({ [dateKeyAt(1)]: { qa: 3, review: 1, note: 2 } })
     const tipRows = wrapper.findAll('.cg__tip-row').map((row) => row.text())
     expect(tipRows).toContain('问答 3')
@@ -73,14 +65,13 @@ describe('ContributionGraph', () => {
     expect(tips[0].text()).toBe('无学习记录')
   })
 
-  it('全年视图自定义周数时按 周数×7 渲染', async () => {
+  it('自定义周数时按 周数×7 渲染', () => {
     const wrapper = mountGraph({}, 26)
-    await wrapper.findAll('.cg__view-btn')[1].trigger('click')
     expect(wrapper.findAll('.cg__cell')).toHaveLength(26 * 7)
   })
 
   it('格子尺寸按容器宽度自适应：容器变宽时放大以填满（未测量时兜底 10px）', async () => {
-    // 模拟容器宽度 800px（当月视图列数少 → 格子放大到上限）
+    // 模拟容器宽度 800px
     const proto = HTMLElement.prototype
     const original = Object.getOwnPropertyDescriptor(proto, 'clientWidth')
     Object.defineProperty(proto, 'clientWidth', {
