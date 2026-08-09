@@ -103,4 +103,49 @@ describe('TopBar', () => {
     expect(document.querySelector('.top-bar__dropdown')).toBeNull()
     wrapper.unmount()
   })
+
+  it('默认（editable=false）不渲染标题编辑按钮（静态界面名不可编辑）', () => {
+    const wrapper = mount(TopBar, {
+      props: { breadcrumbs: ['资料库'] },
+      global: { plugins: [router] },
+    })
+
+    expect(wrapper.find('button[aria-label="编辑会话标题"]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label="会话标题"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('资料库')
+    wrapper.unmount()
+  })
+
+  it('editable=true 时渲染编辑按钮，保存后发出 update-title', async () => {
+    const wrapper = mount(TopBar, {
+      props: { breadcrumbs: ['学习会话', '工作记忆的边界'], editable: true },
+      global: { plugins: [router] },
+      attachTo: document.body,
+    })
+
+    await wrapper.find('button[aria-label="编辑会话标题"]').trigger('click')
+    await nextTick()
+    const input = wrapper.find('input[aria-label="会话标题"]')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('工作记忆的边界')
+
+    await input.setValue('记忆工作区新标题')
+    await input.trigger('blur')
+    await nextTick()
+
+    expect(wrapper.emitted('update-title')).toEqual([['记忆工作区新标题']])
+    wrapper.unmount()
+  })
+
+  it('editable=false 时点击不会出现编辑输入框', async () => {
+    const wrapper = mount(TopBar, {
+      props: { breadcrumbs: ['学习地图'] },
+      global: { plugins: [router] },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.find('button[aria-label="编辑会话标题"]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label="会话标题"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

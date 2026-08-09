@@ -89,7 +89,7 @@ function getProjectRoute(projectId, threadId) {
 - `provide('updateThreadTitle', updateThreadTitle)`：由聊天页在会话标题变化时调用。
 - `provide('updateNoteBreadcrumbTitle', (title) => …)`：由笔记详情页更新面包屑末级标题。
 - `provide('createNewThread', handleNewThread)`：供学习地图等页面"开始新会话"入口调用，`handleNewThread(projectId = activeProjectId)` 支持指定项目（学习地图按钮传 `'1'` 在知枝学习下新建会话，避免跳转到无会话的空白聊天界面）。
-- **顶栏面包屑派生（`displayedBreadcrumbs`）**：`/settings` → `['设置']`；`/notes` → `['资料库']`；`/notes/:id` → `['资料库', 笔记标题]`；其余（会话/分支）→ 会话面包屑 `['学习会话', 会话标题]`（支持内联编辑）。
+- **顶栏面包屑派生（`displayedBreadcrumbs`）**：`/settings` → `['设置']`；`/notes` → `['资料库']`；`/notes/:id` → `['资料库', 笔记标题]`；其余（会话/分支）→ 会话面包屑 `['学习会话', 会话标题]`（支持内联编辑）。**只有会话界面（主会话/分支会话）的末级标题可内联编辑**——`titleEditable` 仅在 `route.name === 'chat' | 'branch-chat'` 时为 true，静态界面名（资料库/学习地图/设置/笔记标题）一律不可编辑。
 
 ### 4.5 生命周期初始化（`onMounted`）
 
@@ -158,9 +158,9 @@ CSS Grid 五区布局，全部为具名插槽：
 
 ### 6.4 `TopBar.vue`
 
-- props：`breadcrumbs: string[]`、`showBack?`、`showThreadsToggle?`、`showCollapseThreads?`、`threadsCollapsed?`、`menuItems?: TopBarMenuItem[]`；emits：`search`、`settings`、`back`、`update-title(title)`、`menu-action(id)`。
+- props：`breadcrumbs: string[]`、`showBack?`、`showThreadsToggle?`、`showCollapseThreads?`、`threadsCollapsed?`、`menuItems?: TopBarMenuItem[]`、`editable?`；emits：`search`、`settings`、`back`、`update-title(title)`、`menu-action(id)`。
 - `showBack` 为真时（笔记/会话/设置界面）最左侧渲染返回按钮（ArrowLeft），替换装饰性 PanelLeft 图标；点击 emit `back`，由 `App.vue` 的 `handleBack` 执行 `router.back()`（vue-router 4 的 `history.state.back` 非空时），无站内历史（如直达 URL）时回退到 `/chat`。
-- 末级面包屑支持内联编辑（Pencil 图标触发，Enter 保存且仅在标题变化时 emit）。
+- 末级面包屑仅在 `editable` 为真时支持内联编辑（Pencil 图标触发，Enter 保存且仅在标题变化时 emit；静态界面名不渲染编辑按钮）。
 - 工具栏右侧：**齿轮设置按钮**（`Settings` 图标 → emit `settings`）与**更多操作按钮**（`Ellipsis` 三个点 → 打开下拉菜单，Teleport 到 body 固定定位，点击外部/Escape/路由切换关闭）。
 - 下拉菜单项 `TopBarMenuItem { id, label?, shortcut?, danger?, separator? }` 由 `App.vue` 的 `contextMenuItems` 按当前路由计算（`handleMenuAction` 分发）：
   - 会话界面（`/chat*`）：新建会话（Ctrl+N）、打开资料库（Ctrl+B）、打开学习地图（Ctrl+H）、收起/展开会话栏（非 compact 时）；

@@ -38,6 +38,7 @@
         :show-collapse-threads="showCollapseThreads"
         :threads-collapsed="threadsCollapsed"
         :menu-items="contextMenuItems"
+        :editable="titleEditable"
         @update-title="handleActiveThreadTitleUpdate"
         @settings="handleSettings"
         @back="handleBack"
@@ -226,6 +227,8 @@ const displayedBreadcrumbs = computed(() => {
   }
   return breadcrumbs.value
 })
+/** 顶栏当前标题是否可编辑：仅主会话/分支会话（会话标题可重命名），静态界面名称不可编辑 */
+const titleEditable = computed(() => route.name === 'chat' || route.name === 'branch-chat')
 const activeProject = computed(() => projects.value.find((project) => project.id === activeProjectId.value) ?? null)
 const threadCount = computed(() => threads.value.length)
 const noteCount = computed(() => (activeProjectId.value === '1' ? 2 : 0))

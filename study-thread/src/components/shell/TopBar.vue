@@ -42,6 +42,7 @@
           <template v-else>
             <span class="top-bar__title-text">{{ crumb }}</span>
             <button
+              v-if="editable"
               class="top-bar__edit-btn"
               type="button"
               aria-label="编辑会话标题"
@@ -144,6 +145,8 @@ const props = defineProps<{
   threadsCollapsed?: boolean
   /** "更多操作"下拉菜单项（由外层按当前界面提供） */
   menuItems?: TopBarMenuItem[]
+  /** 最后一个面包屑（当前标题）是否可编辑（仅会话界面为 true；静态界面名不可编辑） */
+  editable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -227,7 +230,10 @@ const currentTitle = () => props.breadcrumbs[props.breadcrumbs.length - 1] ?? ''
 function startEditing() {
   draftTitle.value = currentTitle()
   isEditing.value = true
-  nextTick(() => titleInput.value?.select())
+  nextTick(() => {
+    const el = titleInput.value
+    if (el && typeof el.select === 'function') el.select()
+  })
 }
 
 function saveTitle() {
