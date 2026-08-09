@@ -106,6 +106,7 @@ interface ReviewTask {
 - `saveNote`：写盘成功后 `useReviewStore().enqueue(createReviewTask(...))`（次日到期），失败不影响笔记保存。
 - `deleteNote`：删除成功后 `useReviewStore().removeFromQueue(path)`，失败不影响删除结果。
 - `loadNote`：从复习队列合并 `Note.review` 镜像字段（未入队则为占位值）。
+- **存量笔记补录（P5 修复）**：入队原本只发生在 `saveNote`，vault 中已存在的存量笔记永远进不了复习队列。`reviewStore.syncQueueWithNotes(vaultPath)` 在加载队列后，把 notes 目录中不在队列里的笔记幂等补录（`createReviewTask`，次日到期），单次持久化；`LearningHubPage` `onMounted` 时调用（内含 `loadQueue`）。
 
 ## 6. UI（复习视图）
 

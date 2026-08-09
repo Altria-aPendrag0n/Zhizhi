@@ -326,9 +326,9 @@ onMounted(() => {
   stats.value.totalNotes = noteStore.noteCount
   stats.value.totalSessions = sessionStore.sessions.length
 
-  // 加载复习队列（vault 就绪时；未打开 vault 时队列为空）
+  // 加载复习队列（vault 就绪时；未打开 vault 时队列为空），并补录存量笔记（幂等）
   if (vaultStore.vaultPath) {
-    reviewStore.loadQueue(vaultStore.vaultPath)
+    void reviewStore.syncQueueWithNotes(vaultStore.vaultPath)
   }
 
   // 最近活动

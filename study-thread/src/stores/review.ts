@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ReviewRating, ReviewTask } from '../types'
 import { createDir, readFile, writeFile } from '../utils/vault-fs'
-import { buildDueList, countDue, reactivateTask, applyRatingWithAlgorithm } from '../utils/review-scheduler'
+import { buildDueList, countDue, reactivateTask, applyRatingWithAlgorithm, createReviewTask } from '../utils/review-scheduler'
 import { loadLearnerProfile } from '../utils/learner-profile'
 import { linkConceptsToNotes, collectWeakNotePaths } from '../utils/learner-note-link'
 import { useNoteStore } from './notes'
@@ -84,6 +84,29 @@ export const useReviewStore = defineStore('review', () => {
     await persist()
   }
 
+  /**
+   * 补录存量笔记到复习队列（P5 修复）：
+   *
+   * 复习入队原本只发生在 AI 摘录生成新笔记时（saveNote），vault 中已存在
+   * 的存量笔记永远不会进入复习队列，导致复习界面长期为空。本方法在加载队列后，
+   * 把 notes 目录中不在队列里的笔记幂等补录为复习任务（次日到期），单次持久化。
+   *
+   * 幂等：重复调用不会产生重复任务；失败（如笔记目录读取失败）静默保持原队列。
+   */
+  async function syncQueueWithNotes(vaultPath: string): Promise<void> {
+    await loadQueue(vaultPath)
+    const noteStore = useNoteStore()
+    if (noteStore.notes.length === 0) await noteStore.loadAllNotes(vaultPath)
+    const queued = new Set(queue.value.map((task) => task.notePath))
+    const missing = noteStore.notes.filter((note) => !queued.has(note.path))
+    if (missing.length === 0) return
+    const now = new Date()
+    for (const note of missing) {
+      queue.value.push(createReviewTask(note.path, note.title, note.type, now))
+    }
+    await persist()
+  }
+
   /** 复习评级：按所选间隔算法（classic/fsrs）推进间隔与掌握度并回写队列（P1 增强） */
   async function applyReview(notePath: string, rating: ReviewRating, now: Date = new Date()): Promise<ReviewTask | null> {
     const index = queue.value.findIndex((item) => item.notePath === notePath)
@@ -121,6 +144,7 @@ export const useReviewStore = defineStore('review', () => {
     loadQueue,
     refreshBoostedPaths,
     enqueue,
+    syncQueueWithNotes,
     applyReview,
     removeFromQueue,
     reactivate,

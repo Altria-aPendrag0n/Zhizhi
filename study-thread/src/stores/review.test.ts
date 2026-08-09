@@ -4,11 +4,15 @@ import { useReviewStore } from './review'
 import { useSettingsStore } from './settings'
 import type { ReviewTask } from '../types'
 
-const { vaultFs, loadProfile, link, collectWeak } = vi.hoisted(() => ({
+const { vaultFs, loadProfile, link, collectWeak, noteStore } = vi.hoisted(() => ({
   vaultFs: { readFile: vi.fn(), writeFile: vi.fn(), createDir: vi.fn() },
   loadProfile: vi.fn(),
   link: vi.fn(),
   collectWeak: vi.fn(),
+  noteStore: {
+    notes: [] as { path: string; title: string; type: string }[],
+    loadAllNotes: vi.fn().mockResolvedValue(undefined),
+  },
 }))
 
 vi.mock('../utils/vault-fs', () => vaultFs)
@@ -18,6 +22,7 @@ vi.mock('../utils/learner-note-link', () => ({
   collectWeakNotePaths: collectWeak,
   invalidateLearnerLinkCache: vi.fn(),
 }))
+vi.mock('./notes', () => ({ useNoteStore: () => noteStore }))
 
 const QUEUE: ReviewTask[] = [
   {
@@ -192,5 +197,59 @@ describe('review store（P1 增强 毕业机制）', () => {
     expect(store.queue[0].interval).toBeLessThanOrEqual(365)
 
     settings.reviewAlgorithm = 'classic' // 还原，避免影响其他用例
+  })
+})
+
+describe('syncQueueWithNotes（存量笔记补录，P5 修复）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vaultFs.readFile.mockResolvedValue(queueFile())
+    vaultFs.writeFile.mockResolvedValue(undefined)
+    vaultFs.createDir.mockResolvedValue(undefined)
+    noteStore.notes = []
+    noteStore.loadAllNotes.mockClear()
+    noteStore.loadAllNotes.mockResolvedValue(undefined)
+  })
+
+  it('补录不在队列中的存量笔记（次日到期），已有任务不重复', async () => {
+    const store = useReviewStore()
+    noteStore.notes = [
+      { path: '/vault/notes/a.md', title: '笔记A', type: 'concept' }, // 已在队列（QUEUE）
+      { path: '/vault/notes/b.md', title: '笔记B', type: 'method' }, // 缺失 → 补录
+      { path: '/vault/notes/c.md', title: '笔记C', type: 'fact' }, // 缺失 → 补录
+    ]
+
+    await store.syncQueueWithNotes('/vault')
+
+    expect(store.queue).toHaveLength(3)
+    const added = store.queue.filter(
+      (task) => task.notePath === '/vault/notes/b.md' || task.notePath === '/vault/notes/c.md',
+    )
+    expect(added).toHaveLength(2)
+    for (const task of added) {
+      expect(task.interval).toBe(0)
+      expect(task.mastery).toBe(0)
+      // 次日到期（不早于当前时间）
+      expect(new Date(task.dueAt).getTime()).toBeGreaterThan(Date.now())
+    }
+    expect(vaultFs.writeFile).toHaveBeenCalled()
+  })
+
+  it('全部已在队列时不再补录、不写盘', async () => {
+    const store = useReviewStore()
+    noteStore.notes = [{ path: '/vault/notes/a.md', title: '笔记A', type: 'concept' }]
+
+    await store.syncQueueWithNotes('/vault')
+
+    expect(store.queue).toHaveLength(1)
+    expect(vaultFs.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('notes 为空时先加载笔记列表再补录（幂等）', async () => {
+    const store = useReviewStore()
+
+    await store.syncQueueWithNotes('/vault')
+
+    expect(noteStore.loadAllNotes).toHaveBeenCalledWith('/vault')
   })
 })
