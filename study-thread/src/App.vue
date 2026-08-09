@@ -11,6 +11,7 @@
         :active-id="activeProjectId"
         @select="handleProjectSelect"
         @add="handleProjectAdd"
+        @brand="handleBrand"
       />
     </template>
     <template #threads>
@@ -208,7 +209,7 @@ function syncActiveThread(id: string | null) {
 
 /** 资料库（/notes*）、设置页、认知地图（/hub）、复习会话（/review*）隐藏会话列：左侧只保留项目栏 */
 const hideThreadsByRoute = computed(() =>
-  route.path.startsWith('/notes') || route.path === '/settings' || route.path === '/hub' || route.path.startsWith('/review'),
+  route.path.startsWith('/notes') || route.path === '/settings' || route.path === '/hub' || route.path.startsWith('/review') || route.path === '/home',
 )
 /** 会话栏是否隐藏：路由隐藏（资料库/设置）或用户手动收起 */
 const hideThreads = computed(() => threadsCollapsed.value || hideThreadsByRoute.value)
@@ -219,6 +220,7 @@ const showBack = computed(() =>
   route.path.startsWith('/chat') || route.path.startsWith('/notes') || route.path === '/settings' || route.path === '/hub' || route.path.startsWith('/review'),
 )
 const displayedBreadcrumbs = computed(() => {
+  if (route.path === '/home') return ['主界面']
   if (route.path === '/settings') return ['设置']
   if (route.path === '/hub') return ['学习地图']
   if (route.path === '/notes') return ['资料库']
@@ -341,6 +343,11 @@ function handleProjectAdd() {
   toast.info('新建项目功能即将上线')
 }
 
+/** 左上角知枝按钮：跳转到主界面（数据总览） */
+function handleBrand() {
+  router.push('/home')
+}
+
 function handleThreadSelect(id: string) {
   if (!threads.value.some((thread) => thread.id === id)) return
 
@@ -460,8 +467,8 @@ const contextMenuItems = computed<TopBarMenuItem[]>(() => {
     ]
   }
 
-  // 学习地图 / 设置：跨界面跳转
-  if (path === '/hub' || path === '/settings') {
+  // 主界面 / 学习地图 / 设置：跨界面跳转
+  if (path === '/home' || path === '/hub' || path === '/settings') {
     return [
       { id: 'notes', label: '打开资料库' },
       { id: 'hub', label: '打开学习地图' },

@@ -61,7 +61,12 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function addMessage(message: Message) {
-    messages.value.push(message)
+    // 自动写入消息级时间戳：serializer 会持久化为「## 用户 · <timestamp>」，
+    // 供主界面学习频率统计按天归位问答次数；存量会话文件无时间戳时按会话 created 近似
+    const stamped: Message = message.timestamp
+      ? message
+      : { ...message, timestamp: new Date().toISOString() }
+    messages.value.push(stamped)
     const session = sessions.value.find((item) => item.id === currentSessionId.value)
     if (session) session.messages = [...messages.value]
   }

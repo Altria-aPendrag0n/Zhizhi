@@ -364,7 +364,8 @@ async function handleSend(content: string) {
     return
   }
 
-  messages.value.push({ role: 'user', content })
+  // 用户消息携带时间戳（复习会话文件 review-* 不计入主界面问答统计，保持一致便于追溯）
+  messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
   const aiMessage: Message = { role: 'assistant', content: '' }
   messages.value.push(aiMessage)
   isStreaming.value = true

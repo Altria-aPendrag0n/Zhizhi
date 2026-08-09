@@ -159,6 +159,7 @@ d:\work\Zhizhi\
 | 13 | Rust 后端 | [13-rust-backend.md](./13-rust-backend.md) | `src-tauri/` | Tauri 装配、10 个文件系统命令、文件监听 |
 | 14 | 间隔复习模块 | [14-review-module.md](./14-review-module.md) | `src/utils/review-scheduler.ts`、`src/stores/review.ts`、`src/components/review/` | SRS 间隔复习调度、`review-state.json` 队列、到期清单 UI |
 | 15 | 复习出题形式模块 | [15-review-question-types.md](./15-review-question-types.md) | `src/review/question-registry.ts`、`src/utils/review-difficulty.ts`、`src/components/review/*`、`src/skills/review-{quiz,cluster,feedback,debate}/` | 六类题型模型与注册表、掌握度×复习曲线难度信号、按题型反馈与辩论多轮 |
+| 16 | 主界面与学习统计模块 | [16-learning-stats-home.md](./16-learning-stats-home.md) | `src/utils/learning-stats.ts`、`src/components/stats/ContributionGraph.vue`、`src/views/HomePage.vue` | 知枝按钮直达 `/home` 数据总览、问答/复习/笔记按天聚合、GitHub 风格学习频率格子图 |
 
 ---
 

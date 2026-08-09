@@ -333,7 +333,8 @@ async function handleSend(content: string) {
     return
   }
 
-  messages.value.push({ role: 'user', content })
+  // 用户消息携带时间戳：serializer 持久化为「## 用户 · <timestamp>」，供主界面按天统计问答
+  messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
 
   const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
   if (!threadId) {

@@ -1,6 +1,12 @@
 <template>
   <div class="project-rail">
-    <button class="project-rail__brand" type="button" aria-label="知枝" title="知枝">
+    <button
+      class="project-rail__brand"
+      type="button"
+      aria-label="主界面"
+      title="主界面"
+      @click="$emit('brand')"
+    >
       <Sprout :size="22" :stroke-width="1.75" />
     </button>
     <button
@@ -44,6 +50,7 @@ defineProps<{
 defineEmits<{
   select: [id: string]
   add: []
+  brand: []
 }>()
 
 function projectIcon(project: Project): Component {

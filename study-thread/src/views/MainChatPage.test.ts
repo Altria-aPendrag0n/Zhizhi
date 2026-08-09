@@ -90,7 +90,7 @@ describe('MainChatPage', () => {
     const chatView = await sendMessage(createWrapper())
 
     expect(chatView.props('messages')).toEqual([
-      { role: 'user', content: '测试问题' },
+      { role: 'user', content: '测试问题', timestamp: expect.any(String) },
       { role: 'assistant', content: '已提交的回答' },
     ])
     expect(chatView.props('streamingText')).toBe('')
@@ -106,7 +106,7 @@ describe('MainChatPage', () => {
     const chatView = await sendMessage(createWrapper())
 
     expect(chatView.props('messages')).toEqual([
-      { role: 'user', content: '测试问题' },
+      { role: 'user', content: '测试问题', timestamp: expect.any(String) },
       { role: 'assistant', content: '正常结束的回答' },
     ])
     expect(saveStoredValue).toHaveBeenCalled()
@@ -122,7 +122,7 @@ describe('MainChatPage', () => {
     const chatView = await sendMessage(createWrapper())
 
     expect(chatView.props('messages')).toEqual([
-      { role: 'user', content: '测试问题' },
+      { role: 'user', content: '测试问题', timestamp: expect.any(String) },
       { role: 'assistant', content: '回答内容', thinking: '思考中' },
     ])
     expect(chatView.props('streamingThinking')).toBe('')
