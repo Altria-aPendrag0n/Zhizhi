@@ -87,7 +87,9 @@ describe('HomePage 主界面', () => {
     expect(values).toContain('3') // 累计问答
     expect(values).toContain('1') // 累计复习
     expect(values).toContain('2') // 累计笔记
-    // 格子图渲染 53 周
+    // 格子图默认渲染当月格子；切换到全年后渲染 53 周
+    expect(wrapper.findAll('.cg__cell').length).toBeGreaterThan(0)
+    await wrapper.findAll('.cg__view-btn')[1].trigger('click')
     expect(wrapper.findAll('.cg__cell')).toHaveLength(371)
   })
 

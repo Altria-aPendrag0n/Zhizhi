@@ -1,47 +1,77 @@
 <template>
   <div class="cg">
-    <div class="cg__body">
-      <!-- 左侧星期标签：周一 / 周三 / 周五 -->
-      <div class="cg__weekdays" aria-hidden="true">
-        <span v-for="(label, index) in WEEKDAY_LABELS" :key="label" :style="{ gridRow: index + 1 }">{{ label }}</span>
-      </div>
-
-      <div class="cg__chart">
-        <!-- 顶部月份标签 -->
-        <div
-          class="cg__months"
-          :style="{ gridTemplateColumns: `repeat(${columnCount}, var(--cg-cell))` }"
-          aria-hidden="true"
+    <!-- 视图切换：当月 / 全年 -->
+    <div class="cg__toolbar">
+      <div class="cg__view-toggle" role="group" aria-label="时间范围">
+        <button
+          class="cg__view-btn"
+          :class="{ 'is-active': viewMode === 'month' }"
+          type="button"
+          @click="viewMode = 'month'"
         >
-          <span
-            v-for="(month, index) in monthLabels"
-            :key="`${month}-${index}`"
-            class="cg__month-label"
+          当月
+        </button>
+        <button
+          class="cg__view-btn"
+          :class="{ 'is-active': viewMode === 'year' }"
+          type="button"
+          @click="viewMode = 'year'"
+        >
+          全年
+        </button>
+      </div>
+    </div>
+
+    <div class="cg__table">
+      <!-- 月份行 + 格子行放入同一横向滚动容器：窄窗口滚动时标签与格子保持对齐 -->
+      <div class="cg__scroll">
+        <!-- 顶部月份标签行：左列与星期标签列同宽占位，保证月份与格子列对齐 -->
+        <div class="cg__months-row">
+          <div class="cg__weekday-col" aria-hidden="true"></div>
+          <div
+            class="cg__months"
+            :style="{ gridTemplateColumns: `repeat(${columnCount}, var(--cg-cell))` }"
+            aria-hidden="true"
           >
-            {{ month }}
-          </span>
+            <span
+              v-for="(month, index) in monthLabels"
+              :key="`${month}-${index}`"
+              class="cg__month-label"
+            >
+              {{ month }}
+            </span>
+          </div>
         </div>
 
-        <!-- 53 周 × 7 天格子 -->
-        <div class="cg__grid" :style="{ gridTemplateColumns: `repeat(${columnCount}, var(--cg-cell))` }">
-          <div
-            v-for="cell in cells"
-            :key="cell.key"
-            class="cg__cell-wrap"
-            :style="{ gridColumn: cell.column + 1, gridRow: cell.row + 1 }"
-          >
+        <!-- 星期标签与格子：同一行内并排、同 grid 行高，保证纵轴严格对齐 -->
+        <div class="cg__grid-row">
+          <div class="cg__weekday-col" aria-hidden="true">
+            <span
+              v-for="(label, index) in WEEKDAY_LABELS"
+              :key="label"
+              :style="{ gridRow: index + 1 }"
+            >{{ label }}</span>
+          </div>
+          <div class="cg__grid" :style="{ gridTemplateColumns: `repeat(${columnCount}, var(--cg-cell))` }">
             <div
-              class="cg__cell"
-              :class="`cg__cell--lvl${cell.level}`"
-              role="img"
-              :aria-label="cell.tipText"
-            ></div>
-            <div class="cg__tip">
-              <div class="cg__tip-title">{{ cell.dateLabel }}</div>
-              <div class="cg__tip-row" v-if="cell.counts.qa > 0">问答 {{ cell.counts.qa }}</div>
-              <div class="cg__tip-row" v-if="cell.counts.review > 0">复习 {{ cell.counts.review }}</div>
-              <div class="cg__tip-row" v-if="cell.counts.note > 0">笔记 {{ cell.counts.note }}</div>
-              <div class="cg__tip-row" v-if="cell.total === 0">无学习记录</div>
+              v-for="cell in cells"
+              :key="cell.key"
+              class="cg__cell-wrap"
+              :style="{ gridColumn: cell.column + 1, gridRow: cell.row + 1 }"
+            >
+              <div
+                class="cg__cell"
+                :class="`cg__cell--lvl${cell.level}`"
+                role="img"
+                :aria-label="cell.tipText"
+              ></div>
+              <div class="cg__tip">
+                <div class="cg__tip-title">{{ cell.dateLabel }}</div>
+                <div class="cg__tip-row" v-if="cell.counts.qa > 0">问答 {{ cell.counts.qa }}</div>
+                <div class="cg__tip-row" v-if="cell.counts.review > 0">复习 {{ cell.counts.review }}</div>
+                <div class="cg__tip-row" v-if="cell.counts.note > 0">笔记 {{ cell.counts.note }}</div>
+                <div class="cg__tip-row" v-if="cell.total === 0">无学习记录</div>
+              </div>
             </div>
           </div>
         </div>
@@ -58,20 +88,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { toDateKey, type DailyCounts } from '../../utils/learning-stats'
 
 /**
  * GitHub 风格学习频率格子图：
- * 近一年（53 周）× 7 天，每格表示一天，当天学习次数（问答/复习/笔记总和）越多颜色越深（绿色分层）。
- * 悬停显示当日明细。
+ * 每格表示一天，当天学习次数（问答/复习/笔记总和）越多颜色越深（绿色分层），悬停显示当日明细。
+ * - 默认「当月」视图：只显示当月日期；可切换到「全年」（53 周）。
+ * - 纵轴（周一/周三/周五）与横轴（月份）文字与格子严格对齐。
  */
 
 const props = withDefaults(
   defineProps<{
     /** dateKey（YYYY-MM-DD，本地时区）→ 当日次数 */
     daily: Record<string, DailyCounts>
-    /** 展示周数（GitHub 为 53） */
+    /** 全年视图展示周数（GitHub 为 53） */
     weekCount?: number
   }>(),
   { weekCount: 53 },
@@ -79,6 +110,9 @@ const props = withDefaults(
 
 const WEEKDAY_LABELS = ['周一', '周三', '周五']
 const DAYS_PER_WEEK = 7
+
+/** 当前视图：默认当月，可切换全年 */
+const viewMode = ref<'month' | 'year'>('month')
 
 interface GraphCell {
   key: string
@@ -92,9 +126,9 @@ interface GraphCell {
   tipText: string
 }
 
-/** 今天所在周的周一（getDay()：0=周日 … 6=周六） */
+/** 所在周的周一（getDay()：0=周日 … 6=周六；row 约定周一=0） */
 function mondayOfWeek(date: Date): Date {
-  const d = new Date(date)
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   const day = d.getDay()
   const offset = day === 0 ? 6 : day - 1
   d.setDate(d.getDate() - offset)
@@ -106,12 +140,6 @@ function addDays(date: Date, days: number): Date {
   d.setDate(d.getDate() + days)
   return d
 }
-
-const today = new Date()
-const columnCount = computed(() => props.weekCount)
-/** 图表起始日期：今天所在周的周一往前推 (周数-1) 周 */
-const firstDate = mondayOfWeek(today)
-firstDate.setDate(firstDate.getDate() - (props.weekCount - 1) * DAYS_PER_WEEK)
 
 /** 最大单日学习次数（用于颜色分层；无记录时为 1 避免除零） */
 const maxCount = computed(() => {
@@ -130,38 +158,85 @@ function levelOf(total: number): number {
   return 1 + Math.min(3, Math.floor(((total - 1) / span) * 3))
 }
 
-const cells = computed<GraphCell[]>(() => {
-  const list: GraphCell[] = []
-  for (let i = 0; i < props.weekCount * DAYS_PER_WEEK; i++) {
-    const date = addDays(firstDate, i)
-    const key = toDateKey(date)
-    const counts = props.daily[key] ?? { qa: 0, review: 0, note: 0 }
-    const total = counts.qa + counts.review + counts.note
-    const parts: string[] = []
-    if (counts.qa > 0) parts.push(`问答 ${counts.qa}`)
-    if (counts.review > 0) parts.push(`复习 ${counts.review}`)
-    if (counts.note > 0) parts.push(`笔记 ${counts.note}`)
-    list.push({
-      key,
-      date,
-      column: Math.floor(i / DAYS_PER_WEEK),
-      row: i % DAYS_PER_WEEK,
-      counts,
-      total,
-      level: levelOf(total),
-      dateLabel: `${date.getMonth() + 1}月${date.getDate()}日`,
-      tipText: parts.length > 0 ? `${date.getMonth() + 1}月${date.getDate()}日：${parts.join('，')}` : `${date.getMonth() + 1}月${date.getDate()}日：无学习`,
-    })
+function buildCell(date: Date, column: number): GraphCell {
+  const key = toDateKey(date)
+  const counts = props.daily[key] ?? { qa: 0, review: 0, note: 0 }
+  const total = counts.qa + counts.review + counts.note
+  const parts: string[] = []
+  if (counts.qa > 0) parts.push(`问答 ${counts.qa}`)
+  if (counts.review > 0) parts.push(`复习 ${counts.review}`)
+  if (counts.note > 0) parts.push(`笔记 ${counts.note}`)
+  return {
+    key,
+    date,
+    column,
+    row: (date.getDay() + 6) % DAYS_PER_WEEK, // 周一=0 … 周日=6
+    counts,
+    total,
+    level: levelOf(total),
+    dateLabel: `${date.getMonth() + 1}月${date.getDate()}日`,
+    tipText: parts.length > 0 ? `${date.getMonth() + 1}月${date.getDate()}日：${parts.join('，')}` : `${date.getMonth() + 1}月${date.getDate()}日：无学习`,
   }
-  return list
+}
+
+const today = new Date()
+
+/** 当月视图：当月 1 号 ~ 月末（含），从当月 1 号所在周的周一起排列 */
+const monthCells = computed<GraphCell[]>(() => {
+  const first = new Date(today.getFullYear(), today.getMonth(), 1)
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+  const firstWeekMonday = mondayOfWeek(first)
+  const cells: GraphCell[] = []
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(today.getFullYear(), today.getMonth(), day)
+    const column = Math.floor((date.getTime() - firstWeekMonday.getTime()) / (24 * 60 * 60 * 1000 * DAYS_PER_WEEK))
+    cells.push(buildCell(date, column))
+  }
+  return cells
 })
 
-/** 月份标签：列首天月份变化时显示（首列固定显示） */
+/** 全年视图：今天所在周的周一往前推 (周数-1) 周起，连续 周数×7 天 */
+const yearCells = computed<GraphCell[]>(() => {
+  const firstDate = mondayOfWeek(today)
+  firstDate.setDate(firstDate.getDate() - (props.weekCount - 1) * DAYS_PER_WEEK)
+  const cells: GraphCell[] = []
+  for (let i = 0; i < props.weekCount * DAYS_PER_WEEK; i++) {
+    const date = addDays(firstDate, i)
+    cells.push(buildCell(date, Math.floor(i / DAYS_PER_WEEK)))
+  }
+  return cells
+})
+
+const cells = computed<GraphCell[]>(() => (viewMode.value === 'month' ? monthCells.value : yearCells.value))
+
+/** 列数：当月视图为当月跨过的周数；全年视图为 weekCount */
+const columnCount = computed<number>(() => {
+  if (viewMode.value === 'month') {
+    const first = new Date(today.getFullYear(), today.getMonth(), 1)
+    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    const firstWeekMonday = mondayOfWeek(first)
+    const lastWeekMonday = mondayOfWeek(last)
+    return Math.floor((lastWeekMonday.getTime() - firstWeekMonday.getTime()) / (24 * 60 * 60 * 1000 * DAYS_PER_WEEK)) + 1
+  }
+  return props.weekCount
+})
+
+/** 月份标签：列首天所在月份变化处显示（当月视图仅一个标签，全年视图逐月分布） */
 const monthLabels = computed<string[]>(() => {
   const labels: string[] = []
   let lastMonth = -1
-  for (let col = 0; col < props.weekCount; col++) {
-    const month = addDays(firstDate, col * DAYS_PER_WEEK).getMonth()
+  for (let col = 0; col < columnCount.value; col++) {
+    let monthDate: Date
+    if (viewMode.value === 'month') {
+      const first = new Date(today.getFullYear(), today.getMonth(), 1)
+      const firstWeekMonday = mondayOfWeek(first)
+      monthDate = addDays(firstWeekMonday, col * DAYS_PER_WEEK)
+    } else {
+      const firstDate = mondayOfWeek(today)
+      firstDate.setDate(firstDate.getDate() - (props.weekCount - 1) * DAYS_PER_WEEK)
+      monthDate = addDays(firstDate, col * DAYS_PER_WEEK)
+    }
+    const month = monthDate.getMonth()
     if (month !== lastMonth) {
       labels.push(`${month + 1}月`)
       lastMonth = month
@@ -176,6 +251,7 @@ const monthLabels = computed<string[]>(() => {
 <style scoped>
 .cg {
   --cg-cell: 10px;
+  --cg-weekday-col: 30px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -183,34 +259,82 @@ const monthLabels = computed<string[]>(() => {
   color: var(--ink-3, #7a8a84);
 }
 
-.cg__body {
+/* 视图切换 */
+.cg__toolbar {
   display: flex;
-  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cg__view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line, #e4e2da);
+  border-radius: 7px;
+  background: var(--surface-2, #f0eee7);
+}
+
+.cg__view-btn {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-2, #52635d);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cg__view-btn:hover {
+  color: var(--ink);
+}
+
+.cg__view-btn.is-active {
+  background: var(--surface, #ffffff);
+  color: var(--brand, #1f5a45);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 表格主体：月份行 + 格子行，两行共享同一左列宽度 */
+.cg__table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 横向滚动容器：窄窗口下月份与星期标签随格子一起滚动，保持对齐 */
+.cg__scroll {
   overflow-x: auto;
   padding-bottom: 2px;
 }
 
-.cg__weekdays {
+.cg__months-row,
+.cg__grid-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* 星期标签列：宽度固定，grid 行高与格子严格一致 */
+.cg__weekday-col {
+  width: var(--cg-weekday-col);
+  flex-shrink: 0;
   display: grid;
   grid-template-rows: repeat(7, var(--cg-cell));
   gap: 3px;
-  flex-shrink: 0;
   min-height: calc(7 * var(--cg-cell) + 6 * 3px);
 }
 
-.cg__weekdays span {
+.cg__weekday-col span {
   display: flex;
   align-items: center;
   font-size: 10px;
   line-height: 1;
 }
 
-.cg__chart {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
+/* 月份标签行：列宽与格子一致，文字左边缘与对应列对齐（允许向右溢出） */
 .cg__months {
   display: grid;
   gap: 3px;
@@ -225,6 +349,7 @@ const monthLabels = computed<string[]>(() => {
   white-space: nowrap;
 }
 
+/* 格子区 */
 .cg__grid {
   display: grid;
   grid-auto-flow: row;
