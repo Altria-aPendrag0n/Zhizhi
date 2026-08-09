@@ -158,6 +158,7 @@ d:\work\Zhizhi\
 | 12 | Pinia 状态管理 | [12-stores.md](./12-stores.md) | `src/stores/` | 6 个 store（含复习队列）的状态、动作与持久化契约 |
 | 13 | Rust 后端 | [13-rust-backend.md](./13-rust-backend.md) | `src-tauri/` | Tauri 装配、10 个文件系统命令、文件监听 |
 | 14 | 间隔复习模块 | [14-review-module.md](./14-review-module.md) | `src/utils/review-scheduler.ts`、`src/stores/review.ts`、`src/components/review/` | SRS 间隔复习调度、`review-state.json` 队列、到期清单 UI |
+| 15 | 复习出题形式模块 | [15-review-question-types.md](./15-review-question-types.md) | `src/review/question-registry.ts`、`src/utils/review-difficulty.ts`、`src/components/review/*`、`src/skills/review-{quiz,cluster,feedback,debate}/` | 六类题型模型与注册表、掌握度×复习曲线难度信号、按题型反馈与辩论多轮 |
 
 ---
 
