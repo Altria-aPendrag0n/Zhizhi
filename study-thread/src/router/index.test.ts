@@ -2,15 +2,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 import router from './index'
 
 afterEach(async () => {
-  await router.push('/chat')
+  await router.push('/home')
 })
 
 describe('应用路由', () => {
-  it('访问根路径时跳转到默认会话页', async () => {
+  it('访问根路径时跳转到主界面', async () => {
     await router.push('/')
 
-    expect(router.currentRoute.value.fullPath).toBe('/chat')
-    expect(router.currentRoute.value.name).toBe('chat')
+    expect(router.currentRoute.value.fullPath).toBe('/home')
+    expect(router.currentRoute.value.name).toBe('home')
   })
 
   it('保留 /notes 笔记详情深链接', async () => {

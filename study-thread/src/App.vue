@@ -8,7 +8,8 @@
     <template #rail>
       <ProjectRail
         :projects="projects"
-        :active-id="activeProjectId"
+        :active-id="isHome ? null : activeProjectId"
+        :brand-active="isHome"
         @select="handleProjectSelect"
         @add="handleProjectAdd"
         @brand="handleBrand"
@@ -206,6 +207,9 @@ function syncActiveThread(id: string | null) {
   breadcrumbs.value = thread ? ['学习会话', thread.title] : ['学习会话']
   saveSessionList()
 }
+
+/** 主界面（/home）：品牌按钮高亮、隐藏会话栏 */
+const isHome = computed(() => route.path === '/home')
 
 /** 资料库（/notes*）、设置页、认知地图（/hub）、复习会话（/review*）隐藏会话列：左侧只保留项目栏 */
 const hideThreadsByRoute = computed(() =>

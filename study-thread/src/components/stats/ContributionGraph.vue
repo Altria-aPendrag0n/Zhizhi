@@ -151,21 +151,20 @@ function addDays(date: Date, days: number): Date {
   return d
 }
 
-/** 最大单日学习次数（用于颜色分层；无记录时为 1 避免除零） */
-const maxCount = computed(() => {
-  let max = 1
-  for (const counts of Object.values(props.daily)) {
-    const total = counts.qa + counts.review + counts.note
-    if (total > max) max = total
-  }
-  return max
-})
-
+/**
+ * 学习次数 → 颜色档位（固定阈值，淡绿到浓绿间隔拉大：10 次及以上才为浓绿）：
+ * - 0 次 → 无色
+ * - 1-2 次 → lvl1（淡绿）
+ * - 3-4 次 → lvl2
+ * - 5-9 次 → lvl3
+ * - 10+ 次 → lvl4（浓绿）
+ */
 function levelOf(total: number): number {
   if (total <= 0) return 0
-  const span = Math.max(1, maxCount.value - 1)
-  // 1..max 均分到 1..4 档
-  return 1 + Math.min(3, Math.floor(((total - 1) / span) * 3))
+  if (total <= 2) return 1
+  if (total <= 4) return 2
+  if (total <= 9) return 3
+  return 4
 }
 
 function buildCell(date: Date, column: number): GraphCell {

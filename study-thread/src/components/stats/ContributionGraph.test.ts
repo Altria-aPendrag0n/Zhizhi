@@ -25,8 +25,8 @@ describe('ContributionGraph', () => {
   it('有学习记录的日期渲染对应层级，无记录为 lvl0', () => {
     const wrapper = mountGraph(
       {
-        [dateKeyAt(0)]: { qa: 1, review: 0, note: 0 },
-        [dateKeyAt(1)]: { qa: 3, review: 1, note: 2 },
+        [dateKeyAt(0)]: { qa: 1, review: 0, note: 0 }, // 总 1 次 → lvl1
+        [dateKeyAt(1)]: { qa: 4, review: 4, note: 4 }, // 总 12 次 → lvl4（浓绿，≥10）
       },
       53,
     )
@@ -44,10 +44,34 @@ describe('ContributionGraph', () => {
       const lvlClass = wrap.find('.cg__cell').classes().find((c) => c.startsWith('cg__cell--lvl'))
       if (lvlClass) byDate.set(tip, lvlClass)
     })
-    // 今天：总次数 1 → lvl1；昨天：总次数 6 → lvl4（最高档）
     expect(byDate.get(labelAt(0))).toBe('cg__cell--lvl1')
     expect(byDate.get(labelAt(1))).toBe('cg__cell--lvl4')
     expect(cells.length).toBe(371)
+  })
+
+  it('颜色档位固定阈值：9 次 lvl3、10 次 lvl4', () => {
+    const wrapper = mountGraph(
+      {
+        [dateKeyAt(0)]: { qa: 5, review: 4, note: 0 }, // 9 → lvl3
+        [dateKeyAt(1)]: { qa: 5, review: 5, note: 0 }, // 10 → lvl4
+      },
+      53,
+    )
+
+    const labelAt = (daysAgo: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() - daysAgo)
+      return `${d.getMonth() + 1}月${d.getDate()}日`
+    }
+
+    const byDate = new Map<string, string>()
+    wrapper.findAll('.cg__cell-wrap').forEach((wrap) => {
+      const tip = wrap.find('.cg__tip-title').text()
+      const lvlClass = wrap.find('.cg__cell').classes().find((c) => c.startsWith('cg__cell--lvl'))
+      if (lvlClass) byDate.set(tip, lvlClass)
+    })
+    expect(byDate.get(labelAt(0))).toBe('cg__cell--lvl3')
+    expect(byDate.get(labelAt(1))).toBe('cg__cell--lvl4')
   })
 
   it('hover 提示包含三类明细', () => {

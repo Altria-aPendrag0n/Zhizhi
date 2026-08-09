@@ -2,6 +2,7 @@
   <div class="project-rail">
     <button
       class="project-rail__brand"
+      :class="{ 'is-active': brandActive }"
       type="button"
       aria-label="主界面"
       title="主界面"
@@ -45,6 +46,8 @@ export interface Project {
 defineProps<{
   projects: Project[]
   activeId: string | null
+  /** 主界面（/home）是否激活：激活时品牌按钮高亮、项目按钮均不高亮 */
+  brandActive?: boolean
 }>()
 
 defineEmits<{
@@ -90,6 +93,14 @@ function projectIcon(project: Project): Component {
 .project-rail__brand:hover {
   transform: scale(1.05);
   box-shadow: 0 3px 12px rgba(31, 90, 69, 0.25);
+}
+
+/* 主界面激活：品牌按钮以白色描边圈出，项目按钮均不高亮 */
+.project-rail__brand.is-active {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px var(--brand),
+    0 3px 12px rgba(31, 90, 69, 0.28);
 }
 
 .project-rail__button {
