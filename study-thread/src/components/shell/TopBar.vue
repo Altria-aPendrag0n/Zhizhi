@@ -28,7 +28,11 @@
         >
           {{ crumb }}
         </span>
-        <span v-else class="top-bar__crumb top-bar__crumb--current">
+        <span
+          v-else
+          class="top-bar__crumb top-bar__crumb--current"
+          :class="{ 'top-bar__crumb--brand': brandTitle }"
+        >
           <input
             v-if="isEditing"
             ref="titleInput"
@@ -298,13 +302,16 @@ watch(
   font-weight: 590;
 }
 
-/* 品牌首标题（主界面「知枝」）：衬线大字 + 品牌绿，呼应页面 hero 标题 */
+/* 品牌首标题（主界面「知枝」）：衬线大字 + 品牌绿 + 柔光阴影，呼应页面 hero 标题 */
 .top-bar__crumb--brand {
   font-family: Georgia, 'Songti SC', serif;
-  font-size: 21px;
+  font-size: 30px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--brand);
+  text-shadow:
+    0 2px 16px rgba(36, 92, 77, 0.3),
+    0 1px 2px rgba(36, 92, 77, 0.14);
 }
 
 .top-bar__title-text {

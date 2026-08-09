@@ -39,7 +39,8 @@
 | `src/views/HomePage.vue` | 主界面编排：统计卡 + 格子图 + 快速入口 + 空态引导 |
 | `src/router/index.ts` | `/home` 路由 |
 | `src/components/shell/ProjectRail.vue` | 知枝按钮 `emit('brand')` |
-| `src/App.vue` | `@brand` → `push('/home')`；路由联动（隐藏会话栏/面包屑/菜单） |
+| `src/components/shell/TopBar.vue` | 顶栏面包屑；`brandTitle` prop 触发品牌首标题样式 |
+| `src/App.vue` | `@brand` → `push('/home')`；路由联动（隐藏会话栏/面包屑/菜单）；`/home` 时传 `:brand-title` |
 
 ## 4. 数据流
 
@@ -76,7 +77,15 @@
 - **对齐**：星期标签（周一/周三/周五）与格子处于同一行容器、共用相同 `grid-template-rows`；月份标签行左侧用与星期列同宽的占位列占位，文字左边缘与对应列对齐；月份行与格子行同置于横向容器（`overflow: hidden`，不显示滚动条）。
 - hover 显示悬浮卡：日期 + 问答/复习/笔记明细（`role="img"` + `aria-label` 兜底）。
 
-## 7. 相关测试
+## 7. 顶栏品牌首标题
+
+主界面顶栏左侧以品牌首标题「知枝」替代普通面包屑，作为入口处的视觉锚点：
+
+- `App.vue` 在 `/home` 路由时向 `TopBar` 传入 `brandTitle: true`，面包屑简化为 `['知枝']`。
+- `TopBar.vue` 对当前标题 span 绑定 `:class="{ 'top-bar__crumb--brand': brandTitle }"`，非主界面（普通会话/笔记等）不受影响。
+- 品牌样式：Georgia / 宋体衬线、30px、600 字重、品牌绿 `--brand`（`#245c4d`）+ 品牌绿柔光 `text-shadow`，与页面 hero 标题呼应。
+
+## 8. 相关测试
 
 - `src/utils/learning-stats.test.ts`：日期键、消息日期提取（带/无时间戳、fallback、误匹配防护）、
   review 解析、聚合、汇总（streak 边界）、vault 聚合（mock vault-fs，排除 review-*）
@@ -84,7 +93,7 @@
 - `src/views/HomePage.test.ts`：空态引导、统计渲染、开始新会话回调、加载失败容错
 - `MainChatPage.test.ts` 断言用户消息携带时间戳（时间戳注入的回归保护）
 
-## 8. 注意事项
+## 9. 注意事项
 
 - 统计为**每次进入主界面实时扫描**（会话/笔记文件规模通常小，单次聚合成本可接受），未建缓存；
   若未来 vault 规模增大可考虑 `.study-thread` 下缓存 + 变更事件失效。

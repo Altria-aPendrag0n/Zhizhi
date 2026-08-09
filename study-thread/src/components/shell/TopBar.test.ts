@@ -22,6 +22,28 @@ afterEach(() => {
 })
 
 describe('TopBar', () => {
+  it('brandTitle 时当前标题应用品牌样式类', () => {
+    const wrapper = mount(TopBar, {
+      props: { breadcrumbs: ['知枝'], brandTitle: true },
+      global: { plugins: [router] },
+    })
+
+    const current = wrapper.find('.top-bar__crumb--current')
+    expect(current.classes()).toContain('top-bar__crumb--brand')
+    wrapper.unmount()
+  })
+
+  it('非 brandTitle 时当前标题不应用品牌样式类', () => {
+    const wrapper = mount(TopBar, {
+      props: { breadcrumbs: ['学习会话'], brandTitle: false },
+      global: { plugins: [router] },
+    })
+
+    const current = wrapper.find('.top-bar__crumb--current')
+    expect(current.classes()).not.toContain('top-bar__crumb--brand')
+    wrapper.unmount()
+  })
+
   it('齿轮设置按钮发出 settings 事件', async () => {
     const wrapper = mount(TopBar, {
       props: { breadcrumbs: ['学习会话'] },
