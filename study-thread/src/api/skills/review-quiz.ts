@@ -1,9 +1,10 @@
 /**
  * 复习出题与反馈执行器（P2 AI 复习会话）
  *
- * 两个固定流程：
- * 1. generateReviewQuestions —— 基于原子笔记（+关联笔记/学习者画像）生成递进复习问题（非流式 JSON）
- * 2. reviewFollowupStream —— 对用户作答做费曼式反馈，对照笔记原文指出知识缺口（流式）
+ * 三个固定流程：
+ * 1. generateReviewQuestions —— 基于原子笔记（+关联笔记/学习者画像/难度信号）生成递进复习问题（非流式 JSON）
+ * 2. reviewFollowupStream —— 对用户作答做按题型适配的费曼式反馈，对照笔记原文指出知识缺口（流式）
+ * 3. reviewDebateStream —— 辩论题多轮对答：中段反驳追问、末轮总结评估（流式）
  */
 
 import type { LLMProvider, Message, StreamChunk } from '../llm-provider'
@@ -12,12 +13,18 @@ import { parseSkill, buildPrompt } from '../../skills/loader'
 import type { LearnerProfile } from '../../utils/learner-profile'
 import { matchConceptExact } from '../../utils/learner-note-link'
 import { extractAllLinks } from '../../parser/wikilink'
-import { normalizeQuizQuestion } from '../../review/question-registry'
+import {
+  DEFAULT_MAX_ROUNDS,
+  formatQuestionForDisplay,
+  normalizeQuizQuestion,
+  shouldEndDebate,
+} from '../../review/question-registry'
 
 // SKILL.md 内容（构建时内联）
 import skillRaw from '../../skills/review-quiz/SKILL.md?raw'
 import feedbackRaw from '../../skills/review-feedback/SKILL.md?raw'
 import clusterRaw from '../../skills/review-cluster/SKILL.md?raw'
+import debateRaw from '../../skills/review-debate/SKILL.md?raw'
 
 /** 笔记正文注入的最大长度（原子笔记为划线原文，防止超长） */
 export const MAX_NOTE_BODY_LENGTH = 4000
@@ -33,6 +40,7 @@ export const GRADUATION_MASTERY_THRESHOLD = 0.9
 let _quizSkillCache: ReturnType<typeof parseSkill> | null = null
 let _feedbackSkillCache: ReturnType<typeof parseSkill> | null = null
 let _clusterQuizSkillCache: ReturnType<typeof parseSkill> | null = null
+let _debateSkillCache: ReturnType<typeof parseSkill> | null = null
 
 function getQuizSkill() {
   if (!_quizSkillCache) _quizSkillCache = parseSkill(skillRaw)
@@ -47,6 +55,11 @@ function getFeedbackSkill() {
 function getClusterQuizSkill() {
   if (!_clusterQuizSkillCache) _clusterQuizSkillCache = parseSkill(clusterRaw)
   return _clusterQuizSkillCache
+}
+
+function getDebateSkill() {
+  if (!_debateSkillCache) _debateSkillCache = parseSkill(debateRaw)
+  return _debateSkillCache
 }
 
 /**
@@ -295,9 +308,9 @@ export async function generateClusterQuestions(
 }
 
 /**
- * 对用户作答做费曼式反馈（流式）
+ * 对用户作答做按题型适配的费曼式反馈（流式）
  *
- * @param question - 本次复习问题
+ * @param question - 本次复习问题（含题型 type 与结构化字段，P5-3）
  * @param answer - 用户的回答
  * @param note - 被复习的原子笔记（对照标准）
  * @param provider - LLM 提供商
@@ -305,7 +318,7 @@ export async function generateClusterQuestions(
  * @returns 流式反馈迭代器
  */
 export async function* reviewFollowupStream(
-  question: string,
+  question: ReviewQuestion,
   answer: string,
   note: Note,
   provider: LLMProvider,
@@ -313,13 +326,14 @@ export async function* reviewFollowupStream(
 ): AsyncIterable<StreamChunk> {
   const skill = getFeedbackSkill()
   const systemPrompt = buildPrompt(skill, {
+    review_question: formatQuestionForDisplay(question),
     note_content: serializeNoteForReview(note),
     cluster_notes:
       clusterNotes && clusterNotes.length > 0 ? serializeClusterNotes(clusterNotes) : '（单条笔记复习，无簇上下文）',
   })
 
   const messages: Message[] = [
-    { role: 'user', content: `复习问题：${question}` },
+    { role: 'user', content: `复习问题：${question.question}` },
     { role: 'user', content: `我的回答：${answer}` },
   ]
 
@@ -335,6 +349,63 @@ export async function* reviewFollowupStream(
     yield {
       type: 'error',
       content: `复习反馈失败: ${(e as Error).message}`,
+    }
+  }
+}
+
+/**
+ * 辩论题多轮对答（流式，P5-3）
+ *
+ * @param question - 辩论题（type=debate，含 position / maxRounds）
+ * @param turns - 历史论点（含用户本轮最新发言，最新在最后；role 与消息一致）
+ * @param note - 被复习的原子笔记（对照标准）
+ * @param provider - LLM 提供商
+ * @param clusterNotes - 复习簇上下文（可空）
+ * @param round - 用户当前发言轮次（从 1 起）
+ * @param maxRounds - 最大辩论轮次（缺省 3）；本轮达到 maxRounds 时输出总结评估
+ * @returns 流式辩论回复迭代器
+ */
+export async function* reviewDebateStream(
+  question: ReviewQuestion,
+  turns: { role: 'user' | 'assistant'; content: string }[],
+  note: Note,
+  provider: LLMProvider,
+  clusterNotes?: Note[],
+  round = 1,
+  maxRounds: number = DEFAULT_MAX_ROUNDS,
+): AsyncIterable<StreamChunk> {
+  const skill = getDebateSkill()
+  const isFinal = shouldEndDebate('debate', round, maxRounds)
+  const turnsText =
+    turns.length > 0
+      ? turns.map((t) => `${t.role === 'user' ? '用户' : '你'}：${t.content}`).join('\n\n')
+      : '（暂无历史发言，本轮为开场）'
+
+  const systemPrompt = buildPrompt(skill, {
+    debate_position: question.position && question.position.trim() ? question.position : question.question,
+    debate_round: `${round} / ${maxRounds}${isFinal ? '（本轮为总结轮）' : ''}`,
+    debate_turns: turnsText,
+    note_content: serializeNoteForReview(note),
+    cluster_notes:
+      clusterNotes && clusterNotes.length > 0 ? serializeClusterNotes(clusterNotes) : '（单条笔记复习，无簇上下文）',
+  })
+
+  const messages: Message[] = [
+    { role: 'user', content: isFinal ? '请给出本轮辩论的总结评估。' : '请针对我上轮论点进行反驳或追问。' },
+  ]
+
+  try {
+    for await (const chunk of provider.chat(messages, {
+      systemPrompt,
+      temperature: 0.7,
+      maxTokens: 2048,
+    })) {
+      yield chunk
+    }
+  } catch (e) {
+    yield {
+      type: 'error',
+      content: `辩论回复失败: ${(e as Error).message}`,
     }
   }
 }

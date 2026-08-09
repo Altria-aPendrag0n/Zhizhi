@@ -130,6 +130,25 @@ export function serializeAnswer(type: ReviewQuestionType, payload: unknown): str
 }
 
 /**
+ * 将 ReviewQuestion 序列化为反馈 prompt 注入文本（含题型标签与结构化内容），
+ * 供 review-feedback 按题型分派反馈策略。
+ */
+export function formatQuestionForDisplay(question: ReviewQuestion): string {
+  const label = QUESTION_TYPE_LABELS[question.type]
+  let text = `[${label}] ${question.question}`
+  if (question.type === 'choice' && question.options) {
+    text += `\n选项：${question.options.map((o, i) => `${OPTION_LETTERS[i]}. ${o}`).join('　')}`
+  }
+  if (question.type === 'ordering' && question.steps) {
+    text += `\n乱序步骤：${question.steps.map((s, i) => `${i + 1}. ${s}`).join('　')}`
+  }
+  if (question.type === 'fill_blank' && question.blanks && question.blanks > 1) {
+    text += `\n（共 ${question.blanks} 个空位）`
+  }
+  return text
+}
+
+/**
  * 辩论轮次判定（纯函数）：当前题型非 debate，或已达到最大轮次时结束辩论。
  * maxRounds 缺省用 DEFAULT_MAX_ROUNDS。
  */

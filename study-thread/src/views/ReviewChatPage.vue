@@ -320,7 +320,7 @@ async function handleSend(content: string) {
   try {
     const provider = createProvider(config)
     for await (const chunk of reviewFollowupStream(
-      question.question,
+      question,
       content,
       note.value,
       provider,

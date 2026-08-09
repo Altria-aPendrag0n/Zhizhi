@@ -194,7 +194,7 @@ describe('ReviewChatPage', () => {
     await flushPromises()
 
     expect(mocks.reviewFollowupStream).toHaveBeenCalledWith(
-      '什么是费曼学习法？',
+      { level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' },
       '通过教别人来检验理解',
       expect.anything(),
       expect.anything(),

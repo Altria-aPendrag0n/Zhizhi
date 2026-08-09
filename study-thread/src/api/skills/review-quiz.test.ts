@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LLMProvider, StreamChunk } from '../llm-provider'
-import type { Note } from '../../types'
+import type { Note, ReviewQuestion } from '../../types'
 import type { LearnerProfile } from '../../utils/learner-profile'
 import {
   generateReviewQuestions,
   reviewFollowupStream,
+  reviewDebateStream,
   serializeNoteForReview,
   shouldSuggestGraduation,
   generateClusterQuestions,
@@ -285,13 +286,16 @@ describe('reviewFollowupStream', () => {
     vi.clearAllMocks()
   })
 
+  const question: ReviewQuestion = { level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' }
+  const questionA: ReviewQuestion = { level: 'recognize', type: 'short_answer', question: '问题A' }
+
   it('流式透传反馈文本', async () => {
     const provider = mockProvider([
       { type: 'text', content: '你的回答基本正确。' },
       { type: 'stop', content: '' },
     ])
     const chunks: StreamChunk[] = []
-    for await (const chunk of reviewFollowupStream('什么是费曼学习法？', '通过教学检验理解', note, provider)) {
+    for await (const chunk of reviewFollowupStream(question, '通过教学检验理解', note, provider)) {
       chunks.push(chunk)
     }
 
@@ -302,7 +306,7 @@ describe('reviewFollowupStream', () => {
 
   it('问题与回答作为两条用户消息传入', async () => {
     const provider = mockProvider([{ type: 'text', content: '反馈' }])
-    for await (const _ of reviewFollowupStream('问题A', '回答B', note, provider)) {
+    for await (const _ of reviewFollowupStream(questionA, '回答B', note, provider)) {
       // 消费迭代器
     }
 
@@ -313,9 +317,27 @@ describe('reviewFollowupStream', () => {
     ])
   })
 
+  it('选择题题型标签与选项注入反馈 prompt（P5-3）', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反馈' }])
+    const choiceQ: ReviewQuestion = {
+      level: 'recognize',
+      type: 'choice',
+      question: '费曼法的核心是什么？',
+      options: ['向他人解释', '死记硬背'],
+    }
+    for await (const _ of reviewFollowupStream(choiceQ, '我选择 A：向他人解释', note, provider)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('[选择题]')
+    expect(systemPrompt).toContain('A. 向他人解释')
+    expect(systemPrompt).toContain('B. 死记硬背')
+  })
+
   it('提供簇上下文时反馈 prompt 注入簇笔记（P4-2）', async () => {
     const provider = mockProvider([{ type: 'text', content: '反馈' }])
-    for await (const _ of reviewFollowupStream('问题A', '回答B', note, provider, [note, relatedNote])) {
+    for await (const _ of reviewFollowupStream(questionA, '回答B', note, provider, [note, relatedNote])) {
       // 消费迭代器
     }
 
@@ -326,7 +348,7 @@ describe('reviewFollowupStream', () => {
 
   it('未提供簇上下文时注入单条占位文案', async () => {
     const provider = mockProvider([{ type: 'text', content: '反馈' }])
-    for await (const _ of reviewFollowupStream('问题A', '回答B', note, provider)) {
+    for await (const _ of reviewFollowupStream(questionA, '回答B', note, provider)) {
       // 消费迭代器
     }
 
@@ -342,9 +364,90 @@ describe('reviewFollowupStream', () => {
     } as unknown as ReturnType<typeof mockProvider>
 
     const chunks: StreamChunk[] = []
-    for await (const chunk of reviewFollowupStream('问题', '回答', note, provider)) {
+    for await (const chunk of reviewFollowupStream(question, '回答', note, provider)) {
       chunks.push(chunk)
     }
     expect(chunks).toEqual([{ type: 'error', content: '复习反馈失败: LLM 挂了' }])
+  })
+})
+
+describe('reviewDebateStream', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const debateQ: ReviewQuestion = {
+    level: 'explain',
+    type: 'debate',
+    question: '辩题：死记硬背毫无价值',
+    position: '反对该观点：死记硬背在记忆巩固中有基础价值',
+    maxRounds: 3,
+  }
+  const turns = [
+    { role: 'assistant' as const, content: '我方观点：死记硬背在基础记忆阶段不可替代。' },
+    { role: 'user' as const, content: '我认为理解更重要，死记硬背效率低。' },
+  ]
+
+  it('中段轮次：注入辩题/轮次/历史论点，提示反驳而非总结', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反驳：理解的前提是先记住基础符号。' }])
+    for await (const _ of reviewDebateStream(debateQ, turns, note, provider, undefined, 1)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('反对该观点：死记硬背在记忆巩固中有基础价值')
+    expect(systemPrompt).toContain('1 / 3')
+    expect(systemPrompt).toContain('用户：我认为理解更重要，死记硬背效率低。')
+    const messages = provider.chat.mock.calls[provider.chat.mock.calls.length - 1][0] as { content: string }[]
+    expect(messages[0].content).toBe('请针对我上轮论点进行反驳或追问。')
+  })
+
+  it('末轮（达到 maxRounds）：提示总结评估', async () => {
+    const provider = mockProvider([{ type: 'text', content: '总结：你的立场有合理处……' }])
+    for await (const _ of reviewDebateStream(debateQ, turns, note, provider, undefined, 3)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('3 / 3')
+    expect(systemPrompt).toContain('总结轮')
+    const messages = provider.chat.mock.calls[provider.chat.mock.calls.length - 1][0] as { content: string }[]
+    expect(messages[0].content).toBe('请给出本轮辩论的总结评估。')
+  })
+
+  it('无 position 时回退用题干作为辩题', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反驳' }])
+    const noPos: ReviewQuestion = { level: 'explain', type: 'debate', question: '辩题A' }
+    for await (const _ of reviewDebateStream(noPos, [], note, provider, undefined, 1, 2)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('辩题A')
+    expect(systemPrompt).toContain('1 / 2')
+    expect(systemPrompt).toContain('暂无历史发言，本轮为开场')
+  })
+
+  it('流式透传辩论回复', async () => {
+    const provider = mockProvider([{ type: 'text', content: '第一句' }, { type: 'text', content: '第二句' }])
+    const chunks: StreamChunk[] = []
+    for await (const chunk of reviewDebateStream(debateQ, turns, note, provider, undefined, 1)) {
+      chunks.push(chunk)
+    }
+    expect(chunks.map((c) => c.content)).toEqual(['第一句', '第二句'])
+  })
+
+  it('provider 抛异常时输出 error chunk 而非抛出', async () => {
+    const provider = {
+      chat: vi.fn(async function* () {
+        throw new Error('LLM 挂了')
+      }),
+    } as unknown as ReturnType<typeof mockProvider>
+
+    const chunks: StreamChunk[] = []
+    for await (const chunk of reviewDebateStream(debateQ, turns, note, provider, undefined, 1)) {
+      chunks.push(chunk)
+    }
+    expect(chunks).toEqual([{ type: 'error', content: '辩论回复失败: LLM 挂了' }])
   })
 })
