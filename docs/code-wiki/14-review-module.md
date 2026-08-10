@@ -9,7 +9,7 @@
 
 - **调度**：决定"何时复习哪条笔记"——按笔记类型差异化间隔序列 + 四档评级推进（借鉴 DeepTutor `learning/scheduler.py` 与 Anki SM-2 思路）。
 - **持久化**：复习队列存于 `<vault>/.study-thread/review-state.json`（DEVELOPMENT.md 已规划该位置）。
-- **生命周期集成**：新笔记保存即入队（次日到期）；删除笔记级联清理队列。
+- **生命周期集成**：新笔记保存即入队（当天到期）；删除笔记级联清理队列。
 - **展示**：学习地图新增「复习」视图，展示到期笔记卡片与评级操作，侧栏显示到期数量徽标。
 
 > 本阶段为纯本地调度层（无 LLM 依赖），是后续「AI 复习会话 / 画像驱动 / 图谱簇复习」的地基。
@@ -41,7 +41,7 @@ interface ReviewTask {
 | 函数 | 说明 |
 |------|------|
 | `getIntervals(type)` | 按类型返回间隔序列；未知类型回退默认序列 |
-| `createReviewTask(notePath, title, type, now?)` | 新笔记入队：`interval: 0`、次日到期、`mastery: 0` |
+| `createReviewTask(notePath, title, type, now?)` | 新笔记入队：`interval: 0`、当天到期、`mastery: 0` |
 | `applyRating(task, rating, now?)` | 评级推进间隔与掌握度，返回新任务（含 history 追加） |
 | `priorityOf(task)` | 任务优先级：mastery < 0.3 最高；上次 again 或 mastery < 0.6 次之；其余按类型偏好 |
 | `buildDueList(tasks, now?)` | 到期任务按优先级升序（同优先级按到期先后） |
@@ -77,10 +77,16 @@ interface ReviewTask {
 
 | 动作 | 说明 |
 |------|------|
-| `loadQueue(vaultPath)` | 读取 `review-state.json`；缺失/损坏置空列表 |
-| `enqueue(task)` | 入队（幂等：同 notePath 跳过）并持久化 |
+| `loadQueue(vaultPath)` | 读取 `review-state.json`；缺失/损坏置空列表；按规范化路径去重历史重复条目（去重后落盘） |
+| `enqueue(task)` | 入队（幂等：同 notePath 跳过，**正/反斜杠视为同一路径**）并持久化 |
 | `applyReview(notePath, rating, now?)` | 评级回写（调度器推进）并持久化 |
 | `removeFromQueue(notePath)` | 删除笔记级联清理 |
+
+> **幂等约定（重复条目修复）**：同一笔记可能以正/反斜杠两种路径形式出现（AI 摘录保存 `saveNote`
+> 拼接 `${vaultPath}/notes/...` 与 `listDir` 扫描返回的 `\` 分隔路径不一致），若直接按原始字符串查重
+> 会把同一笔记重复入队。复习队列统一以 `notePathKey(path)`（分隔符归一 + 小写）作为幂等键：
+> `enqueue` / `syncQueueWithNotes` 补录均按规范化键查重；`syncQueueWithNotes` 并发调用复用同一
+> in-flight Promise（串行化，避免双写）；`loadQueue` 对历史重复条目去重并落盘。
 
 持久化格式：
 
@@ -103,10 +109,10 @@ interface ReviewTask {
 
 ## 5. 笔记生命周期集成（`src/stores/notes.ts`）
 
-- `saveNote`：写盘成功后 `useReviewStore().enqueue(createReviewTask(...))`（次日到期），失败不影响笔记保存。
+- `saveNote`：写盘成功后 `useReviewStore().enqueue(createReviewTask(...))`（当天到期），失败不影响笔记保存。
 - `deleteNote`：删除成功后 `useReviewStore().removeFromQueue(path)`，失败不影响删除结果。
 - `loadNote`：从复习队列合并 `Note.review` 镜像字段（未入队则为占位值）。
-- **存量笔记补录（P5 修复）**：入队原本只发生在 `saveNote`，vault 中已存在的存量笔记永远进不了复习队列。`reviewStore.syncQueueWithNotes(vaultPath)` 在加载队列后，把 notes 目录中不在队列里的笔记幂等补录（`createReviewTask`，次日到期），单次持久化；`LearningHubPage` `onMounted` 时调用（内含 `loadQueue`）。
+- **存量笔记补录（P5 修复）**：入队原本只发生在 `saveNote`，vault 中已存在的存量笔记永远进不了复习队列。`reviewStore.syncQueueWithNotes(vaultPath)` 在加载队列后，把 notes 目录中不在队列里的笔记幂等补录（`createReviewTask`，当天到期），单次持久化；`LearningHubPage`/`HomePage` `onMounted` 时调用（内含 `loadQueue`）。
 
 ## 6. UI（复习视图）
 

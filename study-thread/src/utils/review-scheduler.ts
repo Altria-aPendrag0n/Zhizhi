@@ -51,14 +51,14 @@ export function getIntervals(type: string): number[] {
 }
 
 /**
- * 新建笔记入队：间隔 0、次日到期（"新笔记即入队，明天开始复习"）。
+ * 新建笔记入队：间隔 0、当天到期（"新笔记即入队，当天即可开始复习"）。
  */
 export function createReviewTask(notePath: string, title: string, type: string, now: Date = new Date()): ReviewTask {
   return {
     notePath,
     title,
     type,
-    dueAt: toIso(addDays(now, 1)),
+    dueAt: toIso(now),
     interval: 0,
     mastery: 0,
     history: [],

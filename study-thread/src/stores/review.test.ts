@@ -104,6 +104,21 @@ describe('review store（P3-3 画像提权信号）', () => {
 
     expect(store.boostedNotePaths).toEqual(['/vault/notes/b.md'])
   })
+
+  it('enqueue 对正/反斜杠路径幂等：同一笔记不重复入队', async () => {
+    const store = useReviewStore()
+    await store.loadQueue('/vault')
+    const task = { ...QUEUE[0], notePath: '/vault/notes/new.md' }
+    const slashTask = { ...QUEUE[0], notePath: '\\vault\\notes\\new.md' }
+
+    await store.enqueue(task)
+    await store.enqueue(slashTask)
+
+    expect(store.queue).toHaveLength(2)
+    expect(store.queue.map((item) => item.notePath)).toContain('/vault/notes/new.md')
+    // 仅首次入队时写盘
+    expect(vaultFs.writeFile).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('review store（P1 增强 毕业机制）', () => {
@@ -211,7 +226,7 @@ describe('syncQueueWithNotes（存量笔记补录，P5 修复）', () => {
     noteStore.loadAllNotes.mockResolvedValue(undefined)
   })
 
-  it('补录不在队列中的存量笔记（次日到期），已有任务不重复', async () => {
+  it('补录不在队列中的存量笔记（当天到期），已有任务不重复', async () => {
     const store = useReviewStore()
     noteStore.notes = [
       { path: '/vault/notes/a.md', title: '笔记A', type: 'concept' }, // 已在队列（QUEUE）
@@ -229,9 +244,59 @@ describe('syncQueueWithNotes（存量笔记补录，P5 修复）', () => {
     for (const task of added) {
       expect(task.interval).toBe(0)
       expect(task.mastery).toBe(0)
-      // 次日到期（不早于当前时间）
-      expect(new Date(task.dueAt).getTime()).toBeGreaterThan(Date.now())
+      // 当天到期（不晚于当前时间）
+      expect(new Date(task.dueAt).getTime()).toBeLessThanOrEqual(Date.now())
     }
+    expect(vaultFs.writeFile).toHaveBeenCalled()
+  })
+
+  it('正/反斜杠路径视为同一笔记，补录不产生重复（幂等修复）', async () => {
+    const store = useReviewStore()
+    noteStore.notes = [
+      { path: '/vault/notes/a.md', title: '笔记A', type: 'concept' }, // 已在队列（QUEUE，正斜杠）
+      { path: '\\vault\\notes\\a.md', title: '笔记A', type: 'concept' }, // 同笔记反斜杠形式 → 跳过
+      { path: '/vault/notes/d.md', title: '笔记D', type: 'concept' }, // 缺失 → 补录
+    ]
+
+    await store.syncQueueWithNotes('/vault')
+
+    const aTasks = store.queue.filter((task) => task.notePath === '/vault/notes/a.md')
+    expect(aTasks).toHaveLength(1)
+    expect(store.queue.map((task) => task.notePath)).toContain('/vault/notes/d.md')
+    expect(store.queue).toHaveLength(2)
+  })
+
+  it('并发多次调用 syncQueueWithNotes 只补录一次（串行化防双写）', async () => {
+    const store = useReviewStore()
+    noteStore.notes = [
+      { path: '/vault/notes/b.md', title: '笔记B', type: 'method' },
+      { path: '/vault/notes/c.md', title: '笔记C', type: 'fact' },
+    ]
+
+    await Promise.all([store.syncQueueWithNotes('/vault'), store.syncQueueWithNotes('/vault')])
+
+    const bTasks = store.queue.filter((task) => task.notePath === '/vault/notes/b.md')
+    const cTasks = store.queue.filter((task) => task.notePath === '/vault/notes/c.md')
+    expect(bTasks).toHaveLength(1)
+    expect(cTasks).toHaveLength(1)
+    expect(store.queue).toHaveLength(3)
+  })
+
+  it('加载队列时按规范化路径去重历史重复条目并落盘', async () => {
+    const dupFile = JSON.stringify({
+      version: 1,
+      queue: [
+        { notePath: '/vault/notes/a.md', title: 'A', type: 'concept', dueAt: '2026-08-07T00:00:00.000Z', interval: 1, mastery: 0.2, history: [] },
+        { notePath: '\\vault\\notes\\a.md', title: 'A', type: 'concept', dueAt: '2026-08-07T00:00:00.000Z', interval: 1, mastery: 0.2, history: [] },
+      ],
+    })
+    vaultFs.readFile.mockResolvedValue(dupFile)
+    const store = useReviewStore()
+
+    await store.loadQueue('/vault')
+
+    expect(store.queue).toHaveLength(1)
+    expect(store.queue[0].notePath).toBe('/vault/notes/a.md')
     expect(vaultFs.writeFile).toHaveBeenCalled()
   })
 

@@ -223,7 +223,7 @@ export const useNoteStore = defineStore('notes', () => {
       notes.value = sortNotes([...notes.value.filter((item) => item.path !== filePath), noteMeta])
       // 笔记变更 → 画像概念映射缓存失效
       if (vaultPath) invalidateLearnerLinkCache(vaultPath)
-      // 新笔记进入复习队列（次日到期），失败不影响笔记保存
+      // 新笔记进入复习队列（当天到期），失败不影响笔记保存
       try {
         await useReviewStore().enqueue(createReviewTask(filePath, note.title, note.type))
       } catch (error) {

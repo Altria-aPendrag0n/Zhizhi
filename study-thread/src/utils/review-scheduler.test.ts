@@ -45,13 +45,13 @@ describe('getIntervals', () => {
 })
 
 describe('createReviewTask', () => {
-  it('新笔记间隔为 0、次日到期、掌握度为 0', () => {
+  it('新笔记间隔为 0、当天到期、掌握度为 0', () => {
     const created = createReviewTask('notes/费曼.md', '费曼学习法', 'concept', NOW)
     expect(created.interval).toBe(0)
     expect(created.mastery).toBe(0)
     expect(created.history).toEqual([])
-    // 次日同一时刻到期
-    expect(new Date(created.dueAt).getTime()).toBe(new Date('2026-08-09T12:00:00.000Z').getTime())
+    // 当天同一时刻到期
+    expect(new Date(created.dueAt).getTime()).toBe(NOW.getTime())
   })
 })
 

@@ -2,7 +2,7 @@
   <div class="review-due-list">
     <div v-if="tasks.length === 0" class="review-due-list__empty">
       <div class="review-due-list__empty-title">今天没有到期的复习</div>
-      <div class="review-due-list__empty-desc">新摘录的原子笔记会在次日自动进入复习队列。</div>
+      <div class="review-due-list__empty-desc">新摘录的原子笔记会在当天自动进入复习队列。</div>
     </div>
 
     <div
