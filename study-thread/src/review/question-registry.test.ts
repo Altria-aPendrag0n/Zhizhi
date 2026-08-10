@@ -22,6 +22,22 @@ describe('normalizeQuizQuestion', () => {
     })
   })
 
+  it('确定答案题型透传 answer（标准答案，P5-6）', () => {
+    const q = normalizeQuizQuestion({
+      level: 'recognize',
+      type: 'choice',
+      question: '费曼学习法的核心是什么？',
+      options: ['向他人解释', '死记硬背'],
+      answer: '向他人解释',
+    })
+    expect(q?.answer).toBe('向他人解释')
+  })
+
+  it('answer 为空串或纯空白时忽略', () => {
+    const q = normalizeQuizQuestion({ level: 'recognize', type: 'choice', question: 'Q', options: ['A', 'B'], answer: '  ' })
+    expect(q?.answer).toBeUndefined()
+  })
+
   it('ordering：透传 steps', () => {
     const q = normalizeQuizQuestion({
       level: 'apply',
@@ -82,6 +98,16 @@ describe('normalizeQuizQuestion', () => {
 
   it('question 缺失时丢弃', () => {
     expect(normalizeQuizQuestion({ level: 'recognize', type: 'choice', options: ['a', 'b'] })).toBeNull()
+  })
+
+  it('一问一答：题干含多个疑问句标记（复合问句）时丢弃（P5-6）', () => {
+    const q = normalizeQuizQuestion({ level: 'recognize', type: 'short_answer', question: '什么是 X？它有什么好处？' })
+    expect(q).toBeNull()
+  })
+
+  it('单个问号的正常题干保留', () => {
+    const q = normalizeQuizQuestion({ level: 'recognize', type: 'short_answer', question: '费曼学习法的核心是什么？' })
+    expect(q?.type).toBe('short_answer')
   })
 
   it('choice options 少于 2 时丢弃（防猜率下限）', () => {

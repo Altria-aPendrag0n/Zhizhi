@@ -335,6 +335,34 @@ describe('reviewFollowupStream', () => {
     expect(systemPrompt).toContain('B. 死记硬背')
   })
 
+  it('确定答案题型注入附带的标准答案供判正误（P5-6）', async () => {
+    const provider = mockProvider([{ type: 'text', content: '判定：正确\n很好。' }])
+    const choiceQ: ReviewQuestion = {
+      level: 'recognize',
+      type: 'choice',
+      question: '费曼法的核心是什么？',
+      options: ['向他人解释', '死记硬背'],
+      answer: '向他人解释',
+    }
+    for await (const _ of reviewFollowupStream(choiceQ, '我选择 A：向他人解释', note, provider)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('向他人解释')
+    expect(systemPrompt).not.toContain('本题为自由作答')
+  })
+
+  it('自由作答题型无标准答案时注入占位文案，由 AI 对照笔记判断（P5-6）', async () => {
+    const provider = mockProvider([{ type: 'text', content: '判定：部分正确\n……' }])
+    for await (const _ of reviewFollowupStream(questionA, '回答B', note, provider)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('本题为自由作答')
+  })
+
   it('提供簇上下文时反馈 prompt 注入簇笔记（P4-2）', async () => {
     const provider = mockProvider([{ type: 'text', content: '反馈' }])
     for await (const _ of reviewFollowupStream(questionA, '回答B', note, provider, [note, relatedNote])) {

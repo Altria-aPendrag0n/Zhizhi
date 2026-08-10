@@ -80,6 +80,10 @@ export function normalizeQuizQuestion(raw: unknown): ReviewQuestion | null {
   const level = q.level as ReviewQuestionLevel
   if (!REVIEW_QUESTION_LEVELS.includes(level)) return null
 
+  // 一问一答约束（P5-6）：题干含 2 个及以上疑问句标记视为复合问句（如"什么是 X？它有什么用？"），丢弃该题
+  const questionMarkCount = (q.question.match(/[?？]/g) || []).length
+  if (questionMarkCount >= 2) return null
+
   const type = REVIEW_QUESTION_TYPES.includes(q.type as ReviewQuestionType)
     ? (q.type as ReviewQuestionType)
     : 'short_answer'
@@ -94,6 +98,8 @@ export function normalizeQuizQuestion(raw: unknown): ReviewQuestion | null {
     if (typeof q.position === 'string') base.position = q.position
     base.maxRounds = normalizeNumber(q.maxRounds, DEFAULT_MAX_ROUNDS)
   }
+  // 标准答案透传（确定答案题型由出题时附带；自由作答题型缺省）
+  if (typeof q.answer === 'string' && q.answer.trim()) base.answer = q.answer.trim()
   return base
 }
 

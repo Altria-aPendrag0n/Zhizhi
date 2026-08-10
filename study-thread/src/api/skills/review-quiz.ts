@@ -327,8 +327,12 @@ export async function* reviewFollowupStream(
   clusterNotes?: Note[],
 ): AsyncIterable<StreamChunk> {
   const skill = getFeedbackSkill()
+  // 标准答案：确定答案题型（choice/true_false/fill_blank/ordering）出题时附带，供 AI 判正误；
+  // 自由作答题型缺省 → 占位文案，由 AI 对照笔记原文判断
+  const standardAnswer = question.answer?.trim() || '（本题为自由作答，请对照笔记原文与题目要求判断正误）'
   const systemPrompt = buildPrompt(skill, {
     review_question: formatQuestionForDisplay(question),
+    standard_answer: standardAnswer,
     note_content: serializeNoteForReview(note),
     cluster_notes:
       clusterNotes && clusterNotes.length > 0 ? serializeClusterNotes(clusterNotes) : '（单条笔记复习，无簇上下文）',

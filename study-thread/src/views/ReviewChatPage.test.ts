@@ -208,6 +208,38 @@ describe('ReviewChatPage', () => {
     expect(wrapper.text()).toContain('1 / 2')
   })
 
+  it('反馈首行带判定时显示 AI 正误徽章，并从消息中移除判定行（P5-6）', async () => {
+    mocks.reviewFollowupStream.mockReturnValue((async function* () {
+      yield { type: 'text', content: '判定：正确\n你的理解很准确。' }
+    })())
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '通过教别人来检验理解')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('回答正确')
+    expect(wrapper.text()).toContain('由 AI 依据标准答案/笔记原文判断')
+    // 判定行已从消息文本中移除，避免与徽章重复
+    expect(wrapper.text()).not.toContain('判定：正确')
+  })
+
+  it('反馈无判定行时不显示正误徽章（兼容历史消息）', async () => {
+    mocks.reviewFollowupStream.mockReturnValue((async function* () {
+      yield { type: 'text', content: '你的回答基本正确。' }
+    })())
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '通过教别人来检验理解')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('回答正确')
+    expect(wrapper.text()).not.toContain('回答错误')
+  })
+
   it('辩论题：多轮对答，未达轮次不推进题号，末轮总结后推进（P5-5）', async () => {
     const debateQ: ReviewQuestion = {
       level: 'explain',

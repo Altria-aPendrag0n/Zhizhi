@@ -114,6 +114,12 @@ export interface ReviewQuestion {
   position?: string
   /** debate：最大辩论轮次（默认 3） */
   maxRounds?: number
+  /**
+   * 标准答案（确定答案题型出题时附带：choice 存正确选项文本、true_false 存"正确/错误"、
+   * fill_blank 存填空内容（多空用「；」分隔）、ordering 存正确顺序"1. xxx\n2. yyy"）。
+   * 供判正误与反馈对照；short_answer/debate 等自由作答题型缺省，由 AI 对照笔记原文判断。
+   */
+  answer?: string
 }
 
 export interface NoteMeta {

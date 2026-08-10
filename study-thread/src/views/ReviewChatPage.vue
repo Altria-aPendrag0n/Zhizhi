@@ -80,6 +80,14 @@
       未配置 AI，当前为原文复习模式：先自行回顾，再点击「结束复习」自评。
     </p>
 
+    <!-- AI 正误判定徽章（P5-6：反馈首行"判定：xxx"解析） -->
+    <div v-if="judgment && !isStreaming" class="review-chat-page__judgment" :class="`is-${judgment}`">
+      <span class="review-chat-page__judgment-badge">
+        {{ judgment === 'correct' ? '回答正确' : judgment === 'partial' ? '部分正确' : '回答错误' }}
+      </span>
+      <span class="review-chat-page__judgment-note">由 AI 依据标准答案/笔记原文判断</span>
+    </div>
+
     <!-- 输入区 / 自评面板 -->
     <div v-if="showRating" class="review-chat-page__rating">
       <!-- 簇模式：逐条评级（每条笔记独立 applyReview） -->
@@ -270,6 +278,8 @@ const extractedNotes = ref<NoteReference[]>([])
 /** 辩论状态（P5-5）：round 为用户第几次发言（1 起）；turns 为同题历史论点（含 AI 开场/反驳） */
 const debateRound = ref(1)
 const debateTurns = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
+/** AI 对上一轮回答的正误判定（从反馈首行解析，展示为徽章；辩论题不判定） */
+const judgment = ref<'correct' | 'partial' | 'wrong' | null>(null)
 const addToNoteDialog = reactive({
   visible: false,
   highlightedText: '',
@@ -375,6 +385,8 @@ async function handleSend(content: string) {
 
   // 用户消息携带时间戳（复习会话文件 review-* 不计入主界面问答统计，保持一致便于追溯）
   messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
+  // 新一轮作答开始，清空上一轮的 AI 判定徽章
+  judgment.value = null
   const aiMessage: Message = { role: 'assistant', content: '' }
   messages.value.push(aiMessage)
   isStreaming.value = true
@@ -423,6 +435,7 @@ async function handleSend(content: string) {
       if (isFinal) {
         debateRound.value = 1
         debateTurns.value = []
+        judgment.value = null
         currentQuestionIndex.value++
       } else {
         debateRound.value++
@@ -444,6 +457,13 @@ async function handleSend(content: string) {
       }
       aiMessage.content = streamingText.value
       aiMessage.thinking = streamingThinking.value || undefined
+      // P5-6 正误判定：解析反馈首行"判定：xxx"为徽章状态，并从消息文本中移除该行
+      judgment.value = extractJudgment(aiMessage.content)
+      if (judgment.value) {
+        aiMessage.content = aiMessage.content
+          .replace(/^判定[:：]\s*(正确|部分正确|错误)[^\n]*\n?/, '')
+          .trimStart()
+      }
       // P4-4 缺口定位：从 AI 反馈解析被标注的簇内缺口笔记（回答涉及/应涉及的笔记）
       if (hasCluster.value) {
         gapPaths.value = new Set(parseMentionedNotes(aiMessage.content, clusterNotes.value))
@@ -518,6 +538,13 @@ function finishReview() {
 
 function ratingLabel(rating: ReviewRating): string {
   return RATINGS.find((item) => item.value === rating)?.label ?? rating
+}
+
+/** 解析 AI 反馈首行的正误判定（判定：正确/部分正确/错误）；未命中返回 null（如历史消息无判定行） */
+function extractJudgment(text: string): 'correct' | 'partial' | 'wrong' | null {
+  const match = text.match(/^判定[:：]\s*(正确|部分正确|错误)/)
+  if (!match) return null
+  return match[1] === '正确' ? 'correct' : match[1] === '部分正确' ? 'partial' : 'wrong'
 }
 
 /** 划线 → 生成新笔记（自动加入复习队列） */
@@ -803,6 +830,44 @@ function handleNavigateNote(path: string) {
   font-size: 12px;
   flex-shrink: 0;
   background: var(--surface);
+}
+
+/* AI 正误判定徽章（P5-6） */
+.review-chat-page__judgment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 10px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.review-chat-page__judgment-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #fff;
+}
+
+.review-chat-page__judgment.is-correct .review-chat-page__judgment-badge {
+  background: var(--state-success);
+}
+
+.review-chat-page__judgment.is-partial .review-chat-page__judgment-badge {
+  background: var(--state-warning);
+}
+
+.review-chat-page__judgment.is-wrong .review-chat-page__judgment-badge {
+  background: var(--state-error);
+}
+
+.review-chat-page__judgment-note {
+  font-size: 11px;
+  color: var(--ink-3);
 }
 
 .review-chat-page__rating {
