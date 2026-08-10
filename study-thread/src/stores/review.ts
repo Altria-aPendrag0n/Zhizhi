@@ -150,10 +150,15 @@ export const useReviewStore = defineStore('review', () => {
     return queue.value[index]
   }
 
-  /** 从队列移除（删除笔记时级联清理） */
+  /**
+   * 从队列移除（删除笔记时级联清理）。
+   * 路径规范化比较：删除入口传入的路径来自 listDir 扫描（Windows 下为反斜杠），
+   * 与队列存储路径（AI 摘录保存用正斜杠）可能分隔符不同，必须按 notePathKey 匹配，否则漏删。
+   */
   async function removeFromQueue(notePath: string): Promise<void> {
+    const key = notePathKey(notePath)
     const before = queue.value.length
-    queue.value = queue.value.filter((item) => item.notePath !== notePath)
+    queue.value = queue.value.filter((item) => notePathKey(item.notePath) !== key)
     if (queue.value.length !== before) await persist()
   }
 

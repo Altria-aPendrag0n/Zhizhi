@@ -11,11 +11,18 @@ const vaultFs = vi.hoisted(() => ({
   readFile: vi.fn(),
 }))
 const removeNote = vi.hoisted(() => vi.fn())
+/** review store mock：仅 stub 笔记 store 用到的队列与级联方法，避免真实 store 循环依赖 */
+const reviewStore = vi.hoisted(() => ({
+  queue: [] as Array<{ notePath: string }>,
+  enqueue: vi.fn().mockResolvedValue(undefined),
+  removeFromQueue: vi.fn().mockResolvedValue(undefined),
+}))
 
 vi.mock('../utils/vault-fs', () => vaultFs)
 vi.mock('../embedding/indexer', () => ({
   getNoteIndexer: () => ({ removeNote }),
 }))
+vi.mock('./review', () => ({ useReviewStore: () => reviewStore }))
 
 describe('notes store', () => {
   beforeEach(() => {
@@ -224,6 +231,8 @@ describe('notes store', () => {
     expect(store.notes).toHaveLength(0)
     expect(JSON.parse(localStorage.getItem('study-thread-extracted-notes') || '[]')).toEqual([])
     expect(removeNote).toHaveBeenCalledWith(path)
+    // 级联从复习队列移除该笔记，避免复习列表残留已删除笔记
+    expect(reviewStore.removeFromQueue).toHaveBeenCalledWith(path)
     // 删除信号供聊天页刷新"已生成笔记"引用
     expect(store.lastDeletedNotePath).toBe(path)
   })
@@ -264,6 +273,8 @@ describe('notes store', () => {
     expect(await store.deleteNote(path!)).toBe(false)
     expect(store.notes).toHaveLength(1)
     expect(removeNote).not.toHaveBeenCalled()
+    // 删除失败不级联清理复习队列
+    expect(reviewStore.removeFromQueue).not.toHaveBeenCalled()
     // 删除失败不触发刷新信号
     expect(store.lastDeletedNotePath).toBeNull()
   })

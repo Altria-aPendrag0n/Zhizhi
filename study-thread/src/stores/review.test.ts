@@ -215,6 +215,35 @@ describe('review store（P1 增强 毕业机制）', () => {
   })
 })
 
+describe('removeFromQueue（删除笔记级联清理）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vaultFs.readFile.mockResolvedValue(queueFile())
+    vaultFs.writeFile.mockResolvedValue(undefined)
+    vaultFs.createDir.mockResolvedValue(undefined)
+  })
+
+  it('按规范化路径移除：删除路径与队列路径分隔符不同也能命中', async () => {
+    const store = useReviewStore()
+    await store.loadQueue('/vault')
+    // 队列存储为正斜杠（AI 摘录保存），删除入口传入反斜杠（listDir 扫描）→ 应命中同一笔记
+    await store.removeFromQueue('\\vault\\notes\\a.md')
+    expect(store.queue).toHaveLength(0)
+    expect(vaultFs.writeFile).toHaveBeenCalled()
+  })
+
+  it('未命中任务时队列不变且不写盘', async () => {
+    const store = useReviewStore()
+    await store.loadQueue('/vault')
+
+    await store.removeFromQueue('/vault/notes/不存在.md')
+
+    expect(store.queue).toHaveLength(1)
+    expect(vaultFs.writeFile).not.toHaveBeenCalled()
+  })
+})
+
 describe('syncQueueWithNotes（存量笔记补录，P5 修复）', () => {
   beforeEach(() => {
     vi.clearAllMocks()

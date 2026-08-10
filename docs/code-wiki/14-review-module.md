@@ -80,13 +80,15 @@ interface ReviewTask {
 | `loadQueue(vaultPath)` | 读取 `review-state.json`；缺失/损坏置空列表；按规范化路径去重历史重复条目（去重后落盘） |
 | `enqueue(task)` | 入队（幂等：同 notePath 跳过，**正/反斜杠视为同一路径**）并持久化 |
 | `applyReview(notePath, rating, now?)` | 评级回写（调度器推进）并持久化 |
-| `removeFromQueue(notePath)` | 删除笔记级联清理 |
+| `removeFromQueue(notePath)` | 删除笔记级联清理（**规范化路径匹配**，正/反斜杠视为同一路径） |
 
 > **幂等约定（重复条目修复）**：同一笔记可能以正/反斜杠两种路径形式出现（AI 摘录保存 `saveNote`
 > 拼接 `${vaultPath}/notes/...` 与 `listDir` 扫描返回的 `\` 分隔路径不一致），若直接按原始字符串查重
 > 会把同一笔记重复入队。复习队列统一以 `notePathKey(path)`（分隔符归一 + 小写）作为幂等键：
-> `enqueue` / `syncQueueWithNotes` 补录均按规范化键查重；`syncQueueWithNotes` 并发调用复用同一
-> in-flight Promise（串行化，避免双写）；`loadQueue` 对历史重复条目去重并落盘。
+> `enqueue` / `syncQueueWithNotes` 补录均按规范化键查重；`removeFromQueue` 级联删除同样按规范化键
+> 匹配——删除入口传入的路径来自笔记列表（`listDir` 扫描，可能为反斜杠），与队列存储路径（AI 摘录
+> 保存用正斜杠）分隔符不一致时精确匹配会漏删，导致复习列表残留已删除笔记；`syncQueueWithNotes`
+> 并发调用复用同一 in-flight Promise（串行化，避免双写）；`loadQueue` 对历史重复条目去重并落盘。
 
 持久化格式：
 
