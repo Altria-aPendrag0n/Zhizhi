@@ -21,6 +21,10 @@ vi.mock('../stores/settings', () => ({
   }),
 }))
 
+vi.mock('../stores/busy', () => ({
+  useBusyStore: () => ({ active: false, message: '', start: vi.fn(), stop: vi.fn() }),
+}))
+
 vi.mock('../stores/vault', () => ({
   useVaultStore: () => ({
     vaultPath: '',

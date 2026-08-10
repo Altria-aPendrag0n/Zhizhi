@@ -55,6 +55,7 @@
       <router-view :key="$route.fullPath" />
     </template>
   </AppShell>
+  <AiBusyOverlay />
   <Toast />
 </template>
 
@@ -67,7 +68,9 @@ import ProjectRail from './components/shell/ProjectRail.vue'
 import ThreadList from './components/shell/ThreadList.vue'
 import TopBar, { type TopBarMenuItem } from './components/shell/TopBar.vue'
 import Toast from './components/common/Toast.vue'
+import AiBusyOverlay from './components/common/AiBusyOverlay.vue'
 import { useToast } from './composables/useToast'
+import { useBusyStore } from './stores/busy'
 import type { Project } from './components/shell/ProjectRail.vue'
 import type { Thread } from './components/shell/ThreadList.vue'
 import { getEmbeddingEngine } from './embedding/engine'
@@ -78,6 +81,7 @@ import type { SessionTreeNode } from './utils/session-tree'
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
+const busyStore = useBusyStore()
 const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
 const LOCAL_SESSION_LIST_KEY = 'study-thread-session-list'
@@ -526,6 +530,8 @@ function handleBack() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
+  // AI 忙碌遮罩期间禁用全局快捷键（用户不能进行任何操作）
+  if (busyStore.active) return
   const isCtrl = event.ctrlKey || event.metaKey
   if (isCtrl && event.key === 'n') {
     event.preventDefault()

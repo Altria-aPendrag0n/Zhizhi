@@ -44,7 +44,7 @@
 <script setup lang="ts">
 import { ref, watch, inject, computed, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import type { Message, Session } from '../types'
+import type { ExtractedNote, Message, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
 import { useSessionStore } from '../stores/session'
@@ -58,6 +58,7 @@ import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { useToast } from '../composables/useToast'
+import { useBusyStore } from '../stores/busy'
 import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
@@ -74,6 +75,7 @@ const settingsStore = useSettingsStore()
 const vaultStore = useVaultStore()
 const noteStore = useNoteStore()
 const toast = useToast()
+const busyStore = useBusyStore()
 const updateThreadTitle = inject<(id: string, title: string) => void>('updateThreadTitle', () => {})
 const {
   diff: learnerDiff,
@@ -496,7 +498,12 @@ async function maybeTriggerLearnerUpdate() {
     tags: [],
     messages: [...messages.value],
   }
-  await triggerLearnerUpdate(session, newNotes, createProvider(config), vaultStore.vaultPath, noteStore.noteCount)
+  busyStore.start('AI 正在分析学习画像…')
+  try {
+    await triggerLearnerUpdate(session, newNotes, createProvider(config), vaultStore.vaultPath, noteStore.noteCount)
+  } finally {
+    busyStore.stop()
+  }
 }
 
 async function handleExtractNote(highlightedText: string, domMessageIndex: number | null = null) {
@@ -513,16 +520,22 @@ async function handleExtractNote(highlightedText: string, domMessageIndex: numbe
     const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
     const sourceSession = threadId ? await saveCurrentSession(threadId) : null
     if (!sourceSession) throw new Error('请先在设置中选择本地 Vault')
-    const note = await extractNote(
-      highlightedText,
-      messages.value.map((message) => `${message.role}: ${message.content}`).join('\n\n'),
-      createProvider(config),
-      undefined,
-      {
-        generateTitle: settingsStore.autoGenerateNoteTitle,
-        generateTags: settingsStore.autoGenerateNoteTags,
-      },
-    )
+    busyStore.start('AI 正在提炼笔记…')
+    let note: ExtractedNote
+    try {
+      note = await extractNote(
+        highlightedText,
+        messages.value.map((message) => `${message.role}: ${message.content}`).join('\n\n'),
+        createProvider(config),
+        undefined,
+        {
+          generateTitle: settingsStore.autoGenerateNoteTitle,
+          generateTags: settingsStore.autoGenerateNoteTags,
+        },
+      )
+    } finally {
+      busyStore.stop()
+    }
     const path = await noteStore.saveNote(vaultStore.vaultPath, note, sourceSession, highlightedText)
     if (!path) throw new Error('笔记保存失败')
 

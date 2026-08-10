@@ -30,6 +30,10 @@ vi.mock('./embedding/engine', () => ({
   getEmbeddingEngine: () => ({ initialize: vi.fn().mockResolvedValue(undefined) }),
 }))
 
+vi.mock('./stores/busy', () => ({
+  useBusyStore: () => ({ active: false, message: '', start: vi.fn(), stop: vi.fn() }),
+}))
+
 vi.mock('./stores/vault', () => ({
   useVaultStore: () => ({
     restoreLastVault: vi.fn().mockResolvedValue(undefined),

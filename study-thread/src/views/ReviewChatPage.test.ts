@@ -29,6 +29,10 @@ vi.mock('../stores/settings', () => ({
   useSettingsStore: () => ({ getProviderConfig: mocks.getProviderConfig, autoGenerateNoteTitle: true, autoGenerateNoteTags: true }),
 }))
 
+vi.mock('../stores/busy', () => ({
+  useBusyStore: () => ({ active: false, message: '', start: vi.fn(), stop: vi.fn() }),
+}))
+
 vi.mock('../stores/vault', () => ({
   useVaultStore: () => ({ vaultPath: mocks.vaultPath }),
 }))
