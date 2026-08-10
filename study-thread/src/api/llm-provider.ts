@@ -53,6 +53,12 @@ export interface ChatOptions {
   enableWebSearch?: boolean
   /** 客户端执行的工具列表：随请求体发送，模型可发起调用 */
   tools?: ToolDefinition[]
+  /**
+   * 非学习会话的 AI 调用标记（复习出题 / 笔记摘录 / 画像更新 / 连接测试等）：
+   * 传入后，等待完整输出的期间会自动显示全局 AI 忙碌遮罩并禁止操作。
+   * 学习会话的流式聊天不要传此选项。
+   */
+  busyMessage?: string
 }
 
 // LLM 提供商接口

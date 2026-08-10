@@ -149,6 +149,7 @@ export async function extractNote(
     systemPrompt,
     temperature: 0.3,
     maxTokens: 1024,
+    busyMessage: 'AI 正在提炼笔记…',
   })) {
     if (chunk.type === 'text') {
       fullResponse += chunk.content

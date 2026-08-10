@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { attachBusyController } from '../utils/busy-guard'
 
 /**
  * 全局 AI 忙碌状态（P5-6）：
@@ -24,6 +25,9 @@ export const useBusyStore = defineStore('busy', () => {
     counter = Math.max(0, counter - 1)
     if (counter === 0) active.value = false
   }
+
+  // 实例化即注册为全局控制器，供 api/provider 层（busyMessage 选项）自动开关遮罩
+  attachBusyController({ start, stop })
 
   return { active, message, start, stop }
 })

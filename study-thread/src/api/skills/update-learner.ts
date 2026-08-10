@@ -146,6 +146,7 @@ export async function generateProfileUpdate(
     systemPrompt,
     temperature: 0.3,
     maxTokens: 2048,
+    busyMessage: 'AI 正在分析学习画像…',
   })) {
     if (chunk.type === 'text') {
       fullResponse += chunk.content

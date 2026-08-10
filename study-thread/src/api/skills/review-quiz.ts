@@ -172,6 +172,7 @@ export async function generateReviewQuestions(
     systemPrompt,
     temperature: 0.3,
     maxTokens: 1024,
+    busyMessage: 'AI 正在生成复习题…',
   })) {
     if (chunk.type === 'text') {
       fullResponse += chunk.content
@@ -288,6 +289,7 @@ export async function generateClusterQuestions(
     systemPrompt,
     temperature: 0.3,
     maxTokens: 1024,
+    busyMessage: 'AI 正在生成复习题…',
   })) {
     if (chunk.type === 'text') {
       fullResponse += chunk.content

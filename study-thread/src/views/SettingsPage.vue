@@ -147,12 +147,10 @@ import { Eye, EyeOff, CheckCircle, AlertCircle } from '@lucide/vue'
 import { useSettingsStore } from '../stores/settings'
 import { PROVIDER_PRESETS } from '../api/openai-compat'
 import { createProvider } from '../api/provider-factory'
-import { useBusyStore } from '../stores/busy'
 import VaultSettings from '../components/vault/VaultSettings.vue'
 import type { ReviewAlgorithm } from '../types'
 
 const settingsStore = useSettingsStore()
-const busyStore = useBusyStore()
 
 const selectedProvider = ref<string>('openai')
 const baseUrl = ref('https://api.openai.com')
@@ -220,21 +218,16 @@ async function handleTest() {
     const startTime = Date.now()
     const messages = [{ role: 'user' as const, content: 'hi' }]
 
-    busyStore.start('AI 正在测试连接…')
-    try {
-      for await (const chunk of provider.chat(messages, { maxTokens: 10 })) {
-        if (chunk.type === 'error') {
-          testResult.value = { type: 'error', message: chunk.content }
-          return
-        }
-        if (chunk.type === 'stop') {
-          const latency = Date.now() - startTime
-          testResult.value = { type: 'success', message: `连接成功！延迟: ${latency}ms` }
-          return
-        }
+    for await (const chunk of provider.chat(messages, { maxTokens: 10, busyMessage: 'AI 正在测试连接…' })) {
+      if (chunk.type === 'error') {
+        testResult.value = { type: 'error', message: chunk.content }
+        return
       }
-    } finally {
-      busyStore.stop()
+      if (chunk.type === 'stop') {
+        const latency = Date.now() - startTime
+        testResult.value = { type: 'success', message: `连接成功！延迟: ${latency}ms` }
+        return
+      }
     }
     testResult.value = { type: 'success', message: '连接成功' }
   } catch (e) {

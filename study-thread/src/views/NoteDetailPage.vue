@@ -54,7 +54,6 @@ import { useSettingsStore } from '../stores/settings'
 import { extractNote } from '../api/skills/extract-note'
 import { createProvider } from '../api/provider-factory'
 import { useToast } from '../composables/useToast'
-import { useBusyStore } from '../stores/busy'
 import type { Note, Session, ExtractedNote } from '../types'
 import { getSessionFilePath } from '../utils/session-serializer'
 import { loadBranchContext, parseMessages } from '../utils/branch-context'
@@ -74,7 +73,6 @@ const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
-const busyStore = useBusyStore()
 const updateNoteBreadcrumbTitle = inject<(title: string) => void>('updateNoteBreadcrumbTitle')
 
 const isLoading = ref(false)
@@ -194,22 +192,16 @@ async function handleExtractNote(highlightedText: string) {
 
   try {
     // 先由 LLM 生成建议标题与内容，预填到弹窗，用户可修改
-    busyStore.start('AI 正在提炼笔记…')
-    let draft: ExtractedNote
-    try {
-      draft = await extractNote(
-        highlightedText,
-        `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
-        createProvider(config),
-        undefined,
-        {
-          generateTitle: settingsStore.autoGenerateNoteTitle,
-          generateTags: settingsStore.autoGenerateNoteTags,
-        },
-      )
-    } finally {
-      busyStore.stop()
-    }
+    const draft = await extractNote(
+      highlightedText,
+      `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
+      createProvider(config),
+      undefined,
+      {
+        generateTitle: settingsStore.autoGenerateNoteTitle,
+        generateTags: settingsStore.autoGenerateNoteTags,
+      },
+    )
     extractDialog.draft = draft
     extractDialog.title = draft.title
   } catch (e) {
@@ -231,21 +223,16 @@ async function confirmExtract(title: string) {
     let note = extractDialog.draft
     if (title.trim() !== extractDialog.draft.title.trim()) {
       // 用户修改了标题：用用户标题重新生成，确保描述等内容与标题一致
-      busyStore.start('AI 正在重新提炼笔记…')
-      try {
-        note = await extractNote(
-          highlightedText,
-          `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
-          createProvider(config),
-          title,
-          {
-            generateTitle: settingsStore.autoGenerateNoteTitle,
-            generateTags: settingsStore.autoGenerateNoteTags,
-          },
-        )
-      } finally {
-        busyStore.stop()
-      }
+      note = await extractNote(
+        highlightedText,
+        `笔记标题: ${currentNote.value.title}\n\n${currentNote.value.content}`,
+        createProvider(config),
+        title,
+        {
+          generateTitle: settingsStore.autoGenerateNoteTitle,
+          generateTags: settingsStore.autoGenerateNoteTags,
+        },
+      )
     } else {
       note = { ...extractDialog.draft, title: title.trim() }
     }

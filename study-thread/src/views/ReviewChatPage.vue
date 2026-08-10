@@ -215,13 +215,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { ExtractedNote, Message, Note, ReviewQuestion, ReviewQuestionType, ReviewRating, Session } from '../types'
+import type { Message, Note, ReviewQuestion, ReviewQuestionType, ReviewRating, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
 import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
 import { useToast } from '../composables/useToast'
-import { useBusyStore } from '../stores/busy'
 import { createProvider } from '../api/provider-factory'
 import { reviewFollowupStream, reviewDebateStream } from '../api/skills/review-quiz'
 import { DEFAULT_MAX_ROUNDS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
@@ -249,7 +248,6 @@ const vaultStore = useVaultStore()
 const noteStore = useNoteStore()
 const reviewStore = useReviewStore()
 const toast = useToast()
-const busyStore = useBusyStore()
 
 const session = ref<Session | null>(null)
 const note = ref<Note | null>(null)
@@ -537,22 +535,16 @@ async function handleExtractNote(highlightedText: string, domMessageIndex: numbe
   }
   try {
     const sourceSession = await persist()
-    busyStore.start('AI 正在提炼笔记…')
-    let noteMeta: ExtractedNote
-    try {
-      noteMeta = await extractNote(
-        highlightedText,
-        messages.value.map((message) => `${message.role}: ${message.content}`).join('\n\n'),
-        createProvider(config),
-        undefined,
-        {
-          generateTitle: settingsStore.autoGenerateNoteTitle,
-          generateTags: settingsStore.autoGenerateNoteTags,
-        },
-      )
-    } finally {
-      busyStore.stop()
-    }
+    const noteMeta = await extractNote(
+      highlightedText,
+      messages.value.map((message) => `${message.role}: ${message.content}`).join('\n\n'),
+      createProvider(config),
+      undefined,
+      {
+        generateTitle: settingsStore.autoGenerateNoteTitle,
+        generateTags: settingsStore.autoGenerateNoteTags,
+      },
+    )
     const path = await noteStore.saveNote(vaultStore.vaultPath, noteMeta, sourceSession || '', highlightedText)
     if (!path) throw new Error('笔记保存失败')
     const messageIndex = resolveMessageIndex(highlightedText, messages.value, domMessageIndex, 'assistant')

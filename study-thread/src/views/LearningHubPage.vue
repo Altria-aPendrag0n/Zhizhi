@@ -138,7 +138,6 @@ import { useReviewStore } from '../stores/review'
 import { useVaultStore } from '../stores/vault'
 import { useSettingsStore } from '../stores/settings'
 import { useToast } from '../composables/useToast'
-import { useBusyStore } from '../stores/busy'
 import type { Note, ReviewQuestion, ReviewRating, ReviewTask } from '../types'
 import { createProvider } from '../api/provider-factory'
 import { generateReviewQuestions, generateClusterQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
@@ -156,7 +155,6 @@ const reviewStore = useReviewStore()
 const vaultStore = useVaultStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
-const busyStore = useBusyStore()
 
 /** 当前视图：由左侧"学习地图切换管理栏"控制；默认复习视图，支持 ?view=review|network 深链接 */
 const currentView = ref<'review' | 'network'>(route.query.view === 'network' ? 'network' : 'review')
@@ -248,8 +246,7 @@ async function handleStartReview(task: ReviewTask) {
   const config = settingsStore.getProviderConfig()
   let questions: ReviewQuestion[] = []
   if (config.apiKey) {
-    // 全屏忙碌遮罩：等待出题期间用户不能操作，避免反复点击"开始复习"重复创建会话
-    busyStore.start('AI 正在生成复习题…')
+    // 等待出题期间全屏忙碌遮罩由 provider 层（busyMessage）自动打开，避免反复点击"开始复习"重复创建会话
     try {
       // P3-4 难度个性化：加载画像注入出题 prompt；高置信度 + 高掌握度时附毕业引导
       const profile = await loadLearnerProfile(vaultPath)
@@ -278,8 +275,6 @@ async function handleStartReview(task: ReviewTask) {
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '复习出题失败，已进入原文复习模式')
-    } finally {
-      busyStore.stop()
     }
   }
 
