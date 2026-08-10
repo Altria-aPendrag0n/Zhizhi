@@ -153,6 +153,14 @@
       </template>
     </div>
     <template v-else>
+      <!-- 当前题目（一问一答）：每题单独展示题干，明确当前作答区对应的是哪道题 -->
+      <div v-if="activeQuestion" class="review-chat-page__question">
+        <div class="review-chat-page__question-head">
+          <span class="review-chat-page__question-tag">第 {{ currentQuestionIndex + 1 }} 题 / 共 {{ questions.length }} 题</span>
+          <span class="review-chat-page__question-type">{{ QUESTION_TYPE_LABELS[activeQuestion.type] }}</span>
+        </div>
+        <p class="review-chat-page__question-text">{{ activeQuestion.question }}</p>
+      </div>
       <!-- 辩论题轮次指示（P5-5）：活跃题为 debate 时展示当前轮次与 AI 持方，仍走 Composer 文本作答 -->
       <div
         v-if="activeQuestion && activeQuestion.type === 'debate'"
@@ -231,7 +239,7 @@ import { useReviewStore } from '../stores/review'
 import { useToast } from '../composables/useToast'
 import { createProvider } from '../api/provider-factory'
 import { reviewFollowupStream, reviewDebateStream } from '../api/skills/review-quiz'
-import { DEFAULT_MAX_ROUNDS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
+import { DEFAULT_MAX_ROUNDS, QUESTION_TYPE_LABELS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
 import { extractNote } from '../api/skills/extract-note'
 import { loadReviewSession, getReviewSessionFilePath } from '../utils/review-session'
 import { parseMentionedNotes } from '../utils/review-gap'
@@ -1038,6 +1046,50 @@ function handleNavigateNote(path: string) {
 
 .review-chat-page__finish:hover {
   background: var(--brand-strong);
+}
+
+/* ---- 当前题目（一问一答标注：题干 + 题号 + 题型）---- */
+.review-chat-page__question {
+  flex-shrink: 0;
+  margin: 8px 20px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+.review-chat-page__question-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.review-chat-page__question-tag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.review-chat-page__question-type {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.review-chat-page__question-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ink);
 }
 
 /* ---- 结构化答题卡片容器 ---- */

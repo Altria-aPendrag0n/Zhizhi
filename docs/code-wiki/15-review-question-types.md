@@ -90,6 +90,8 @@ export interface ReviewQuestion {
 
 **分派逻辑**（`ReviewChatPage.vue`）：`activeQuestion.type` 经 `STRUCTURED_TYPES` 判断——结构化题型渲染组件并 `serializeAnswer` 后走 `handleSend`；`debate` 渲染轮次指示 + Composer，由 `debateRound`/`debateTurns` 状态机驱动（未达 `maxRounds` 不推进题号，末轮总结后推进）。
 
+**一问一答标注（UI 落实）**：答题区上方固定展示**当前题目卡片**——题号「第 X 题 / 共 N 题」+ 题型标签（`QUESTION_TYPE_LABELS`）+ 完整题干；选择/判对错/填空/排序/简答/辩论作答时都可见，用户明确知道当前作答对应哪道题。出题会话首条引导消息只提示"共 N 道题，请逐题作答"，不再列出全部问题（避免"一次回答全部"的误解）。
+
 **AI 正误判定（P5-6）**：反馈完成后解析首行 `判定：正确/部分正确/错误` → 显示品牌色徽章（正确=成功绿 / 部分正确=警告 / 错误=错误红）于输入区上方，并从消息文本移除该行避免重复；新一轮作答开始或辩论推进题号时清空徽章。
 
 ## 7. 测试覆盖

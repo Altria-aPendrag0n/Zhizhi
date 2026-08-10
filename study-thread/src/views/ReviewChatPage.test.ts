@@ -429,4 +429,37 @@ describe('ReviewChatPage', () => {
     // 已作答 1 题 → 进度恢复为 1 / 2，而非从头开始
     expect(wrapper.text()).toContain('1 / 2')
   })
+
+  it('答题区展示当前题目：题号 + 题型标签 + 题干（一问一答标注）', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({
+        review_questions: [
+          {
+            level: 'recognize',
+            type: 'choice',
+            question: '费曼法的核心是什么？',
+            options: ['向他人解释', '死记硬背'],
+            answer: '向他人解释',
+          },
+          { level: 'explain', type: 'short_answer', question: '为什么费曼法能暴露知识缺口？' },
+        ],
+      }),
+    )
+    mocks.reviewFollowupStream.mockReturnValue((async function* () {
+      yield { type: 'text', content: '判定：正确\n你的理解很准确。' }
+    })())
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    // 当前第 1 题：明确标注题号与题型，用户知道选项对应哪道题
+    expect(wrapper.text()).toContain('第 1 题 / 共 2 题')
+    expect(wrapper.text()).toContain('选择题')
+    expect(wrapper.text()).toContain('费曼法的核心是什么？')
+
+    // 选择题作答后推进到第 2 题（简答题），题目卡片同步更新
+    await wrapper.findComponent({ name: 'ChoiceAnswer' }).vm.$emit('submit', { index: 0, text: '向他人解释' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('第 2 题 / 共 2 题')
+    expect(wrapper.text()).toContain('为什么费曼法能暴露知识缺口？')
+  })
 })

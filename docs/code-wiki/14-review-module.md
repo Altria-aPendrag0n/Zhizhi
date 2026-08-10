@@ -196,6 +196,7 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **路由**：`/review/:sessionId`（`router/index.ts`）；App 布局中 `/review*` 映射项目 1、隐藏会话列、显示返回按钮。
 - **入口**：学习地图复习视图 `ReviewDueList` 卡片新增「开始复习」按钮 → `LearningHubPage.handleStartReview`（出题 → 创建复习会话 → 跳转）。
 - **页面**：复用 `ChatView` + `Composer`；顶部展示被复习笔记标题（可跳详情）与答题进度；`handleSend` 调 `reviewFollowupStream` 流式反馈，逐题推进。
+- **一问一答标注**：答题区上方固定展示**当前题目卡片**（题号「第 X 题 / 共 N 题」+ 题型标签 + 题干），结构化题型（选择/判对错/填空/排序）与简答/辩论作答时都可见，用户明确知道当前选项/输入对应哪道题；出题会话首条引导消息不再一次性列出全部问题（改为"共 N 道题，请逐题作答"），避免"一次回答全部"的误解。
 - **划线双路径**：复用划线菜单——「生成笔记」→ `extract-note` skill → 新笔记自动入队；「加入笔记」→ `AddToNoteDialog` 插回原笔记。
 - **自评闭环**：「结束复习」→ 四档自评面板 → `reviewStore.applyReview` → Toast 提示 → 返回学习地图。
 - **无 API Key 兜底**：出题为空时 `createReviewSession` 首条消息展示笔记原文，页面显示"原文复习模式"提示并仅提供自评。

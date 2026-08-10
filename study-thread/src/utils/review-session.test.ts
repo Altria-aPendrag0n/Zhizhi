@@ -63,8 +63,9 @@ describe('createReviewSession', () => {
     expect(session.tags).toContain('复习')
     expect(session.messages).toHaveLength(1)
     expect(session.messages[0].content).toContain('## 复习目标\n费曼学习法')
-    expect(session.messages[0].content).toContain('1. 什么是费曼学习法？')
-    expect(session.messages[0].content).toContain('2. 为什么费曼法能暴露知识缺口？')
+    // 首条消息不再列出全部问题（避免"一次回答全部"误解），仅提示逐题作答
+    expect(session.messages[0].content).toContain('共 2 道题')
+    expect(session.messages[0].content).not.toContain('1. 什么是费曼学习法？')
   })
 })
 
@@ -87,7 +88,7 @@ describe('序列化 round-trip', () => {
 
     expect(messages).toHaveLength(1)
     expect(messages[0].role).toBe('assistant')
-    expect(messages[0].content).toContain('1. 什么是费曼学习法？')
+    expect(messages[0].content).toContain('共 2 道题')
   })
 })
 
