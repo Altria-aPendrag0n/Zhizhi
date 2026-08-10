@@ -848,6 +848,8 @@ function handleNavigateNote(path: string) {
 }
 
 .review-chat-page__body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
