@@ -5,9 +5,16 @@ import { parseFrontmatter } from '../parser/frontmatter'
 import { parseMessages } from './branch-context'
 
 const readFile = vi.hoisted(() => vi.fn())
-vi.mock('../utils/vault-fs', () => ({ readFile }))
+const listDir = vi.hoisted(() => vi.fn())
+vi.mock('../utils/vault-fs', () => ({ readFile, listDir }))
 
-import { createReviewSession, buildReviewRelatedNotes, loadReviewSession, getReviewSessionFilePath } from './review-session'
+import {
+  createReviewSession,
+  buildReviewRelatedNotes,
+  loadReviewSession,
+  getReviewSessionFilePath,
+  findIncompleteReviewSession,
+} from './review-session'
 
 const note: Note = {
   path: 'notes/费曼学习法.md',
@@ -129,6 +136,67 @@ describe('loadReviewSession', () => {
 
   it('文件路径使用 review- 前缀', () => {
     expect(getReviewSessionFilePath('/vault', 'review_123')).toBe('/vault/sessions/review-review_123.md')
+  })
+})
+
+describe('findIncompleteReviewSession（复用进行中的复习会话）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('同一笔记存在多个复习会话时返回最新创建的一个', async () => {
+    const older = createReviewSession(note, questions, new Date('2026-08-09T08:00:00.000Z'))
+    const newer = createReviewSession(note, questions, new Date('2026-08-10T08:00:00.000Z'))
+    listDir.mockResolvedValue([
+      { name: `review-${older.id}.md`, path: `/vault/sessions/review-${older.id}.md`, is_dir: false },
+      { name: `review-${newer.id}.md`, path: `/vault/sessions/review-${newer.id}.md`, is_dir: false },
+      { name: 'new_1.md', path: '/vault/sessions/new_1.md', is_dir: false }, // 非 review 文件应被忽略
+    ])
+    readFile.mockImplementation((path: string) => {
+      if (path.includes(older.id)) return Promise.resolve(serializeSession(older))
+      if (path.includes(newer.id)) return Promise.resolve(serializeSession(newer))
+      return Promise.reject(new Error('ENOENT'))
+    })
+
+    const id = await findIncompleteReviewSession('/vault', 'notes/费曼学习法.md')
+    expect(id).toBe(newer.id)
+  })
+
+  it('正/反斜杠路径视为同一笔记', async () => {
+    const target = createReviewSession(note, questions)
+    listDir.mockResolvedValue([
+      { name: `review-${target.id}.md`, path: `/vault/sessions/review-${target.id}.md`, is_dir: false },
+    ])
+    readFile.mockResolvedValue(serializeSession(target))
+
+    // 查询路径用反斜杠，会话 frontmatter 存正斜杠 → 应命中
+    const id = await findIncompleteReviewSession('/vault', 'notes\\费曼学习法.md')
+    expect(id).toBe(target.id)
+  })
+
+  it('无匹配时返回 null', async () => {
+    listDir.mockResolvedValue([])
+    expect(await findIncompleteReviewSession('/vault', 'notes/费曼学习法.md')).toBeNull()
+  })
+
+  it('sessions 目录读取失败时返回 null，不抛错', async () => {
+    listDir.mockRejectedValue(new Error('ENOENT'))
+    expect(await findIncompleteReviewSession('/vault', 'notes/费曼学习法.md')).toBeNull()
+  })
+
+  it('损坏的 review 文件跳过，不影响其他匹配', async () => {
+    const target = createReviewSession(note, questions)
+    listDir.mockResolvedValue([
+      { name: `review-${target.id}.md`, path: `/vault/sessions/review-${target.id}.md`, is_dir: false },
+      { name: 'review-broken.md', path: '/vault/sessions/review-broken.md', is_dir: false },
+    ])
+    readFile.mockImplementation((path: string) => {
+      if (path.includes('broken')) return Promise.reject(new Error('corrupt'))
+      return Promise.resolve(serializeSession(target))
+    })
+
+    const id = await findIncompleteReviewSession('/vault', 'notes/费曼学习法.md')
+    expect(id).toBe(target.id)
   })
 })
 

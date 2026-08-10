@@ -10,7 +10,7 @@
 
 import type { Message, Note, ReviewQuestion, Session } from '../types'
 import { sanitizeFileName } from './session-serializer'
-import { readFile } from './vault-fs'
+import { listDir, readFile } from './vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import { extractAllLinks } from '../parser/wikilink'
 import { parseMessages } from './branch-context'
@@ -18,6 +18,16 @@ import { normalizeQuizQuestion } from '../review/question-registry'
 
 /** 复习会话关联笔记的最大数量 */
 export const MAX_REVIEW_RELATED_NOTES = 4
+
+/** 路径规范化键：统一分隔符 + 小写（与 review store 的幂等约定一致，正/反斜杠视为同一路径） */
+function notePathKey(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase()
+}
+
+/** 从复习会话文件名推断会话 id：review-review_123.md → review_123（meta.session_id 缺失时兜底） */
+function sessionIdFromFileName(name: string): string {
+  return name.replace(/^review-/, '').replace(/\.md$/, '')
+}
 
 function toString(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -174,4 +184,43 @@ export async function loadReviewSession(vaultPath: string, sessionId: string): P
   } catch {
     return null
   }
+}
+
+/**
+ * 查找指定笔记是否存在未完成的复习会话（临时会话复用：不重复调用 AI 出题）。
+ *
+ * 遍历 `sessions/` 下 `review-*.md` 文件，解析 frontmatter 的 `reviewed_note`，
+ * 按规范化路径（分隔符归一 + 小写）匹配该笔记；命中则返回**最新创建**的一个会话 id，
+ * 无匹配返回 null。文件缺失/损坏的条目静默跳过，不抛错。
+ *
+ * 调用方（学习地图「开始复习」）命中后直接跳转已有会话，节省一次 LLM 出题 token；
+ * 复习会话文件在用户完成复习（评级/结束）后由 ReviewChatPage 删除。
+ */
+export async function findIncompleteReviewSession(vaultPath: string, notePath: string): Promise<string | null> {
+  const key = notePathKey(notePath)
+  let entries: Awaited<ReturnType<typeof listDir>>
+  try {
+    entries = await listDir(`${vaultPath}/sessions`)
+  } catch {
+    return null
+  }
+  const candidates: Array<{ id: string; created: string }> = []
+  for (const entry of entries) {
+    if (entry.is_dir || !entry.name.startsWith('review-') || !entry.name.endsWith('.md')) continue
+    try {
+      const raw = await readFile(entry.path)
+      const { meta } = parseFrontmatter(raw)
+      if (meta.kind !== 'review' || !meta.reviewed_note) continue
+      if (notePathKey(toString(meta.reviewed_note)) !== key) continue
+      candidates.push({
+        id: toString(meta.session_id) || sessionIdFromFileName(entry.name),
+        created: toString(meta.created),
+      })
+    } catch {
+      // 损坏/不可读文件跳过，不影响查找
+    }
+  }
+  if (candidates.length === 0) return null
+  candidates.sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0))
+  return candidates[0].id || null
 }

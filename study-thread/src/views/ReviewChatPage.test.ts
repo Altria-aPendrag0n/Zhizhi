@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   reviewDebateStream: vi.fn(),
   extractNote: vi.fn(),
   parseMentionedNotes: vi.fn(),
+  deleteFile: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('vue-router', () => ({
@@ -56,7 +57,7 @@ vi.mock('../utils/session-serializer', () => ({
   saveSessionToVault: mocks.saveSessionToVault,
 }))
 
-vi.mock('../utils/vault-fs', () => ({ readFile: mocks.readFile }))
+vi.mock('../utils/vault-fs', () => ({ readFile: mocks.readFile, deleteFile: mocks.deleteFile }))
 vi.mock('../utils/session-linker', () => ({
   extractNoteRefsFromSession: mocks.extractNoteRefsFromSession,
 }))
@@ -375,5 +376,57 @@ describe('ReviewChatPage', () => {
     const badges = wrapper.findAll('.review-chat-page__gap-badge')
     expect(badges).toHaveLength(1)
     expect(badges[0].text()).toContain('AI 缺口')
+  })
+
+  it('单条模式评级完成后删除临时复习会话文件（下次开始复习重新出题）', async () => {
+    const wrapper = createWrapper()
+    await flushPromises()
+    await wrapper.find('.review-chat-page__end').trigger('click')
+
+    await wrapper.find('.review-chat-page__rate--good').trigger('click')
+    await flushPromises()
+
+    // getReviewSessionFilePath('/vault', 'review_1') = /vault/sessions/review-review_1.md
+    expect(mocks.deleteFile).toHaveBeenCalledWith('/vault/sessions/review-review_1.md')
+  })
+
+  it('簇模式完成复习后删除临时复习会话文件', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({ review_cluster: ['notes/费曼学习法.md', 'notes/主动回忆.md'] }),
+    )
+    mocks.loadNote.mockImplementation((path: string) =>
+      Promise.resolve(path === 'notes/主动回忆.md' ? clusterNote : note),
+    )
+    const wrapper = createWrapper()
+    await flushPromises()
+    await wrapper.find('.review-chat-page__end').trigger('click')
+
+    const items = wrapper.findAll('.review-chat-page__rating-item')
+    await items[0].find('.review-chat-page__rate--good').trigger('click')
+    await items[1].find('.review-chat-page__rate--easy').trigger('click')
+    await flushPromises()
+
+    // 评级完成前不删除；点「完成复习」后删除临时会话文件
+    expect(mocks.deleteFile).not.toHaveBeenCalled()
+    await wrapper.find('.review-chat-page__finish').trigger('click')
+    await flushPromises()
+    expect(mocks.deleteFile).toHaveBeenCalledWith('/vault/sessions/review-review_1.md')
+  })
+
+  it('重新打开会话时按已作答消息数恢复答题进度（复用题目不重复出题）', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({
+        messages: [
+          { role: 'assistant', content: '## 复习目标\n费曼学习法\n\n## 问题\n1. ...\n2. ...' },
+          { role: 'user', content: '通过教别人来检验理解' },
+          { role: 'assistant', content: '判定：正确\n你的理解很准确。' },
+        ],
+      }),
+    )
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    // 已作答 1 题 → 进度恢复为 1 / 2，而非从头开始
+    expect(wrapper.text()).toContain('1 / 2')
   })
 })

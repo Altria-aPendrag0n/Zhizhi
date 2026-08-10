@@ -143,7 +143,7 @@ import { createProvider } from '../api/provider-factory'
 import { generateReviewQuestions, generateClusterQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
 import { loadLearnerProfile, describeLearnerProfile } from '../utils/learner-profile'
 import { describeDifficultyContext } from '../utils/review-difficulty'
-import { buildReviewRelatedNotes, createReviewSession } from '../utils/review-session'
+import { buildReviewRelatedNotes, createReviewSession, findIncompleteReviewSession } from '../utils/review-session'
 import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
 import ReviewDueList from '../components/review/ReviewDueList.vue'
@@ -222,6 +222,14 @@ async function handleStartReview(task: ReviewTask) {
   const vaultPath = vaultStore.vaultPath
   if (!vaultPath) {
     toast.error('请先在设置中选择本地 Vault')
+    return
+  }
+  // 复用进行中的复习会话：该笔记已有未完成的复习会话时直接继续，
+  // 不重复调用 LLM 出题（出题结果已随会话文件持久化，节省 token）
+  const existingSessionId = await findIncompleteReviewSession(vaultPath, task.notePath)
+  if (existingSessionId) {
+    toast.info('继续上次的复习会话（复用已生成题目）')
+    router.push(`/review/${encodeURIComponent(existingSessionId)}`)
     return
   }
   const note = await noteStore.loadNote(task.notePath)

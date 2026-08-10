@@ -239,7 +239,7 @@ import { saveSessionToVault } from '../utils/session-serializer'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { resolveMessageIndex } from '../utils/message-locator'
 import { extractNoteRefsFromSession, type NoteReference } from '../utils/session-linker'
-import { readFile } from '../utils/vault-fs'
+import { readFile, deleteFile } from '../utils/vault-fs'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 import AddToNoteDialog from '../components/notes/AddToNoteDialog.vue'
@@ -329,7 +329,10 @@ async function load() {
   }
   session.value = loaded
   messages.value = [...loaded.messages]
-  currentQuestionIndex.value = 0
+  // 恢复答题进度：已作答的 user 消息数即已推进的题数（每答一题 push 一条 user 消息；
+  // 上限为题目数，答完末题后停在"已无更多问题"；辩论多轮不推进题号，恢复为近似值）
+  const answeredCount = messages.value.filter((m) => m.role === 'user').length
+  currentQuestionIndex.value = Math.min(answeredCount, questions.value.length)
   if (loaded.reviewed_note) {
     note.value = await noteStore.loadNote(loaded.reviewed_note)
   }
@@ -526,6 +529,8 @@ async function handleRate(notePath: string, rating: ReviewRating) {
   // 单条模式：评级即完成，自动返回；簇模式：等待逐条评级后手动返回
   if (!hasCluster.value) {
     rated.value = true
+    // 单条模式评级即完成：删除临时复习会话文件（下次「开始复习」将重新出题）
+    void removeReviewSessionFile()
     setTimeout(() => router.push('/hub'), 800)
   }
 }
@@ -533,7 +538,24 @@ async function handleRate(notePath: string, rating: ReviewRating) {
 /** 簇模式：结束逐条评级并返回学习地图 */
 function finishReview() {
   rated.value = true
+  // 簇模式完成复习：删除临时复习会话文件（下次「开始复习」将重新出题）
+  void removeReviewSessionFile()
   void router.push('/hub')
+}
+
+/**
+ * 删除临时复习会话文件（完成复习后调用）。
+ *
+ * 复习会话是按笔记临时生成并持久化出题结果的，用户中途退出时由学习地图复用（不重复出题）；
+ * 完成后删除该文件，下次「开始复习」重新出题。删除失败静默忽略，不影响评级返回。
+ */
+async function removeReviewSessionFile() {
+  if (!vaultStore.vaultPath || !session.value) return
+  try {
+    await deleteFile(getReviewSessionFilePath(vaultStore.vaultPath, session.value.id))
+  } catch {
+    // 删除失败不影响评级返回
+  }
 }
 
 function ratingLabel(rating: ReviewRating): string {

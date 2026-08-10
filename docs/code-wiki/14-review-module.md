@@ -187,7 +187,9 @@ noteStore.loadNote ──► 合并 Note.review 镜像
   - `createReviewSession(note, questions)`：构建复习会话，首条 assistant 消息为"复习目标 + 问题列表"。
   - `buildReviewRelatedNotes(note, allNotes)`：wikilink 目标优先、同标签补充，去重截断（上限 4 条；P3 可扩展 RAG）。
   - `loadReviewSession(vaultPath, sessionId)`：解析复习会话文件 → Session（含出题结果与消息）。
-- **协作链路**：`LearningHub 开始复习 → generateReviewQuestions → createReviewSession → saveSessionToVault(isReview) → 复习会话页 → 逐题 reviewFollowupStream → reviewStore.applyReview`
+  - `findIncompleteReviewSession(vaultPath, notePath)`：遍历 `sessions/` 下 `review-*.md`，按 `reviewed_note` 规范化路径（分隔符归一 + 小写）匹配，返回**最新创建**的会话 id；文件损坏/目录缺失静默跳过。
+- **临时会话复用与清理（P6）**：复习会话是**按笔记临时生成**的——学习地图「开始复习」前先 `findIncompleteReviewSession`，命中则直接跳转已有会话（**不重复调用 LLM 出题**，出题结果已随会话文件持久化，节省 token）；重新打开时按已作答 user 消息数恢复答题进度。完成复习后（单条模式评级完成 / 簇模式点「完成复习」）删除会话文件（`deleteFile(getReviewSessionFilePath(...))`），下次「开始复习」重新出题。
+- **协作链路**：`LearningHub 开始复习 → findIncompleteReviewSession（命中则复用）→ generateReviewQuestions → createReviewSession → saveSessionToVault(isReview) → 复习会话页 → 逐题 reviewFollowupStream → 完成评级/结束 → 删除临时会话文件`
 
 ### 9.3 复习会话交互 UI（`src/views/ReviewChatPage.vue`）
 
