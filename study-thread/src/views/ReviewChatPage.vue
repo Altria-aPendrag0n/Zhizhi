@@ -668,7 +668,7 @@ function handleNavigateNote(path: string) {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 20px;
+  padding: 8px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex-shrink: 0;
@@ -684,10 +684,10 @@ function handleNavigateNote(path: string) {
 
 .review-chat-page__eyebrow {
   flex-shrink: 0;
-  color: var(--brand);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.13em;
+  color: var(--ink-3);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -700,9 +700,9 @@ function handleNavigateNote(path: string) {
   background: transparent;
   padding: 0;
   font: inherit;
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
   cursor: pointer;
   text-align: left;
 }
@@ -1051,8 +1051,9 @@ function handleNavigateNote(path: string) {
 /* ---- 当前题目（一问一答标注：题干 + 题号 + 题型）---- */
 .review-chat-page__question {
   flex-shrink: 0;
-  margin: 8px 20px 0;
-  padding: 12px 14px;
+  margin: 14px 20px 0;
+  padding: 22px 26px;
+  text-align: center;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
@@ -1062,8 +1063,9 @@ function handleNavigateNote(path: string) {
 .review-chat-page__question-head {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 
 .review-chat-page__question-tag {
@@ -1086,17 +1088,17 @@ function handleNavigateNote(path: string) {
 
 .review-chat-page__question-text {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.6;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.7;
   color: var(--ink);
 }
 
 /* ---- 结构化答题卡片容器 ---- */
 .review-chat-page__answer {
   flex-shrink: 0;
-  margin: 8px 20px 0;
-  padding: 14px;
+  margin: 12px 20px 0;
+  padding: 18px 20px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
