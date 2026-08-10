@@ -8,7 +8,7 @@
             class="hub-nav__item"
             :class="{ active: currentView === 'overview' }"
             type="button"
-            @click="currentView = 'overview'"
+            @click="switchView('overview')"
           >
             学习总览
           </button>
@@ -16,7 +16,7 @@
             class="hub-nav__item"
             :class="{ active: currentView === 'network' }"
             type="button"
-            @click="currentView = 'network'"
+            @click="switchView('network')"
           >
             概念网络
           </button>
@@ -24,7 +24,7 @@
             class="hub-nav__item"
             :class="{ active: currentView === 'review' }"
             type="button"
-            @click="currentView = 'review'"
+            @click="switchView('review')"
           >
             复习
             <span v-if="reviewStore.dueCount > 0" class="hub-nav__badge">
@@ -249,7 +249,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
@@ -271,6 +271,7 @@ import BranchTree from '../components/chat/BranchTree.vue'
 import ReviewDueList from '../components/review/ReviewDueList.vue'
 
 const router = useRouter()
+const route = useRoute()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
 const reviewStore = useReviewStore()
@@ -281,8 +282,16 @@ const toast = useToast()
 const createNewThread = inject<(projectId?: string) => void>('createNewThread', () => {})
 
 const sessionTree = ref<SessionTreeNode | null>(null)
-/** 当前视图：由左侧"学习地图切换管理栏"控制 */
-const currentView = ref<'overview' | 'network' | 'review'>('overview')
+/** 当前视图：由左侧"学习地图切换管理栏"控制；支持 ?view=review 等深链接直达（主界面"待复习"入口） */
+const currentView = ref<'overview' | 'network' | 'review'>(
+  route.query.view === 'review' || route.query.view === 'network' ? route.query.view : 'overview',
+)
+
+/** 切换学习地图视图并同步 URL query，保证外部入口（主界面待复习 → view=review）可直达 */
+function switchView(view: 'overview' | 'network' | 'review') {
+  currentView.value = view
+  router.replace({ query: { view } })
+}
 
 interface ConceptRelation {
   id: string

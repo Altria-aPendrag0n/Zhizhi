@@ -11,7 +11,7 @@
 | 能力 | 说明 |
 |------|------|
 | 主界面路由 | `/home`（`HomePage.vue`），知枝按钮（`ProjectRail` 品牌位）直达 |
-| 今日学习进度 | 主界面一行四格：今日问答 / 今日笔记 / 今日已复习（取当日聚合计数）+ 待复习（`reviewStore.dueCount`，点击跳学习地图） |
+| 今日学习进度 | 主界面一行四格：今日问答 / 今日笔记 / 今日已复习（取当日聚合计数）+ 待复习（`reviewStore.dueCount`，点击直达学习地图复习视图 `/hub?view=review`） |
 | 学习统计 | `learning-stats.ts`：从 vault 聚合三种学习行为 → 按天计数 |
 | 频率格子图 | `ContributionGraph.vue`：53 周 × 7 天绿色分层，hover 显示当日明细 |
 

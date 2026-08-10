@@ -63,9 +63,9 @@
           class="home-today__item home-today__item--due"
           role="button"
           tabindex="0"
-          :title="'点击前往学习地图查看到期复习'"
-          @click="router.push('/hub')"
-          @keydown.enter="router.push('/hub')"
+          :title="'点击前往学习地图复习界面'"
+          @click="router.push({ path: '/hub', query: { view: 'review' } })"
+          @keydown.enter="router.push({ path: '/hub', query: { view: 'review' } })"
         >
           <CalendarClock :size="16" class="home-today__icon" />
           <span class="home-today__label">待复习</span>
