@@ -6,22 +6,6 @@
         <nav class="hub-nav" aria-label="学习地图视图">
           <button
             class="hub-nav__item"
-            :class="{ active: currentView === 'overview' }"
-            type="button"
-            @click="switchView('overview')"
-          >
-            学习总览
-          </button>
-          <button
-            class="hub-nav__item"
-            :class="{ active: currentView === 'network' }"
-            type="button"
-            @click="switchView('network')"
-          >
-            概念网络
-          </button>
-          <button
-            class="hub-nav__item"
             :class="{ active: currentView === 'review' }"
             type="button"
             @click="switchView('review')"
@@ -31,122 +15,21 @@
               {{ reviewStore.dueCount }}
             </span>
           </button>
+          <button
+            class="hub-nav__item"
+            :class="{ active: currentView === 'network' }"
+            type="button"
+            @click="switchView('network')"
+          >
+            认知地图（开发中）
+          </button>
         </nav>
       </aside>
 
       <div class="hub-content">
         <div class="learning-hub">
-          <!-- 知识图谱总览视图 -->
-          <template v-if="currentView === 'overview'">
-      <section class="learning-hub__intro" aria-labelledby="focus-title">
-        <div class="eyebrow">Today's learning loop</div>
-        <h2 id="focus-title" class="learning-hub__hero-title">把理解留在可回溯的路径上</h2>
-        <p class="learning-hub__hero-desc">
-          从一处被划线的判断开始，把它压缩成可检验的解释，再用追问、练习与复习确认理解。
-        </p>
-      </section>
-
-      <!-- 学习线索 -->
-      <section class="learning-line" aria-label="学习线索">
-        <div class="line-step">
-          <span class="step-no">01</span>
-          <span class="step-name">划线</span>
-          <span class="step-detail">捕捉值得停下的判断</span>
-        </div>
-        <span class="line-arrow" aria-hidden="true"></span>
-        <div class="line-step">
-          <span class="step-no">02</span>
-          <span class="step-name">原子笔记</span>
-          <span class="step-detail">压缩为一个可复用观点</span>
-        </div>
-        <span class="line-arrow" aria-hidden="true"></span>
-        <div class="line-step current">
-          <span class="step-no">03 · NOW</span>
-          <span class="step-name">分支追问</span>
-          <span class="step-detail">暴露解释中的跳步</span>
-        </div>
-        <span class="line-arrow" aria-hidden="true"></span>
-        <div class="line-step">
-          <span class="step-no">04</span>
-          <span class="step-name">练习</span>
-          <span class="step-detail">用白话组织因果结构</span>
-        </div>
-        <span class="line-arrow" aria-hidden="true"></span>
-        <div class="line-step">
-          <span class="step-no">05</span>
-          <span class="step-name">复习</span>
-          <span class="step-detail">在间隔后重新提取</span>
-        </div>
-      </section>
-
-      <!-- 统计卡片 -->
-      <div class="learning-hub__stats">
-        <div class="stat-card">
-          <div class="stat-card__value">{{ stats.totalSessions }}</div>
-          <div class="stat-card__label">总会话</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card__value">{{ stats.totalNotes }}</div>
-          <div class="stat-card__label">总笔记</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card__value">{{ stats.activeDays }}</div>
-          <div class="stat-card__label">本月学习天数</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card__value">{{ stats.avgDepth.toFixed(1) }}</div>
-          <div class="stat-card__label">平均追问深度</div>
-        </div>
-      </div>
-
-      <!-- 会话树 -->
-      <div class="learning-hub__section">
-        <BranchTree
-          :tree="sessionTree"
-          @select-node="handleSelectNode"
-        />
-      </div>
-
-      <!-- 最近活动 -->
-      <div class="learning-hub__section">
-        <div class="activity-panel">
-          <h3 class="activity-panel__title">最近活动</h3>
-          <div class="activity-panel__list" v-if="recentActivities.length > 0">
-            <div
-              v-for="(item, index) in recentActivities"
-              :key="index"
-              class="activity-item"
-              @click="handleActivityClick(item)"
-            >
-              <span class="activity-item__icon">
-                <BookOpen v-if="item.type === 'session'" :size="14" />
-                <FileText v-else :size="14" />
-              </span>
-              <span class="activity-item__text">{{ item.label }}</span>
-              <span class="activity-item__time">{{ item.time }}</span>
-            </div>
-          </div>
-          <div v-else class="activity-panel__empty">
-            暂无活动记录
-          </div>
-        </div>
-      </div>
-
-      <!-- 快速入口 -->
-      <div class="learning-hub__quick">
-        <button class="quick-btn" @click="startNewChat">
-          <MessageSquare :size="16" />
-          <span>开始新会话</span>
-        </button>
-        <button class="quick-btn" @click="router.push('/notes')">
-          <FileText :size="16" />
-          <span>查看所有笔记</span>
-        </button>
-      </div>
-    </template>
-
-    <!-- 复习视图：到期间隔复习 -->
-    <template v-else-if="currentView === 'review'">
+          <!-- 复习视图：到期间隔复习 -->
+          <template v-if="currentView === 'review'">
       <section class="learning-hub__intro" aria-labelledby="review-title">
         <div class="eyebrow">Spaced Repetition</div>
         <h2 id="review-title" class="learning-hub__hero-title">复习 · 在间隔后重新提取</h2>
@@ -168,13 +51,13 @@
       </div>
     </template>
 
-    <!-- 概念关系网络视图 -->
+    <!-- 认知地图视图（开发中） -->
     <template v-else-if="currentView === 'network'">
       <section class="learning-hub__intro" aria-labelledby="network-title">
         <div class="eyebrow">Concept Network</div>
-        <h2 id="network-title" class="learning-hub__hero-title">概念关系网络</h2>
+        <h2 id="network-title" class="learning-hub__hero-title">认知地图（开发中）</h2>
         <p class="learning-hub__hero-desc">
-          探索知识节点之间的关联，理解概念之间的因果、类比与层级关系。
+          探索知识节点之间的关联，理解概念之间的因果、类比与层级关系。此视图仍在开发中。
         </p>
       </section>
 
@@ -248,17 +131,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, inject } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
 import { useVaultStore } from '../stores/vault'
 import { useSettingsStore } from '../stores/settings'
 import { useToast } from '../composables/useToast'
-import { parseNoteDate } from '../utils/date'
 import type { Note, ReviewQuestion, ReviewRating, ReviewTask } from '../types'
-import type { SessionTreeNode } from '../utils/session-tree'
 import { createProvider } from '../api/provider-factory'
 import { generateReviewQuestions, generateClusterQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
 import { loadLearnerProfile, describeLearnerProfile } from '../utils/learner-profile'
@@ -266,29 +146,21 @@ import { describeDifficultyContext } from '../utils/review-difficulty'
 import { buildReviewRelatedNotes, createReviewSession } from '../utils/review-session'
 import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
-import { BookOpen, FileText, MessageSquare } from '@lucide/vue'
-import BranchTree from '../components/chat/BranchTree.vue'
 import ReviewDueList from '../components/review/ReviewDueList.vue'
 
 const router = useRouter()
 const route = useRoute()
-const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
 const reviewStore = useReviewStore()
 const vaultStore = useVaultStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
-/** 知枝学习项目下新建会话（由 App 提供，避免跳转到无会话的空白聊天界面） */
-const createNewThread = inject<(projectId?: string) => void>('createNewThread', () => {})
 
-const sessionTree = ref<SessionTreeNode | null>(null)
-/** 当前视图：由左侧"学习地图切换管理栏"控制；支持 ?view=review 等深链接直达（主界面"待复习"入口） */
-const currentView = ref<'overview' | 'network' | 'review'>(
-  route.query.view === 'review' || route.query.view === 'network' ? route.query.view : 'overview',
-)
+/** 当前视图：由左侧"学习地图切换管理栏"控制；默认复习视图，支持 ?view=review|network 深链接 */
+const currentView = ref<'review' | 'network'>(route.query.view === 'network' ? 'network' : 'review')
 
 /** 切换学习地图视图并同步 URL query，保证外部入口（主界面待复习 → view=review）可直达 */
-function switchView(view: 'overview' | 'network' | 'review') {
+function switchView(view: 'review' | 'network') {
   currentView.value = view
   router.replace({ query: { view } })
 }
@@ -313,44 +185,11 @@ const conceptRelations = ref<ConceptRelation[]>([
   { id: '8', type: 'causal', typeLabel: '因果', from: '因果结构', to: '可检验性', desc: '因果结构提供可检验的预测' },
 ])
 
-interface ActivityItem {
-  type: 'session' | 'note'
-  label: string
-  time: string
-  target?: string
-}
-
-const recentActivities = ref<ActivityItem[]>([])
-const stats = ref({
-  totalSessions: 0,
-  totalNotes: 0,
-  activeDays: 0,
-  avgDepth: 0,
-})
-
 onMounted(() => {
-  sessionTree.value = sessionStore.sessionTree
-
-  // 统计
-  stats.value.totalNotes = noteStore.noteCount
-  stats.value.totalSessions = sessionStore.sessions.length
-
   // 加载复习队列（vault 就绪时；未打开 vault 时队列为空），并补录存量笔记（幂等）
   if (vaultStore.vaultPath) {
     void reviewStore.syncQueueWithNotes(vaultStore.vaultPath)
   }
-
-  // 最近活动
-  const activities: ActivityItem[] = []
-  for (const s of sessionStore.sessions) {
-    activities.push({
-      type: 'session',
-      label: s.title,
-      time: formatRelativeTime(s.created),
-      target: s.id,
-    })
-  }
-  recentActivities.value = activities.slice(0, 10)
 })
 
 /** 复习评级：回写复习队列并轻提示下一次间隔 */
@@ -452,36 +291,6 @@ function ratingLabel(rating: ReviewRating): string {
     easy: '熟练',
   }
   return labels[rating]
-}
-
-function handleSelectNode(nodeId: string) {
-  // 跳转到对应会话（携带 thread 参数，避免进入无会话的空白聊天界面）
-  sessionStore.switchSession(nodeId)
-  router.push({ path: '/chat', query: { thread: nodeId } })
-}
-
-function handleActivityClick(item: ActivityItem) {
-  if (item.type === 'session') {
-    sessionStore.switchSession(item.target || '')
-    router.push({ path: '/chat', query: { thread: item.target || '' } })
-  }
-}
-
-/** 快速入口：在知枝学习项目下新建会话并跳转 */
-function startNewChat() {
-  createNewThread('1')
-}
-
-function formatRelativeTime(iso: string): string {
-  const d = parseNoteDate(iso)
-  if (!d) return ''
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  if (hours < 24) return `${hours}小时前`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}天前`
-  return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 </script>
 
@@ -614,119 +423,11 @@ function formatRelativeTime(iso: string): string {
   line-height: 1.7;
 }
 
-/* 学习线索 */
-.learning-line {
-  display: grid;
-  grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr;
-  align-items: start;
-  margin-bottom: 35px;
-}
-
-.line-step {
-  position: relative;
-  min-height: 118px;
-  padding: 16px 13px 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: #f8f7f2;
-}
-
-.line-step.current {
-  border-color: #91b2a2;
-  background: var(--brand-soft);
-  box-shadow: 0 7px 16px rgba(25, 49, 43, 0.07);
-}
-
-.step-no {
-  display: block;
-  margin-bottom: 16px;
-  color: var(--ink-3);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.1em;
-}
-
-.current .step-no {
-  color: var(--brand);
-}
-
-.step-name {
-  display: block;
-  font-size: 13px;
-  font-weight: 750;
-  color: var(--ink);
-}
-
-.step-detail {
-  display: block;
-  margin-top: 6px;
-  color: var(--ink-2);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.line-arrow {
-  align-self: center;
-  height: 1px;
-  margin: 0 5px;
-  background: #b8c9bf;
-  position: relative;
-}
-
-.line-arrow::after {
-  position: absolute;
-  right: -1px;
-  top: -3px;
-  width: 6px;
-  height: 6px;
-  border-top: 1px solid #8fa99b;
-  border-right: 1px solid #8fa99b;
-  transform: rotate(45deg);
-  content: '';
-}
-
-/* 统计卡片 */
-.learning-hub__stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 28px;
-}
-
-.stat-card {
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  text-align: center;
-}
-
-.stat-card__value {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--brand);
-  font-family: Georgia, 'Songti SC', serif;
-}
-
-.stat-card__label {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 .learning-hub__section {
   margin-bottom: 24px;
 }
 
 /* 活动面板 */
-.activity-panel {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-}
-
 .activity-panel__title {
   margin: 0;
   padding: 14px 18px;
@@ -734,72 +435,6 @@ function formatRelativeTime(iso: string): string {
   font-weight: 650;
   color: var(--ink);
   border-bottom: 1px solid var(--line);
-}
-
-.activity-panel__list {
-  padding: 6px;
-}
-
-.activity-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: var(--r-md);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.activity-item:hover {
-  background: var(--surface-2);
-}
-
-.activity-item__icon {
-  color: var(--ink-3);
-  flex-shrink: 0;
-}
-
-.activity-item__text {
-  flex: 1;
-  font-size: 13px;
-  color: var(--ink);
-}
-
-.activity-item__time {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-
-.activity-panel__empty {
-  padding: 24px;
-  text-align: center;
-  color: var(--ink-3);
-  font-size: 13px;
-}
-
-/* 快速入口 */
-.learning-hub__quick {
-  display: flex;
-  gap: 12px;
-}
-
-.quick-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 15px;
-  border: 1px solid var(--brand);
-  border-radius: var(--r-md);
-  background: var(--brand);
-  color: var(--brand-ink);
-  font-size: 12px;
-  font-weight: 720;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.quick-btn:hover {
-  background: var(--brand-strong);
 }
 
 @media (max-width: 1240px) {
@@ -829,20 +464,7 @@ function formatRelativeTime(iso: string): string {
   }
 }
 
-@media (max-width: 700px) {
-  .learning-hub__stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .learning-line {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  .line-arrow {
-    display: none;
-  }
-}
-
-/* 概念关系网络 */
+/* 认知地图 */
 .concept-network {
   display: grid;
   grid-template-columns: 1fr 320px;

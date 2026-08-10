@@ -142,12 +142,12 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 - emits：`close`、`extract-note(text, messageIndex)`、`add-to-note(text)`、`create-branch(text, messageIndex)`、`copy(text)`（剪贴板）。
 - 点击外部 / ESC 关闭（document 级监听，卸载时移除）。
 
-### 3.7 分支树展示（学习总览使用）
+### 3.7 分支展示
+
+> 注：`BranchTree.vue` / `TreeNode.vue` 曾用于学习地图"学习总览"视图的会话树展示；学习总览视图已移除（与主界面重合），这两个组件随之删除。会话分支现由左侧会话栏的 `ThreadBranch.vue` 与 `BranchBreadcrumb.vue` 呈现。
 
 | 组件 | 说明 |
 |------|------|
-| `BranchTree.vue` | 会话树容器；props `tree: SessionTreeNode \| null`；emits `select-node`；显示节点总数（`countNodes`） |
-| `TreeNode.vue` | 递归节点；按 `node.type` 区分消息/分支图标，缩进随 depth；emits `select` |
 | `BranchBreadcrumb.vue` | 分支页面包屑；props `breadcrumbs: BreadcrumbItem[]`；emits `navigate(target)`；含"← 返回主对话" |
 
 ## 4. 与其他模块的协作

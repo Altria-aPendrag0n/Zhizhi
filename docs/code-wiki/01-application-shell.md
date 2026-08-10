@@ -30,12 +30,12 @@
 
 | 路径 | 名称 | 页面组件 | 说明 |
 |------|------|----------|------|
-| `/` | — | 重定向 | → `/chat` |
+| `/` | — | 重定向 | → `/home` |
 | `/chat` | `chat` | `views/MainChatPage.vue` | 主会话聊天 |
 | `/chat/branch/:sessionId/:branchId` | `branch-chat` | `views/BranchChatPage.vue` | 分支深度追问 |
 | `/notes` | `notes` | `views/NotesPage.vue` | 资料库（笔记 + 参考资料） |
 | `/notes/:id` | `note-detail` | `views/NoteDetailPage.vue` | 笔记详情 |
-| `/hub` | `hub` | `views/LearningHubPage.vue` | 学习总览 |
+| `/hub` | `hub` | `views/LearningHubPage.vue` | 学习地图（复习 · 认知地图） |
 | `/settings` | `settings` | `views/SettingsPage.vue` | 设置 |
 
 > 路由均使用 `createWebHistory()`；页面组件全部懒加载（`() => import(...)`）。
@@ -81,7 +81,7 @@ function getProjectRoute(projectId, threadId) {
 |--------|------|
 | `Ctrl/Cmd + N` | 新建会话 |
 | `Ctrl/Cmd + ,` | 打开设置 |
-| `Ctrl/Cmd + H` | 跳转学习总览 |
+| `Ctrl/Cmd + H` | 跳转学习地图 |
 | `Ctrl/Cmd + B` | 跳转资料库 |
 
 ### 4.4 provide 注入回调
