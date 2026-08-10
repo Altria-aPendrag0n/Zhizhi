@@ -153,13 +153,15 @@
       </template>
     </div>
     <template v-else>
-      <!-- 当前题目（一问一答）：每题单独展示题干，明确当前作答区对应的是哪道题 -->
+      <!-- 当前题目（一问一答）：每题单独展示题干，可上下拉伸、长题干内部滚动 -->
       <div v-if="activeQuestion" class="review-chat-page__question">
         <div class="review-chat-page__question-head">
           <span class="review-chat-page__question-tag">第 {{ currentQuestionIndex + 1 }} 题 / 共 {{ questions.length }} 题</span>
           <span class="review-chat-page__question-type">{{ QUESTION_TYPE_LABELS[activeQuestion.type] }}</span>
         </div>
-        <p class="review-chat-page__question-text">{{ activeQuestion.question }}</p>
+        <div class="review-chat-page__question-scroll">
+          <p class="review-chat-page__question-text">{{ activeQuestion.question }}</p>
+        </div>
       </div>
       <!-- 辩论题轮次指示（P5-5）：活跃题为 debate 时展示当前轮次与 AI 持方，仍走 Composer 文本作答 -->
       <div
@@ -1052,10 +1054,15 @@ function handleNavigateNote(path: string) {
 
 /* ---- 当前题目（一问一答标注：题干 + 题号 + 题型）---- */
 .review-chat-page__question {
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
   margin: 12px 16px 0;
-  padding: 26px 32px;
-  text-align: center;
+  padding: 16px 20px 14px;
+  min-height: 108px;
+  max-height: 55vh;
+  resize: vertical; /* 上下可自由拉伸，左右默认占满 */
+  overflow: hidden; /* 配合 resize 生效；内容滚动由内部 scroll 区处理 */
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
@@ -1067,7 +1074,8 @@ function handleNavigateNote(path: string) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .review-chat-page__question-tag {
@@ -1086,6 +1094,15 @@ function handleNavigateNote(path: string) {
   color: var(--brand-strong);
   font-size: 11px;
   font-weight: 650;
+}
+
+/* 题干滚动区：长题干内部滚动，避免显示不全 */
+.review-chat-page__question-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  text-align: center;
+  padding: 2px 4px;
 }
 
 .review-chat-page__question-text {
