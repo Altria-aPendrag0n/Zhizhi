@@ -153,14 +153,27 @@
       </template>
     </div>
     <template v-else>
-      <!-- 当前题目（一问一答）：每题单独展示题干，可上下拉伸、长题干内部滚动 -->
-      <div v-if="activeQuestion" class="review-chat-page__question">
+      <!-- 当前题目（一问一答）：每题单独展示题干，自定义拖拽手柄上下拉伸、长题干内部滚动 -->
+      <div
+        v-if="activeQuestion"
+        ref="questionBoxRef"
+        class="review-chat-page__question"
+        :style="questionBoxStyle"
+      >
         <div class="review-chat-page__question-head">
           <span class="review-chat-page__question-tag">第 {{ currentQuestionIndex + 1 }} 题 / 共 {{ questions.length }} 题</span>
           <span class="review-chat-page__question-type">{{ QUESTION_TYPE_LABELS[activeQuestion.type] }}</span>
         </div>
         <div class="review-chat-page__question-scroll">
           <p class="review-chat-page__question-text">{{ activeQuestion.question }}</p>
+        </div>
+        <!-- 自定义拉伸手柄（替代 CSS resize，兼容 WebView2） -->
+        <div
+          class="review-chat-page__question-resize"
+          :class="{ 'is-dragging': isResizing }"
+          @mousedown="startResize"
+        >
+          <span class="review-chat-page__question-resize-bar"></span>
         </div>
       </div>
       <!-- 辩论题轮次指示（P5-5）：活跃题为 debate 时展示当前轮次与 AI 持方，仍走 Composer 文本作答 -->
@@ -231,7 +244,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Message, Note, ReviewQuestion, ReviewQuestionType, ReviewRating, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
@@ -297,6 +310,52 @@ const addToNoteDialog = reactive({
   error: '',
 })
 let abortController: AbortController | null = null
+
+/** 问题框自定义拖拽拉伸（替代 CSS resize，兼容 WebView2） */
+const questionBoxRef = ref<HTMLElement | null>(null)
+const questionHeight = ref<number | null>(null) // null = 自适应高度；拖拽后为像素值
+const isResizing = ref(false)
+let resizeStartY = 0
+let resizeStartHeight = 0
+const QUESTION_MIN_HEIGHT = 108
+const QUESTION_MAX_VH = 0.55
+
+const questionBoxStyle = computed(() =>
+  questionHeight.value !== null ? { height: `${questionHeight.value}px` } : {},
+)
+
+function startResize(event: MouseEvent) {
+  if (!questionBoxRef.value) return
+  isResizing.value = true
+  resizeStartY = event.clientY
+  resizeStartHeight = questionBoxRef.value.offsetHeight
+  document.body.style.cursor = 'ns-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+  event.preventDefault()
+}
+
+function onResizeMove(event: MouseEvent) {
+  if (!isResizing.value) return
+  const delta = event.clientY - resizeStartY
+  const maxHeight = Math.floor(window.innerHeight * QUESTION_MAX_VH)
+  const newHeight = Math.max(QUESTION_MIN_HEIGHT, Math.min(maxHeight, resizeStartHeight + delta))
+  questionHeight.value = newHeight
+}
+
+function stopResize() {
+  isResizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+})
 
 const sessionId = computed(() => String(route.params.sessionId || ''))
 const questions = computed<ReviewQuestion[]>(() => session.value?.review_questions ?? [])
@@ -1058,11 +1117,10 @@ function handleNavigateNote(path: string) {
   flex-direction: column;
   flex-shrink: 0;
   margin: 12px 16px 0;
-  padding: 16px 20px 14px;
+  padding: 16px 20px 0;
   min-height: 108px;
   max-height: 55vh;
-  resize: vertical; /* 上下可自由拉伸，左右默认占满 */
-  overflow: hidden; /* 配合 resize 生效；内容滚动由内部 scroll 区处理 */
+  overflow: hidden; /* 内容滚动由内部 scroll 区处理 */
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
@@ -1111,6 +1169,41 @@ function handleNavigateNote(path: string) {
   font-weight: 650;
   line-height: 1.7;
   color: var(--ink);
+}
+
+/* 自定义拉伸手柄（替代 CSS resize，兼容 WebView2） */
+.review-chat-page__question-resize {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  margin: 6px -20px 0;
+  cursor: ns-resize;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.review-chat-page__question-resize:hover,
+.review-chat-page__question-resize.is-dragging {
+  background: var(--brand-soft);
+}
+
+.review-chat-page__question-resize-bar {
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ink-3);
+  transition: background 0.15s;
+  pointer-events: none;
+}
+
+.review-chat-page__question-resize:hover .review-chat-page__question-resize-bar,
+.review-chat-page__question-resize.is-dragging .review-chat-page__question-resize-bar {
+  background: var(--brand);
 }
 
 /* ---- 结构化答题卡片容器 ---- */
