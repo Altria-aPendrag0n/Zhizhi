@@ -160,20 +160,20 @@
         class="review-chat-page__question"
         :style="questionBoxStyle"
       >
-        <div class="review-chat-page__question-head">
-          <span class="review-chat-page__question-tag">第 {{ currentQuestionIndex + 1 }} 题 / 共 {{ questions.length }} 题</span>
-          <span class="review-chat-page__question-type">{{ QUESTION_TYPE_LABELS[activeQuestion.type] }}</span>
-        </div>
-        <div class="review-chat-page__question-scroll">
-          <p class="review-chat-page__question-text">{{ activeQuestion.question }}</p>
-        </div>
-        <!-- 自定义拉伸手柄（替代 CSS resize，兼容 WebView2） -->
+        <!-- 自定义拉伸手柄（置于问题框最顶部；向上拖拉高、向下拖拉低，兼容 WebView2） -->
         <div
           class="review-chat-page__question-resize"
           :class="{ 'is-dragging': isResizing }"
           @mousedown="startResize"
         >
           <span class="review-chat-page__question-resize-bar"></span>
+        </div>
+        <div class="review-chat-page__question-head">
+          <span class="review-chat-page__question-tag">第 {{ currentQuestionIndex + 1 }} 题 / 共 {{ questions.length }} 题</span>
+          <span class="review-chat-page__question-type">{{ QUESTION_TYPE_LABELS[activeQuestion.type] }}</span>
+        </div>
+        <div class="review-chat-page__question-scroll">
+          <p class="review-chat-page__question-text">{{ activeQuestion.question }}</p>
         </div>
       </div>
       <!-- 辩论题轮次指示（P5-5）：活跃题为 debate 时展示当前轮次与 AI 持方，仍走 Composer 文本作答 -->
@@ -338,9 +338,10 @@ function startResize(event: MouseEvent) {
 
 function onResizeMove(event: MouseEvent) {
   if (!isResizing.value) return
+  // 手柄在顶部：向上拖（delta 为负）拉高，向下拖（delta 为正）拉低
   const delta = event.clientY - resizeStartY
   const maxHeight = Math.floor(window.innerHeight * QUESTION_MAX_VH)
-  const newHeight = Math.max(QUESTION_MIN_HEIGHT, Math.min(maxHeight, resizeStartHeight + delta))
+  const newHeight = Math.max(QUESTION_MIN_HEIGHT, Math.min(maxHeight, resizeStartHeight - delta))
   questionHeight.value = newHeight
 }
 
@@ -1171,18 +1172,18 @@ function handleNavigateNote(path: string) {
   color: var(--ink);
 }
 
-/* 自定义拉伸手柄（替代 CSS resize，兼容 WebView2） */
+/* 自定义拉伸手柄（置于问题框顶部，向上拖拉高/向下拖拉低；替代 CSS resize，兼容 WebView2） */
 .review-chat-page__question-resize {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   height: 16px;
-  margin: 6px -20px 0;
+  margin: -16px -20px 6px;
   cursor: ns-resize;
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: var(--surface-2);
-  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
   transition: background 0.15s;
   user-select: none;
 }
