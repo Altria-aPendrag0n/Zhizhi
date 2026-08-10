@@ -233,6 +233,7 @@ const displayedBreadcrumbs = computed(() => {
   if (route.path.startsWith('/notes/')) {
     return ['资料库', noteDetailTitle.value || decodeURIComponent((route.params?.id as string) || '')]
   }
+  if (route.path.startsWith('/review')) return ['学习地图', '复习']
   return breadcrumbs.value
 })
 /** 顶栏当前标题是否可编辑：仅主会话/分支会话（会话标题可重命名），静态界面名称不可编辑 */
@@ -291,8 +292,9 @@ watch(
       activeProjectId.value = '2'
     } else if (path === '/hub' && activeProjectId.value !== '3') {
       activeProjectId.value = '3'
-    } else if (path.startsWith('/review') && activeProjectId.value !== '1') {
-      activeProjectId.value = '1'
+    } else if (path.startsWith('/review') && activeProjectId.value !== '3') {
+      // 复习会话来自学习地图（项目3），项目栏高亮学习地图而非知枝学习
+      activeProjectId.value = '3'
     }
   },
 )

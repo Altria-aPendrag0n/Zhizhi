@@ -1,6 +1,10 @@
 <template>
   <div class="review-due-list">
     <div v-if="tasks.length === 0" class="review-due-list__empty">
+      <div class="review-due-list__empty-mark" aria-hidden="true">
+        <span class="review-due-list__empty-mark-dot" />
+        <span class="review-due-list__empty-mark-line" />
+      </div>
       <div class="review-due-list__empty-title">今天没有到期的复习</div>
       <div class="review-due-list__empty-desc">新摘录的原子笔记会在当天自动进入复习队列。</div>
     </div>
@@ -9,6 +13,7 @@
       v-for="task in tasks"
       :key="task.notePath"
       class="review-card"
+      :class="`review-card--${task.type}`"
       @click="$emit('open', task)"
     >
       <div class="review-card__main">
@@ -152,15 +157,50 @@ function ratingLabel(rating: ReviewRating | null): string {
 }
 
 .review-due-list__empty {
-  padding: 34px 24px;
-  border: 1px dashed var(--line);
+  padding: 44px 24px;
+  border: 1.5px dashed var(--line);
   border-radius: var(--r-lg);
+  background: var(--surface);
   text-align: center;
+}
+
+.review-due-list__empty-mark {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: var(--brand-soft);
+}
+
+.review-due-list__empty-mark-dot {
+  position: absolute;
+  top: 13px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.review-due-list__empty-mark-line {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  width: 16px;
+  height: 1.5px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: var(--brand);
+  opacity: 0.55;
 }
 
 .review-due-list__empty-title {
   font-family: Georgia, 'Songti SC', serif;
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 600;
   color: var(--ink);
 }
 
@@ -171,22 +211,52 @@ function ratingLabel(rating: ReviewRating | null): string {
 }
 
 .review-card {
+  position: relative;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
   gap: 14px;
-  padding: 15px 16px;
+  padding: 16px 18px 16px 20px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
   box-shadow: var(--shadow-1);
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+/* 左侧类型色条：概念/方法/事实/问题 */
+.review-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--card-type, var(--brand));
+}
+
+.review-card--concept::before {
+  --card-type: #2e7d5b;
+}
+
+.review-card--method::before {
+  --card-type: #3f6b72;
+}
+
+.review-card--fact::before {
+  --card-type: #b0772a;
+}
+
+.review-card--question::before {
+  --card-type: #7b4f9e;
 }
 
 .review-card:hover {
-  border-color: #91b2a2;
-  box-shadow: 0 4px 14px rgba(25, 49, 43, 0.08);
+  border-color: #b9c9bf;
+  box-shadow: 0 6px 18px rgba(25, 49, 43, 0.1);
+  transform: translateY(-1px);
 }
 
 .review-card__main {
@@ -206,15 +276,16 @@ function ratingLabel(rating: ReviewRating | null): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
-  font-weight: 650;
+  font-family: Georgia, 'Songti SC', serif;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--ink);
 }
 
 .review-card__type {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-pill);
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.04em;
@@ -223,33 +294,33 @@ function ratingLabel(rating: ReviewRating | null): string {
 .review-card__boost {
   flex-shrink: 0;
   padding: 2px 8px;
-  border: 1px solid #e6b656;
-  border-radius: 4px;
-  background: #fff8e6;
-  color: #a06a00;
+  border: 1px solid #e6c46a;
+  border-radius: var(--r-pill);
+  background: #fdf4dc;
+  color: #92671a;
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.04em;
 }
 
 .review-card__type--concept {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: #e2f1e7;
+  color: #2e7d5b;
 }
 
 .review-card__type--method {
-  background: #e3f2fd;
-  color: #1565c0;
+  background: #e5eff2;
+  color: #3f6b72;
 }
 
 .review-card__type--fact {
-  background: #fff3e0;
-  color: #e65100;
+  background: #f8edd9;
+  color: #b0772a;
 }
 
 .review-card__type--question {
-  background: #f3e5f5;
-  color: #7b1fa2;
+  background: #eee6f4;
+  color: #7b4f9e;
 }
 
 .review-card__meta {
@@ -264,22 +335,22 @@ function ratingLabel(rating: ReviewRating | null): string {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 9px;
+  margin-top: 10px;
 }
 
 .review-card__mastery-track {
   flex: 1;
   max-width: 220px;
-  height: 4px;
-  border-radius: 2px;
+  height: 5px;
+  border-radius: var(--r-pill);
   background: var(--surface-2);
   overflow: hidden;
 }
 
 .review-card__mastery-fill {
   height: 100%;
-  border-radius: 2px;
-  background: var(--brand);
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--brand-soft), var(--brand));
   transition: width 0.25s ease;
 }
 
@@ -296,19 +367,20 @@ function ratingLabel(rating: ReviewRating | null): string {
 }
 
 .review-card__rate {
-  padding: 6px 10px;
+  padding: 7px 11px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--ink-2);
   font: inherit;
   font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .review-card__start {
-  padding: 6px 12px;
+  padding: 7px 14px;
   border: 1px solid var(--brand);
   border-radius: var(--r-md);
   background: var(--brand);
@@ -317,11 +389,14 @@ function ratingLabel(rating: ReviewRating | null): string {
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s;
+  box-shadow: 0 2px 6px rgba(36, 92, 77, 0.24);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 
 .review-card__start:hover {
   background: var(--brand-strong);
+  box-shadow: 0 3px 10px rgba(36, 92, 77, 0.3);
+  transform: translateY(-1px);
 }
 
 .review-card__rate:hover {
@@ -333,13 +408,25 @@ function ratingLabel(rating: ReviewRating | null): string {
 .review-card__rate--again:hover {
   border-color: var(--state-error);
   color: var(--state-error);
-  background: #f7e9e7;
+  background: #f6e8e5;
+}
+
+.review-card__rate--good:hover {
+  border-color: var(--state-success);
+  color: var(--state-success);
+  background: #e3efe9;
+}
+
+.review-card__rate--hard:hover {
+  border-color: var(--state-warning);
+  color: var(--state-warning);
+  background: #f6eeda;
 }
 
 .review-card__rate--easy:hover {
-  border-color: var(--state-success);
-  color: var(--state-success);
-  background: #e7f3ec;
+  border-color: var(--brand-strong);
+  color: var(--brand-strong);
+  background: var(--brand-soft);
 }
 
 @media (max-width: 900px) {

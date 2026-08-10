@@ -52,17 +52,24 @@ function submit() {
 .review-answer__input {
   flex: 1;
   min-width: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--border, #e2e2e2);
-  border-radius: 8px;
-  background: var(--card, #ffffff);
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font: inherit;
   font-size: 14px;
-  color: var(--foreground, #1f2328);
+  color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.review-answer__input::placeholder {
+  color: var(--ink-3);
 }
 
 .review-answer__input:focus {
   outline: none;
-  border-color: var(--color-primary, #4f7cff);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(36, 92, 77, 0.14);
 }
 
 .review-answer__input:disabled {
@@ -71,13 +78,20 @@ function submit() {
 
 .review-answer__submit {
   flex: none;
-  padding: 0 20px;
-  border: none;
-  border-radius: 8px;
-  background: var(--color-primary, #4f7cff);
-  color: #fff;
-  font-size: 14px;
+  padding: 0 22px;
+  border: 1px solid var(--brand);
+  border-radius: var(--r-md);
+  background: var(--brand);
+  color: var(--brand-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
+  transition: background 0.15s;
+}
+
+.review-answer__submit:hover:not(:disabled) {
+  background: var(--brand-strong);
 }
 
 .review-answer__submit:disabled {

@@ -109,10 +109,12 @@
               class="review-chat-page__rate"
               :class="`review-chat-page__rate--${item2.value}`"
               type="button"
+              :title="item2.hint"
               :disabled="ratedPaths.has(item.path)"
               @click="handleRate(item.path, item2.value)"
             >
-              {{ item2.label }}
+              <span class="review-chat-page__rate-name">{{ item2.label }}</span>
+              <span class="review-chat-page__rate-hint">{{ item2.hint }}</span>
             </button>
           </div>
         </div>
@@ -133,9 +135,11 @@
             class="review-chat-page__rate"
             :class="`review-chat-page__rate--${item.value}`"
             type="button"
+            :title="item.hint"
             @click="handleRate(session?.reviewed_note ?? '', item.value)"
           >
-            {{ item.label }}
+            <span class="review-chat-page__rate-name">{{ item.label }}</span>
+            <span class="review-chat-page__rate-hint">{{ item.hint }}</span>
           </button>
         </div>
       </template>
@@ -180,6 +184,11 @@
           :disabled="isStreaming"
           @submit="handleStructuredAnswer"
         />
+      </div>
+      <!-- AI 等待提示（P5-6）：流式生成中提示用户耐心等待，避免反复提交 -->
+      <div v-if="isStreaming" class="review-chat-page__waiting" role="status">
+        <span class="review-chat-page__waiting-spinner" aria-hidden="true" />
+        <span class="review-chat-page__waiting-text">AI 正在思考…请稍候，不要重复提交</span>
       </div>
       <Composer
         v-if="!isStructuredAnswer"
@@ -759,12 +768,6 @@ function handleNavigateNote(path: string) {
   color: var(--brand-ink);
 }
 
-.review-chat-page__progress {
-  flex-shrink: 0;
-  color: var(--ink-3);
-  font-size: 12px;
-}
-
 .review-chat-page__end {
   flex-shrink: 0;
   padding: 7px 14px;
@@ -948,5 +951,147 @@ function handleNavigateNote(path: string) {
 
 .review-chat-page__finish:hover {
   background: var(--brand-strong);
+}
+
+/* ---- 结构化答题卡片容器 ---- */
+.review-chat-page__answer {
+  flex-shrink: 0;
+  margin: 8px 20px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+/* ---- AI 等待提示（防重复提交）---- */
+.review-chat-page__waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin: 8px 20px 0;
+  padding: 9px 14px;
+  border: 1px solid #c3d6cb;
+  border-radius: var(--r-md);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.review-chat-page__waiting-spinner {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(36, 92, 77, 0.25);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: review-waiting-spin 0.8s linear infinite;
+}
+
+@keyframes review-waiting-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- 评级按钮（四档配色）---- */
+.review-chat-page__rate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.review-chat-page__rate-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.review-chat-page__rate-hint {
+  font-size: 10px;
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.review-chat-page__rate:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.review-chat-page__rate--again {
+  border-color: #ecd2cd;
+  background: #fbf1ef;
+  color: #9c4039;
+}
+
+.review-chat-page__rate--again:hover {
+  border-color: var(--state-error);
+  background: #f6e6e3;
+}
+
+.review-chat-page__rate--hard {
+  border-color: #ecd9b4;
+  background: #faf3e4;
+  color: #8a651f;
+}
+
+.review-chat-page__rate--hard:hover {
+  border-color: var(--state-warning);
+  background: #f4ead3;
+}
+
+.review-chat-page__rate--good {
+  border-color: #c9dfd2;
+  background: #edf5f0;
+  color: #2f7d5d;
+}
+
+.review-chat-page__rate--good:hover {
+  border-color: var(--state-success);
+  background: #e2efe9;
+}
+
+.review-chat-page__rate--easy {
+  border-color: #a9c6b8;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.review-chat-page__rate--easy:hover {
+  border-color: var(--brand);
+  background: #c9ddd2;
+}
+
+.review-chat-page__rate:disabled {
+  opacity: 0.55;
+  cursor: default;
+  border-color: var(--line);
+  color: var(--ink-3);
+  background: var(--surface);
+}
+
+.review-chat-page__progress {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
 }
 </style>

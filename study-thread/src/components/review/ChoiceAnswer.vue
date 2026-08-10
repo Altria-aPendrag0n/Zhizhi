@@ -43,20 +43,22 @@ const letters = computed(() => props.options.map((_, i) => OPTION_LETTERS[i] ?? 
 .review-answer__choice {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--border, #e2e2e2);
-  border-radius: 8px;
-  background: var(--card, #ffffff);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  font: inherit;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .review-answer__choice:hover:not(:disabled) {
-  border-color: var(--color-primary, #4f7cff);
-  background: color-mix(in srgb, var(--color-primary, #4f7cff) 6%, transparent);
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  box-shadow: 0 2px 8px rgba(36, 92, 77, 0.08);
 }
 
 .review-answer__choice:disabled {
@@ -66,21 +68,28 @@ const letters = computed(() => props.options.map((_, i) => OPTION_LETTERS[i] ?? 
 
 .review-answer__choice-letter {
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
+  font-family: Georgia, 'Songti SC', serif;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--color-primary, #4f7cff);
-  background: color-mix(in srgb, var(--color-primary, #4f7cff) 10%, transparent);
+  font-weight: 700;
+  color: var(--brand);
+  background: var(--brand-soft);
+  transition: background 0.15s, color 0.15s;
+}
+
+.review-answer__choice:hover:not(:disabled) .review-answer__choice-letter {
+  background: var(--brand);
+  color: var(--brand-ink);
 }
 
 .review-answer__choice-text {
   font-size: 14px;
   line-height: 1.5;
-  color: var(--foreground, #1f2328);
+  color: var(--ink);
 }
 </style>

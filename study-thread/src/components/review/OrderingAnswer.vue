@@ -67,14 +67,14 @@ function submit() {
 .review-answer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
 }
 
 .review-answer__hint {
   margin: 0;
   font-size: 12px;
-  color: var(--muted-foreground, #6b7280);
+  color: var(--ink-2);
 }
 
 .review-answer__steps {
@@ -89,43 +89,59 @@ function submit() {
 .review-answer__step {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border, #e2e2e2);
-  border-radius: 8px;
-  background: var(--card, #ffffff);
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  transition: border-color 0.15s;
+}
+
+.review-answer__step:hover {
+  border-color: #b9c9bf;
 }
 
 .review-answer__step-index {
   flex: none;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  font-family: Georgia, 'Songti SC', serif;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--color-primary, #4f7cff);
-  background: color-mix(in srgb, var(--color-primary, #4f7cff) 10%, transparent);
+  font-weight: 700;
+  color: var(--brand);
+  background: var(--brand-soft);
 }
 
 .review-answer__step-text {
   flex: 1;
   font-size: 14px;
-  color: var(--foreground, #1f2328);
+  line-height: 1.5;
+  color: var(--ink);
 }
 
 .review-answer__move {
   flex: none;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border, #e2e2e2);
-  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
   background: transparent;
   cursor: pointer;
+  font: inherit;
   font-size: 14px;
   line-height: 1;
+  color: var(--ink-2);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.review-answer__move:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
 }
 
 .review-answer__move:disabled {
@@ -135,13 +151,20 @@ function submit() {
 
 .review-answer__submit {
   align-self: flex-end;
-  padding: 8px 20px;
-  border: none;
-  border-radius: 8px;
-  background: var(--color-primary, #4f7cff);
-  color: #fff;
-  font-size: 14px;
+  padding: 9px 22px;
+  border: 1px solid var(--brand);
+  border-radius: var(--r-md);
+  background: var(--brand);
+  color: var(--brand-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
+  transition: background 0.15s;
+}
+
+.review-answer__submit:hover:not(:disabled) {
+  background: var(--brand-strong);
 }
 
 .review-answer__submit:disabled {
