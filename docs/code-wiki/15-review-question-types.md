@@ -29,8 +29,11 @@ export interface ReviewQuestion {
   blanks?: number                     // fill_blank：空位数（默认 1）
   position?: string                   // debate：AI 持方观点
   maxRounds?: number                  // debate：最大辩论轮次（默认 3）
+  answer?: string                     // 标准答案（P5-6）：choice/true_false/fill_blank/ordering 出题时附带，供判正误与反馈对照；自由作答题型缺省
 }
 ```
+
+**标准答案约定（P5-6）**：`choice` 存正确选项文本（与 `options` 某一项完全一致）；`true_false` 存「正确/错误」；`fill_blank` 存填空内容（多空用「；」分隔）；`ordering` 存正确顺序（`1. xxx\n2. yyy`）。`short_answer` / `debate` 自由作答题型不写 `answer`，正误由 AI 对照笔记原文判断。
 
 **兼容性**：旧会话 frontmatter 中的 `review_questions` 无 `type`，`review-session.ts` 的 `parseReviewQuestions` 经 `normalizeQuizQuestion` 自动降级为 `short_answer`，不破坏既有会话。
 
@@ -41,7 +44,7 @@ export interface ReviewQuestion {
 - `REVIEW_QUESTION_TYPES` / `REVIEW_QUESTION_LEVELS`：枚举常量
 - `QUESTION_TYPE_LABELS` / `QUESTION_TYPE_DIFFICULTY`：标签与难度档（★ 1-4）
 - `FIELD_VALIDATORS`：题型特定字段校验（choice 需 options≥2；ordering 需 steps≥2）
-- `normalizeQuizQuestion(raw)`：出题响应规范化——level 非法丢弃、type 缺省/未知降级 `short_answer`、可选字段补默认值（`DEFAULT_MAX_ROUNDS=3` / `DEFAULT_BLANKS=1`）
+- `normalizeQuizQuestion(raw)`：出题响应规范化——level 非法丢弃、type 缺省/未知降级 `short_answer`、可选字段补默认值（`DEFAULT_MAX_ROUNDS=3` / `DEFAULT_BLANKS=1`）、**一问一答校验**（题干含 2 个以上疑问句标记的复合问句直接丢弃）、**标准答案 `answer` 透传**（空白忽略）
 - `serializeAnswer(type, payload)`：组件作答 payload → 消息文本（走既有 `handleSend(content)` 消息流，session 持久化零破坏）
 - `shouldEndDebate(type, round, maxRounds)`：辩论轮次判定（`round >= maxRounds` 结束）
 - `formatQuestionForDisplay(question)`：反馈 prompt 注入文本（含题型标签与选项/步骤）
@@ -63,14 +66,14 @@ export interface ReviewQuestion {
 
 | SKILL | 变更 |
 |---|---|
-| `review-quiz` / `review-cluster`（1.1.0） | 新增「题型选择」章节（六类定义 + 笔记类型引导 + 难度矩阵）；`{difficulty_signal}` 输入；支架式回忆规则（低掌握给线索，避免裸默写）；JSON 输出示例含 `type/options/steps/position/maxRounds` |
-| `review-feedback`（1.1.0） | 新增「按题型反馈」：choice 解释错选、true_false 辨析、fill_blank 逐空判错、ordering 定位错位步骤；`{review_question}` 输入 |
+| `review-quiz` / `review-cluster`（1.1.0） | 新增「题型选择」章节（六类定义 + 笔记类型引导 + 难度矩阵）；`{difficulty_signal}` 输入；支架式回忆规则（低掌握给线索，避免裸默写）；JSON 输出示例含 `type/options/steps/position/maxRounds`；**一问一答规则**（单题单点、禁止复合问句）+ **标准答案 `answer` 字段**（确定答案题型必填） |
+| `review-feedback`（1.1.0） | 新增「按题型反馈」：choice 解释错选、true_false 辨析、fill_blank 逐空判错、ordering 定位错位步骤；`{review_question}` 输入；**`{standard_answer}` 输入 + 首行判定**（`判定：正确/部分正确/错误`，确定答案题型对照标准答案、自由作答对照笔记原文） |
 | `review-debate`（新增 1.0.0） | 辩论对答 prompt：中段反驳/追问、末轮总结评估（立场评价 + 缺口 + 给分） |
 
 **执行器**（`src/api/skills/review-quiz.ts`）：
 
 - `parseQuizResponse` / `parseClusterQuizResponse`：接入 `normalizeQuizQuestion`，全部题目非法时抛错
-- `reviewFollowupStream(question: ReviewQuestion, ...)`：注入题型上下文
+- `reviewFollowupStream(question: ReviewQuestion, ...)`：注入题型上下文 + `standard_answer`（无答案的自由作答题型注入占位文案，由 AI 对照笔记判断）
 - `reviewDebateStream(question, turns, note, provider, clusterNotes?, round, maxRounds)`：辩论流式回复，末轮（`shouldEndDebate` 为真）输出总结
 
 ## 6. 交互 UI（`src/components/review/*` + `ReviewChatPage.vue`）
@@ -85,17 +88,21 @@ export interface ReviewQuestion {
 
 **分派逻辑**（`ReviewChatPage.vue`）：`activeQuestion.type` 经 `STRUCTURED_TYPES` 判断——结构化题型渲染组件并 `serializeAnswer` 后走 `handleSend`；`debate` 渲染轮次指示 + Composer，由 `debateRound`/`debateTurns` 状态机驱动（未达 `maxRounds` 不推进题号，末轮总结后推进）。
 
+**AI 正误判定（P5-6）**：反馈完成后解析首行 `判定：正确/部分正确/错误` → 显示品牌色徽章（正确=成功绿 / 部分正确=警告 / 错误=错误红）于输入区上方，并从消息文本移除该行避免重复；新一轮作答开始或辩论推进题号时清空徽章。
+
 ## 7. 测试覆盖
 
-- `src/review/question-registry.test.ts`（21 例）：normalize 各题型/降级/丢弃、serialize、shouldEndDebate
+- `src/review/question-registry.test.ts`（25 例）：normalize 各题型/降级/丢弃、**复合问句丢弃、answer 透传**、serialize、shouldEndDebate
 - `src/utils/review-difficulty.test.ts`（6 例）：档位阈值边界、classic/fsrs 文本差异、空队列回退
-- `src/api/skills/review-quiz.test.ts`（37 例）：题型字段透传、反馈题型注入、辩论轮次/总结
+- `src/api/skills/review-quiz.test.ts`（39 例）：题型字段透传、反馈题型注入、**standard_answer 注入（有答案/自由作答占位）**、辩论轮次/总结
 - `src/components/review/answers.test.ts`（9 例）：四组件渲染/交互/disabled
-- `src/views/ReviewChatPage.test.ts`（10 例）：结构化分派、3 轮辩论状态机
+- `src/views/ReviewChatPage.test.ts`（12 例）：结构化分派、3 轮辩论状态机、**判定徽章显示与判定行移除**
 - `src/utils/review-session.test.ts`：旧会话 type 降级兼容
 
 ## 8. 降级与风险
 
 - LLM 出题字段不稳定（options 缺项、steps 乱序）→ 校验丢弃该题或降级 `short_answer`，会话不中断
+- 复合问句（题干含 2+ 疑问句标记）→ 视为违反一问一答，直接丢弃该题
+- LLM 反馈未输出判定行 → 前端不显示徽章，反馈文本原样展示（兼容历史会话）
 - debate 拉长会话 → `maxRounds` 默认 3
 - 旧 session 兼容 → 消息流仍为纯字符串，`review_questions` 解析自动补 `type`
