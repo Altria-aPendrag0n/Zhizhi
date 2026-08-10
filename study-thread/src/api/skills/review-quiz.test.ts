@@ -173,12 +173,18 @@ describe('generateReviewQuestions', () => {
     await expect(generateReviewQuestions(note, [], provider)).rejects.toThrow('复习出题失败: 网络超时')
   })
 
-  it('maxTokens 放宽到 2048，避免附带标准答案后 JSON 被截断', async () => {
+  it('maxTokens 放宽到 4096 且禁用思考模式，避免附带标准答案后 JSON 被截断或挤空', async () => {
     const provider = mockProvider([{ type: 'text', content: QUIZ_JSON }])
     await generateReviewQuestions(note, [], provider)
 
-    const call = provider.chat.mock.calls[0][1] as { maxTokens: number }
-    expect(call.maxTokens).toBe(2048)
+    const call = provider.chat.mock.calls[0][1] as { maxTokens: number; disableThinking: boolean }
+    expect(call.maxTokens).toBe(4096)
+    expect(call.disableThinking).toBe(true)
+  })
+
+  it('AI 返回空响应时抛出明确错误提示（而非误导性的 JSON 解析失败）', async () => {
+    const provider = mockProvider([{ type: 'text', content: '   ' }])
+    await expect(generateReviewQuestions(note, [], provider)).rejects.toThrow('AI 返回了空响应')
   })
 
   it('LLM 响应被截断时降级逐题提取，保留可解析的完整题目', async () => {

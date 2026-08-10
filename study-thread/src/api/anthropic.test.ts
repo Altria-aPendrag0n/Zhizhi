@@ -21,7 +21,7 @@ function jsonResponse(status: number, body: ReadableStream<Uint8Array>) {
   })
 }
 
-async function collect(provider: AnthropicProvider, messages: Message[], options?: { enableWebSearch?: boolean; model?: string; tools?: ToolDefinition[] }) {
+async function collect(provider: AnthropicProvider, messages: Message[], options?: { enableWebSearch?: boolean; model?: string; tools?: ToolDefinition[]; disableThinking?: boolean }) {
   const chunks: string[] = []
   for await (const chunk of provider.chat(messages, options)) {
     chunks.push(`${chunk.type}:${chunk.content}`)
@@ -78,6 +78,25 @@ describe('AnthropicProvider', () => {
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
     expect(body.tools).toBeUndefined()
+  })
+
+  it('disableThinking 时请求体附带 thinking disabled（防止思考挤空正文）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, sseBody([
+        JSON.stringify({ type: 'message_start', message: { id: 'm1' } }),
+        JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }),
+        JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '你好' } }),
+        JSON.stringify({ type: 'content_block_stop', index: 0 }),
+        JSON.stringify({ type: 'message_stop' }),
+      ])),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new AnthropicProvider('key', 'https://api.deepseek.com/anthropic', 'deepseek-v4-flash')
+    await collect(provider, messages, { disableThinking: true })
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.thinking).toEqual({ type: 'disabled' })
   })
 
   it('流式解析：thinking_delta 与 text_delta 分别输出', async () => {

@@ -107,7 +107,7 @@ export class OpenAICompatProvider implements LLMProvider {
     messages: Message[],
     options?: ChatOptions,
   ): AsyncIterable<StreamChunk> {
-    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch = false, tools = [] } = options || {}
+    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch = false, tools = [], disableThinking = false } = options || {}
 
     const apiMessages = toApiMessages(messages, systemPrompt)
     const attempts = buildAttempts(enableWebSearch, tools)
@@ -119,6 +119,11 @@ export class OpenAICompatProvider implements LLMProvider {
         messages: apiMessages,
         stream: true,
         max_tokens: maxTokens,
+      }
+      // 显式禁用思考模式（DeepSeek V4-Flash 等默认开启思考，与正文共用 maxTokens 预算，
+      // 出题/摘录等需要稳定 JSON 输出时思考过长会把正文挤空）
+      if (disableThinking) {
+        body.thinking = { type: 'disabled' }
       }
       if (attempt.withWebSearch) {
         body.tools = [{ type: 'web_search' }]

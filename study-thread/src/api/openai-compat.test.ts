@@ -21,7 +21,7 @@ function jsonResponse(status: number, body: ReadableStream<Uint8Array>) {
   })
 }
 
-async function collect(provider: OpenAICompatProvider, messages: Message[], options?: { enableWebSearch?: boolean; tools?: ToolDefinition[] }) {
+async function collect(provider: OpenAICompatProvider, messages: Message[], options?: { enableWebSearch?: boolean; tools?: ToolDefinition[]; disableThinking?: boolean }) {
   const chunks: string[] = []
   for await (const chunk of provider.chat(messages, options)) {
     chunks.push(`${chunk.type}:${chunk.content}`)
@@ -71,6 +71,22 @@ describe('OpenAICompatProvider', () => {
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
     expect(body.tools).toBeUndefined()
+  })
+
+  it('disableThinking 时请求体附带 thinking disabled（防止思考挤空正文）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, sseBody([
+        JSON.stringify({ choices: [{ delta: { content: '你好' } }] }),
+        '[DONE]',
+      ])),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new OpenAICompatProvider('key', 'https://api.deepseek.com', 'deepseek-v4-flash')
+    await collect(provider, messages, { disableThinking: true })
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.thinking).toEqual({ type: 'disabled' })
   })
 
   it('默认（不传 enableWebSearch）请求体无 tools', async () => {

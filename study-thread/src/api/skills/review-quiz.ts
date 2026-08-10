@@ -160,6 +160,17 @@ function extractQuestionsFromTruncated(text: string): Record<string, unknown>[] 
  */
 function parseQuizResponseText(fullResponse: string): unknown {
   const jsonStr = extractJSON(fullResponse)
+  // 空/纯空白响应单独提示：多半是思考模式挤空正文或服务商异常，JSON 解析失败是误导性归因
+  if (!fullResponse.trim()) {
+    logError('review-quiz', '复习出题失败: AI 返回空响应（无任何文本内容）', {
+      response: fullResponse,
+      extracted: jsonStr,
+    })
+    throw new Error(
+      '复习出题失败: AI 返回了空响应（无文本内容）\n' +
+      '可能原因：模型思考模式挤空输出预算、服务商异常或请求被中断。请重试；若反复出现，请在设置中更换模型。',
+    )
+  }
   try {
     return JSON.parse(jsonStr)
   } catch {
@@ -257,8 +268,12 @@ export async function generateReviewQuestions(
   for await (const chunk of provider.chat(messages, {
     systemPrompt,
     temperature: 0.3,
-    // 每题附带标准答案（answer）后出题 JSON 明显变长，1024 易被截断导致解析失败，放宽到 2048
-    maxTokens: 2048,
+    // 每题附带标准答案（answer）后出题 JSON 明显变长；1024 易截断，2048 在多题/长答案时仍偏紧，
+    // 放宽到 4096（配合 disableThinking 关闭思考，正文拥有完整预算）
+    maxTokens: 4096,
+    // 显式关闭思考模式（DeepSeek V4-Flash 等默认开启）：思考与正文共用 maxTokens 预算，
+    // 思考过长时正文被挤空返回空字符串，导致出题 JSON 解析失败（见日志 response 为空）
+    disableThinking: true,
     busyMessage: 'AI 正在生成复习题…',
   })) {
     if (chunk.type === 'text') {
@@ -368,8 +383,10 @@ export async function generateClusterQuestions(
   for await (const chunk of provider.chat(messages, {
     systemPrompt,
     temperature: 0.3,
-    // 簇模式下题目更多且携带 notes 标注，1024 易被截断导致解析失败，放宽到 2048
-    maxTokens: 2048,
+    // 簇模式下题目更多且携带 notes 标注，放宽到 4096（配合 disableThinking 关闭思考）
+    maxTokens: 4096,
+    // 显式关闭思考模式（同 generateReviewQuestions，防止思考挤空正文）
+    disableThinking: true,
     busyMessage: 'AI 正在生成复习题…',
   })) {
     if (chunk.type === 'text') {

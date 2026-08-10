@@ -103,9 +103,11 @@ reviewFollowupStream(question, answer, note, provider): AsyncIterable<StreamChun
 
 流程（出题）：
 1. `getQuizSkill()` → `buildPrompt` 注入：`note_content`（`serializeNoteForReview`：标题/描述/类型/标签/正文，正文截断 4000 字）、`related_notes`（`serializeRelatedNotes`：每条截断 800 字，空则占位）、`learner_profile`（空则占位"按默认难度出题"）。
-2. `provider.chat` 收集完整响应（temperature 0.3，maxTokens 1024）。
+2. `provider.chat` 收集完整响应（temperature 0.3，maxTokens 4096，`disableThinking: true`——显式关闭思考模式，防止 DeepSeek V4-Flash 等模型思考挤空正文；簇模式同参数）。
 3. `extractJSON` + `JSON.parse` + `validateQuizResponse`（questions 非空、每条含合法 `level` 与 `question`）。
 4. 返回 `ReviewQuestion[]`（`{level: 'recognize'|'apply'|'explain', question}`）。
+
+> **空响应防护**（P6）：`parseQuizResponseText` 先检查响应是否为空/纯空白——若为空单独抛出「AI 返回了空响应」提示（指向思考模式挤空预算/服务商异常），避免误报为 JSON 解析失败。`disableThinking` 选项已下沉到 `AnthropicProvider` 与 `OpenAICompatProvider`（请求体 `thinking: {type: 'disabled'}`），供出题/摘录等结构化输出场景复用。
 
 流程（反馈）：`getFeedbackSkill()` → 注入 `note_content` → 以「复习问题/我的回答」两条 user 消息流式调用（temperature 0.5，maxTokens 2048），异常包装为 `error` chunk。
 

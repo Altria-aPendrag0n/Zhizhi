@@ -54,6 +54,13 @@ export interface ChatOptions {
   /** 客户端执行的工具列表：随请求体发送，模型可发起调用 */
   tools?: ToolDefinition[]
   /**
+   * 显式禁用模型思考模式（thinking/reasoning）：
+   * 用于出题、摘录等需要稳定 JSON 输出的场景——思考模式（如 DeepSeek V4-Flash 默认开启）
+   * 会与正文共用 maxTokens 预算，思考过长时正文被截断为空，导致结构化输出解析失败。
+   * 缺省不传，保持服务商默认行为。
+   */
+  disableThinking?: boolean
+  /**
    * 非学习会话的 AI 调用标记（复习出题 / 笔记摘录 / 画像更新 / 连接测试等）：
    * 传入后，等待完整输出的期间会自动显示全局 AI 忙碌遮罩并禁止操作。
    * 学习会话的流式聊天不要传此选项。

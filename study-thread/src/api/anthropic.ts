@@ -75,7 +75,7 @@ export class AnthropicProvider implements LLMProvider {
     messages: Message[],
     options?: ChatOptions,
   ): AsyncIterable<StreamChunk> {
-    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch, tools = [] } = options || {}
+    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch, tools = [], disableThinking = false } = options || {}
 
     // 分离 system 消息和非 system 消息
     const systemMessages = messages
@@ -113,6 +113,12 @@ export class AnthropicProvider implements LLMProvider {
     }
     if (apiTools.length > 0) {
       body.tools = apiTools
+    }
+
+    // 显式禁用思考模式（DeepSeek V4-Flash 等默认开启思考，会与正文共用 maxTokens 预算，
+    // 出题/摘录等需要稳定 JSON 输出的场景下思考过长会把正文挤空，需显式关闭）
+    if (disableThinking) {
+      body.thinking = { type: 'disabled' }
     }
 
     try {
