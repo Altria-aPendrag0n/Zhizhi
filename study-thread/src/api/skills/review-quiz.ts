@@ -13,6 +13,7 @@ import { parseSkill, buildPrompt } from '../../skills/loader'
 import type { LearnerProfile } from '../../utils/learner-profile'
 import { matchConceptExact } from '../../utils/learner-note-link'
 import { extractAllLinks } from '../../parser/wikilink'
+import { logError, logWarn } from '../../utils/logger'
 import {
   DEFAULT_MAX_ROUNDS,
   formatQuestionForDisplay,
@@ -98,6 +99,91 @@ function extractJSON(text: string): string {
 }
 
 /**
+ * 从（可能被截断的）JSON 文本中逐题提取完整对象。
+ *
+ * 整体 JSON.parse 失败时降级使用：定位 `questions` 数组起始后逐个按大括号匹配
+ * 提取完整对象并尝试 JSON.parse，被截断的最后一个不完整对象直接丢弃——从而在
+ * LLM 响应因 maxTokens 限制被截断时，仍能保留所有可用的完整题目。
+ *
+ * 括号匹配跳过字符串内的 `{`/`}`，避免题干中的花括号干扰提取；单个对象解析
+ * 失败时跳过继续，不影响其余题目。
+ */
+function extractQuestionsFromTruncated(text: string): Record<string, unknown>[] {
+  // 只从 questions 数组内部提取，避免把外层对象（含 questions 键）误当题目
+  const qKey = text.indexOf('"questions"')
+  const start = qKey >= 0 ? text.indexOf('[', qKey) : text.indexOf('[')
+  if (start < 0) return []
+  const questions: Record<string, unknown>[] = []
+  let i = start
+  while (i < text.length) {
+    const open = text.indexOf('{', i)
+    if (open < 0) break
+    // 括号匹配：depth 回到 0 即为一个完整对象；跳过字符串内的括号
+    let depth = 0
+    let inString = false
+    let escaped = false
+    let j = open
+    for (; j < text.length; j++) {
+      const ch = text[j]
+      if (inString) {
+        if (escaped) escaped = false
+        else if (ch === '\\') escaped = true
+        else if (ch === '"') inString = false
+        continue
+      }
+      if (ch === '"') inString = true
+      else if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) break
+      }
+    }
+    if (depth !== 0) break // 最后一个对象不完整（被截断），停止提取
+    i = j + 1
+    try {
+      const obj = JSON.parse(text.slice(open, j + 1)) as unknown
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        questions.push(obj as Record<string, unknown>)
+      }
+    } catch {
+      // 单个对象解析失败（可能命中题干内的花括号），跳过继续
+    }
+  }
+  return questions
+}
+
+/**
+ * 解析 LLM 出题响应为可解析对象；整体 JSON.parse 失败时降级为逐题提取。
+ *
+ * 降级成功（提取到 ≥1 题）记录 warn 并返回 { questions }；完全无法解析时
+ * 记录完整响应到日志系统并抛出带日志提示的错误。
+ */
+function parseQuizResponseText(fullResponse: string): unknown {
+  const jsonStr = extractJSON(fullResponse)
+  try {
+    return JSON.parse(jsonStr)
+  } catch {
+    const recovered = extractQuestionsFromTruncated(jsonStr)
+    if (recovered.length > 0) {
+      logWarn('review-quiz', 'LLM 出题响应 JSON 不完整，已降级保留可解析题目', {
+        recovered: recovered.length,
+        responseLength: fullResponse.length,
+        snippet: jsonStr.slice(0, 300),
+      })
+      return { questions: recovered }
+    }
+    // 完整响应与提取结果写入日志，便于在设置页「调试日志」中排查
+    logError('review-quiz', '复习出题失败: 无法解析 LLM 响应为 JSON', {
+      response: fullResponse,
+      extracted: jsonStr,
+    })
+    throw new Error(
+      `复习出题失败: 无法解析 LLM 响应为 JSON（完整响应见设置页「调试日志」）\n响应内容: ${fullResponse.slice(0, 300)}`,
+    )
+  }
+}
+
+/**
  * 从 LLM 响应中提取并规范化复习问题（P5 接入题型注册表）。
  *
  * 逐题经 normalizeQuizQuestion 规范化：type 缺省/未知降级 short_answer，
@@ -171,7 +257,8 @@ export async function generateReviewQuestions(
   for await (const chunk of provider.chat(messages, {
     systemPrompt,
     temperature: 0.3,
-    maxTokens: 1024,
+    // 每题附带标准答案（answer）后出题 JSON 明显变长，1024 易被截断导致解析失败，放宽到 2048
+    maxTokens: 2048,
     busyMessage: 'AI 正在生成复习题…',
   })) {
     if (chunk.type === 'text') {
@@ -181,15 +268,8 @@ export async function generateReviewQuestions(
     }
   }
 
-  const jsonStr = extractJSON(fullResponse)
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(jsonStr)
-  } catch {
-    throw new Error(`复习出题失败: 无法解析 LLM 响应为 JSON\n响应内容: ${fullResponse.slice(0, 200)}`)
-  }
-
-  return parseQuizResponse(parsed)
+  // 解析出题 JSON：整体失败时降级逐题提取，容忍 maxTokens 截断
+  return parseQuizResponse(parseQuizResponseText(fullResponse))
 }
 
 /** 簇模式问题：额外携带涉及笔记标题（P4-4 缺口定位依据） */
@@ -288,7 +368,8 @@ export async function generateClusterQuestions(
   for await (const chunk of provider.chat(messages, {
     systemPrompt,
     temperature: 0.3,
-    maxTokens: 1024,
+    // 簇模式下题目更多且携带 notes 标注，1024 易被截断导致解析失败，放宽到 2048
+    maxTokens: 2048,
     busyMessage: 'AI 正在生成复习题…',
   })) {
     if (chunk.type === 'text') {
@@ -298,15 +379,8 @@ export async function generateClusterQuestions(
     }
   }
 
-  const jsonStr = extractJSON(fullResponse)
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(jsonStr)
-  } catch {
-    throw new Error(`复习出题失败: 无法解析 LLM 响应为 JSON\n响应内容: ${fullResponse.slice(0, 200)}`)
-  }
-
-  return parseClusterQuizResponse(parsed)
+  // 解析出题 JSON：整体失败时降级逐题提取，容忍 maxTokens 截断
+  return parseClusterQuizResponse(parseQuizResponseText(fullResponse))
 }
 
 /**

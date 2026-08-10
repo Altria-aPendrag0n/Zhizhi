@@ -73,6 +73,8 @@ export interface ReviewQuestion {
 **执行器**（`src/api/skills/review-quiz.ts`）：
 
 - `parseQuizResponse` / `parseClusterQuizResponse`：接入 `normalizeQuizQuestion`，全部题目非法时抛错
+- `parseQuizResponseText(fullResponse)`：出题 JSON 解析入口——整体 `JSON.parse` 成功直接返回；失败时降级 `extractQuestionsFromTruncated` 按大括号匹配逐题提取（**容忍 maxTokens 截断**）：能提取到 ≥1 题则保留完整题目、丢弃被截断的末题；完全无法解析时把完整响应写入日志系统（设置页「调试日志」可见）并抛错
+- **`maxTokens: 2048`**：附带标准答案 `answer` 后出题 JSON 明显变长，1024 易被截断导致解析失败（曾报"复习出题失败: 无法解析 LLM 响应为 JSON"），放宽后大幅降低截断概率
 - `reviewFollowupStream(question: ReviewQuestion, ...)`：注入题型上下文 + `standard_answer`（无答案的自由作答题型注入占位文案，由 AI 对照笔记判断）
 - `reviewDebateStream(question, turns, note, provider, clusterNotes?, round, maxRounds)`：辩论流式回复，末轮（`shouldEndDebate` 为真）输出总结
 

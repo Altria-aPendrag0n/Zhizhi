@@ -172,6 +172,41 @@ describe('generateReviewQuestions', () => {
     const provider = mockProvider([{ type: 'error', content: '网络超时' }])
     await expect(generateReviewQuestions(note, [], provider)).rejects.toThrow('复习出题失败: 网络超时')
   })
+
+  it('maxTokens 放宽到 2048，避免附带标准答案后 JSON 被截断', async () => {
+    const provider = mockProvider([{ type: 'text', content: QUIZ_JSON }])
+    await generateReviewQuestions(note, [], provider)
+
+    const call = provider.chat.mock.calls[0][1] as { maxTokens: number }
+    expect(call.maxTokens).toBe(2048)
+  })
+
+  it('LLM 响应被截断时降级逐题提取，保留可解析的完整题目', async () => {
+    // 模拟 maxTokens 截断：第 3 题在 question 字符串中间被切断（JSON 不完整）
+    const truncated =
+      '{"questions":[' +
+      '{"level":"recognize","type":"choice","question":"费曼法的核心是什么？","options":["向他人解释","死记硬背"],"answer":"向他人解释"},' +
+      '{"level":"apply","type":"true_false","question":"费曼法就是复述原文？","answer":"错误"},' +
+      '{"level":"explain","type":"short_answer","question":"为什么费曼法能暴'
+    const provider = mockProvider([{ type: 'text', content: truncated }])
+
+    const questions = await generateReviewQuestions(note, [], provider)
+
+    // 前两题完整保留，被截断的第三题丢弃
+    expect(questions).toHaveLength(2)
+    expect(questions[0]).toMatchObject({ level: 'recognize', type: 'choice', answer: '向他人解释' })
+    expect(questions[1]).toMatchObject({ level: 'apply', type: 'true_false', answer: '错误' })
+  })
+
+  it('整体无法解析时抛错，并将完整响应写入日志系统', async () => {
+    const provider = mockProvider([{ type: 'text', content: '抱歉，这不是 JSON。' }])
+
+    await expect(generateReviewQuestions(note, [], provider)).rejects.toThrow('无法解析 LLM 响应为 JSON')
+
+    const raw = localStorage.getItem('study-thread-logs')
+    expect(raw).toContain('抱歉，这不是 JSON。')
+    expect(raw).toContain('review-quiz')
+  })
 })
 
 describe('shouldSuggestGraduation（P3-4 毕业引导判断）', () => {

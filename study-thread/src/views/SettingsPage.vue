@@ -138,6 +138,28 @@
         <span class="test-result__text">设置已保存</span>
       </div>
     </div>
+
+    <!-- 调试日志 -->
+    <div class="settings-page__logs">
+      <div class="logs-header">
+        <h3 class="logs-title">调试日志</h3>
+        <button class="btn btn-secondary btn--sm" :disabled="logs.length === 0" @click="handleClearLogs">
+          清空
+        </button>
+      </div>
+      <p class="form-hint">
+        记录最近 {{ logs.length }} 条运行时日志（保留 {{ MAX_LOGS }} 条）。LLM 出题解析失败时会在日志中写入完整响应，便于排查 JSON 截断等问题。
+      </p>
+      <div v-if="logs.length === 0" class="logs-empty">暂无日志</div>
+      <div v-else class="logs-list">
+        <div v-for="(log, index) in logs" :key="index" class="logs-item" :class="`logs-item--${log.level}`">
+          <span class="logs-item__time">{{ formatLogTime(log.at) }}</span>
+          <span class="logs-item__module">{{ log.module }}</span>
+          <span class="logs-item__message">{{ log.message }}</span>
+          <pre v-if="log.meta" class="logs-item__meta">{{ log.meta }}</pre>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -147,6 +169,7 @@ import { Eye, EyeOff, CheckCircle, AlertCircle } from '@lucide/vue'
 import { useSettingsStore } from '../stores/settings'
 import { PROVIDER_PRESETS } from '../api/openai-compat'
 import { createProvider } from '../api/provider-factory'
+import { getLogs, clearLogs, MAX_LOGS, type LogEntry } from '../utils/logger'
 import VaultSettings from '../components/vault/VaultSettings.vue'
 import type { ReviewAlgorithm } from '../types'
 
@@ -164,6 +187,26 @@ const showKey = ref(false)
 const testing = ref(false)
 const saved = ref(false)
 const testResult = ref<{ type: 'success' | 'error'; message: string } | null>(null)
+// 调试日志（设置页展示，便于排查运行时问题）
+const logs = ref<LogEntry[]>([])
+
+/** 加载日志（正序展示最新在末尾） */
+function loadLogs() {
+  logs.value = getLogs()
+}
+
+/** 时间仅显示 HH:mm:ss，便于列表紧凑展示 */
+function formatLogTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function handleClearLogs() {
+  clearLogs()
+  logs.value = []
+}
 
 // 服务商预设映射
 const providerPresetKeys: Record<string, { type: 'anthropic' | 'openai-compat'; preset?: string }> = {
@@ -256,11 +299,13 @@ onMounted(() => {
     for (const [key, preset] of Object.entries(PROVIDER_PRESETS)) {
       if (settingsStore.baseUrl === preset.baseUrl) {
         selectedProvider.value = key
+        loadLogs()
         return
       }
     }
     selectedProvider.value = 'custom'
   }
+  loadLogs()
 })
 </script>
 
@@ -515,6 +560,108 @@ onMounted(() => {
 
 .toggle input:checked + .toggle__slider::before {
   transform: translateX(18px);
+}
+
+/* 调试日志面板 */
+.settings-page__logs {
+  margin-top: 36px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.logs-title {
+  margin: 0;
+  font-family: Georgia, 'Songti SC', serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.btn--sm {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+.logs-empty {
+  padding: 22px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  margin-top: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.logs-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--ink-3);
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.logs-item--error {
+  border-left-color: var(--state-error);
+}
+
+.logs-item--warn {
+  border-left-color: var(--state-warning);
+}
+
+.logs-item__time {
+  flex-shrink: 0;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.logs-item__module {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--ink-2);
+  font-size: 11px;
+}
+
+.logs-item__message {
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.logs-item__meta {
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 8px;
+  overflow-x: auto;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink-3) 12%, transparent);
+  color: var(--ink-2);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 @media (max-width: 1240px) {
