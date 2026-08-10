@@ -667,8 +667,8 @@ function handleNavigateNote(path: string) {
 .review-chat-page__header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 8px 20px;
+  gap: 10px;
+  padding: 5px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex-shrink: 0;
@@ -677,7 +677,7 @@ function handleNavigateNote(path: string) {
 .review-chat-page__note {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 }
@@ -686,7 +686,7 @@ function handleNavigateNote(path: string) {
   flex-shrink: 0;
   color: var(--ink-3);
   font-size: 9px;
-  font-weight: 500;
+  font-weight: 450;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -700,9 +700,9 @@ function handleNavigateNote(path: string) {
   background: transparent;
   padding: 0;
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 450;
+  color: var(--ink-3);
   cursor: pointer;
   text-align: left;
 }
@@ -1051,8 +1051,8 @@ function handleNavigateNote(path: string) {
 /* ---- 当前题目（一问一答标注：题干 + 题号 + 题型）---- */
 .review-chat-page__question {
   flex-shrink: 0;
-  margin: 14px 20px 0;
-  padding: 22px 26px;
+  margin: 12px 16px 0;
+  padding: 26px 32px;
   text-align: center;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -1065,11 +1065,11 @@ function handleNavigateNote(path: string) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .review-chat-page__question-tag {
-  padding: 2px 10px;
+  padding: 3px 12px;
   border-radius: 999px;
   background: var(--brand);
   color: var(--brand-ink);
@@ -1078,7 +1078,7 @@ function handleNavigateNote(path: string) {
 }
 
 .review-chat-page__question-type {
-  padding: 2px 10px;
+  padding: 3px 12px;
   border-radius: 999px;
   background: var(--brand-soft);
   color: var(--brand-strong);
@@ -1088,7 +1088,7 @@ function handleNavigateNote(path: string) {
 
 .review-chat-page__question-text {
   margin: 0;
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 650;
   line-height: 1.7;
   color: var(--ink);
@@ -1097,8 +1097,8 @@ function handleNavigateNote(path: string) {
 /* ---- 结构化答题卡片容器 ---- */
 .review-chat-page__answer {
   flex-shrink: 0;
-  margin: 12px 20px 0;
-  padding: 18px 20px;
+  margin: 12px 16px 0;
+  padding: 20px 24px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
