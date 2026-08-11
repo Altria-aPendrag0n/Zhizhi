@@ -163,7 +163,7 @@ npm run fetch:models -- --mirror  # 国内网络使用 hf-mirror 镜像下载
 | Linux | `src-tauri/target/release/bundle/deb/知枝_0.1.0_amd64.deb` | DEB 包 |
 | Linux | `src-tauri/target/release/bundle/appimage/知枝_0.1.0_amd64.AppImage` | AppImage |
 
-### 3.3 仅构建特定平台的安装包
+### 3.4 仅构建特定平台的安装包
 
 修改 `src-tauri/tauri.conf.json` 中的 `bundle.targets`：
 
@@ -183,7 +183,7 @@ npm run fetch:models -- --mirror  # 国内网络使用 hf-mirror 镜像下载
 npm run tauri build -- --debug
 ```
 
-### 3.5 仅构建二进制（不打包安装程序）
+### 3.6 仅构建二进制（不打包安装程序）
 
 ```bash
 cargo build --release
@@ -241,9 +241,64 @@ cargo build --release
 
 ### 4.4 自动更新
 
-V1 不内置自动更新功能。后续可通过以下方式实现：
-- Tauri 的 [updater plugin](https://v2.tauri.app/plugin/updater/)
-- 手动检查 GitHub Releases 最新版本
+应用已内置 Tauri updater 自动更新（设置页「关于知枝」→「检查更新」）：检查到新版本后后台下载安装并自动重启。更新清单（`latest.json`）与安装包托管在 **GitHub Releases**，无需自建服务器。
+
+#### 4.4.1 一次性配置（首次发版前完成）
+
+**① 生成签名密钥对**（任一终端执行，密钥务必私密保存）：
+
+```bash
+npx @tauri-apps/cli signer generate
+```
+
+输出中 `Public key` 即为签名公钥，私钥（`~/.tauri/<app>.key`）与密码用于后续构建。
+
+**② 填入 `src-tauri/tauri.conf.json`** 的 `plugins.updater`：
+
+```json
+{
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/<OWNER>/<REPO>/releases/latest/download/latest.json"
+      ],
+      "pubkey": "<上一步生成的 Public key>"
+    }
+  }
+}
+```
+
+把 `<OWNER>/<REPO>` 替换为真实 GitHub 仓库。
+
+#### 4.4.2 每次发版流程
+
+1. **同步版本号**：`package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 三处版本号一致（见 §3.7）。
+2. **带签名构建**（Windows PowerShell 设置环境变量后执行）：
+
+   ```powershell
+   $env:TAURI_SIGNING_PRIVATE_KEY="<私钥内容>"
+   $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<密钥密码>"
+   npm run tauri build
+   ```
+
+   产物旁的 `*.sig` 文件即签名（未配置密钥则不会生成签名文件）。
+3. **生成更新清单**：
+
+   ```bash
+   node scripts/release-latest.mjs `
+     --base-url=https://github.com/<OWNER>/<REPO>/releases/latest/download `
+     --notes "v0.2.0 更新内容" `
+     --output dist/latest.json
+   ```
+
+   脚本会扫描 `src-tauri/target/release/bundle/` 下各平台安装包与 `.sig`，生成 `latest.json` 并打印待上传清单。
+4. **发布 GitHub Release**：创建对应版本号的 Release，上传 **安装包 + 对应 `.sig` 文件 + `latest.json`** 三个部分（NSIS 安装包是 Windows 自更新的承载格式；`.sig` 缺失会导致客户端签名校验失败无法更新）。
+
+#### 4.4.3 说明
+
+- **客户端更新流程**：`check()` 读取 `latest.json` 比对版本 → `downloadAndInstall()` 后台下载安装 → `relaunch()` 重启。更新失败（网络/签名校验不通过）时应用内降级为错误提示，不影响正常使用。
+- **Windows 仅 NSIS 支持自更新**（MSI 不支持 updater），分发时请以 NSIS 安装包为准。
+- 未签名安装包仍会触发 SmartScreen 拦截，正式版建议购买代码签名证书（见 §4.3）。
 
 ---
 

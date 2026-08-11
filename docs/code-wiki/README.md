@@ -219,7 +219,10 @@ d:\work\Zhizhi\
 | `@codemirror/*` | CodeMirror 6 编辑器（view/state/autocomplete/lang-markdown/language-data/commands/language） |
 | `@lucide/vue` | 图标库 |
 | `@tauri-apps/api` | Tauri IPC（invoke / event listen） |
-| `@tauri-apps/plugin-opener` | 用系统默认程序打开文件（参考资料编辑弹窗） |
+| `@tauri-apps/plugin-opener` | 用系统默认程序打开文件（参考资料编辑弹窗、邮件反馈 mailto） |
+| `@tauri-apps/plugin-dialog` | 原生文件对话框（导出调试日志保存路径） |
+| `@tauri-apps/plugin-updater` | 自动更新：检查 / 下载安装新版本（配合 GitHub Releases latest.json） |
+| `@tauri-apps/plugin-process` | 进程控制：更新安装完成后 relaunch 重启应用 |
 | `@xenova/transformers` | 浏览器内 ONNX 推理，加载本地 embedding 模型 |
 | `d3` | 局部关系图力导向布局 |
 | `js-yaml` | frontmatter / SKILL.md 解析 |
@@ -232,6 +235,9 @@ d:\work\Zhizhi\
 |------|------|
 | `tauri` v2 | 桌面壳与 IPC |
 | `tauri-plugin-opener` | 打开外部文件 |
+| `tauri-plugin-dialog` | 原生文件对话框 |
+| `tauri-plugin-updater` | 自动更新（检查 GitHub Releases latest.json 清单并下载安装） |
+| `tauri-plugin-process` | 进程插件（重启应用） |
 | `serde` / `serde_json` | 命令序列化 |
 | `notify` v6 | 文件变更监听（watch 目录，emit `file-changed` 事件） |
 
@@ -276,6 +282,9 @@ npm run dev            # 浏览器访问 http://localhost:1420
 | `npm run preview` | 预览生产构建 |
 | `npm run test` | 运行全部单元测试（vitest run） |
 | `npm run test:watch` | 监听模式测试 |
+| `npm run fetch:models` | 下载内置 Embedding 模型与 ort wasm（构建前置，可加 `-- --mirror`） |
+| `npm run check:models` | 校验模型资源完整性（`npm run build` 自动执行） |
+| `npm run release:latest` | 生成自动更新清单 latest.json（发版用，见 RUN.md §4.4） |
 | `npm run tauri` | Tauri CLI 透传（`tauri dev` / `tauri build` 等） |
 
 ### 7.4 生产打包

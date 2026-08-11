@@ -174,6 +174,7 @@ CSS Grid 五区布局，全部为具名插槽：
 - 设置页底部「关于知枝」区块（v0.1 发布前新增，为反馈定位版本）。
 - 展示产品名、发布状态（测试版徽标）、数据存放说明（本地 Vault，不自动上传）。
 - 版本号通过 `@tauri-apps/api/app` 的 `getVersion()` 获取（权限由 `core:default` 覆盖）；非 Tauri 环境或获取失败时降级展示默认版本号 `0.1.0`。
+- **自动更新**（v0.1 起）：「检查更新」按钮调用 `@tauri-apps/plugin-updater` 的 `check()` 读取远端 `latest.json`（GitHub Releases 托管）→ 有新版本时 `downloadAndInstall()` 后台下载安装 → `@tauri-apps/plugin-process` 的 `relaunch()` 重启应用；按钮旋转态防重复点击，异常降级为 toast 错误提示。Rust 侧由 `tauri-plugin-updater` + `tauri-plugin-process` 提供能力，`capabilities/default.json` 授予 `updater:default`、`process:default` 权限。发版清单生成与上传流程见 `docs/RUN.md` §4.4。
 - **反馈工具**（v0.1 反馈收集核心通道）：
   - 「导出调试日志」：`dialog.save` 选择保存路径 → `vault-fs.writeFile` 写入格式化反馈全文（版本/平台/最近 30 条日志/反馈指引）；
   - 「复制反馈信息」：`navigator.clipboard.writeText` 复制同样的反馈全文；

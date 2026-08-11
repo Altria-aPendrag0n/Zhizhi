@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import AboutSection from './AboutSection.vue'
 import { logInfo, clearLogs } from '../../utils/logger'
+import { useToast } from '../../composables/useToast'
 
 vi.mock('@tauri-apps/api/app', () => ({
   getVersion: vi.fn().mockResolvedValue('0.1.0-beta'),
@@ -25,6 +26,22 @@ const openerState = vi.hoisted(() => ({
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: openerState.openUrl,
+}))
+
+const updaterState = vi.hoisted(() => ({
+  check: vi.fn(),
+}))
+
+vi.mock('@tauri-apps/plugin-updater', () => ({
+  check: updaterState.check,
+}))
+
+const processState = vi.hoisted(() => ({
+  relaunch: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@tauri-apps/plugin-process', () => ({
+  relaunch: processState.relaunch,
 }))
 
 vi.mock('../../utils/vault-fs', () => ({
@@ -147,4 +164,46 @@ describe('AboutSection 关于知枝', () => {
 
     expect(openerState.openUrl).toHaveBeenCalledTimes(1)
   })
+
+  it('检查更新：无新版本时提示已是最新', async () => {
+    updaterState.check.mockResolvedValueOnce(null)
+    const wrapper = await mountAbout()
+
+    await findButton(wrapper, '检查更新').trigger('click')
+    await flushPromises()
+
+    expect(updaterState.check).toHaveBeenCalledTimes(1)
+    expect(lastToastMessage()).toContain('已是最新版本')
+    expect(processState.relaunch).not.toHaveBeenCalled()
+  })
+
+  it('检查更新：发现新版本时下载安装并重启应用', async () => {
+    const downloadAndInstall = vi.fn().mockResolvedValue(true)
+    updaterState.check.mockResolvedValueOnce({ version: '0.2.0', downloadAndInstall })
+    const wrapper = await mountAbout()
+
+    await findButton(wrapper, '检查更新').trigger('click')
+    await flushPromises()
+
+    expect(downloadAndInstall).toHaveBeenCalledTimes(1)
+    expect(processState.relaunch).toHaveBeenCalledTimes(1)
+  })
+
+  it('检查更新：未配置更新服务或网络异常时提示失败，不影响使用', async () => {
+    updaterState.check.mockRejectedValueOnce(new Error('updater not configured'))
+    const wrapper = await mountAbout()
+
+    await findButton(wrapper, '检查更新').trigger('click')
+    await flushPromises()
+
+    expect(lastToastMessage()).toContain('检查更新失败')
+    expect(processState.relaunch).not.toHaveBeenCalled()
+  })
 })
+
+/** 取最近一条 toast 消息（模块级 toasts 跨用例累积） */
+function lastToastMessage(): string {
+  const { toasts } = useToast()
+  const list = toasts.value
+  return list[list.length - 1]?.message ?? ''
+}

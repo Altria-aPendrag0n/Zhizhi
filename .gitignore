@@ -13,6 +13,7 @@ progress.json
 /test vault/
 study-thread/scripts/*
 !study-thread/scripts/fetch-models.mjs
+!study-thread/scripts/release-latest.mjs
 study-thread.design
 pages/
 partials/

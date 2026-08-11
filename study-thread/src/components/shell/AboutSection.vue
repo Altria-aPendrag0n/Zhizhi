@@ -31,6 +31,18 @@
       本版本为测试版，功能仍在迭代中，数据格式与界面可能变化。遇到问题或想提建议，请使用下方反馈工具，连同问题描述一起发送给我们。
     </p>
 
+    <!-- 应用更新 -->
+    <div class="about-section__update">
+      <div class="about-section__update-info">
+        <p class="about-section__update-label">应用更新</p>
+        <p class="about-section__update-hint">发布新版本后在此检查并自动安装</p>
+      </div>
+      <button class="btn btn-secondary" type="button" :disabled="checkingUpdate" @click="handleCheckUpdate">
+        <RefreshCw :size="15" :class="{ 'is-spinning': checkingUpdate }" />
+        {{ checkingUpdate ? '检查中…' : '检查更新' }}
+      </button>
+    </div>
+
     <!-- 反馈工具 -->
     <div class="about-section__feedback">
       <div class="about-section__feedback-head">
@@ -60,7 +72,9 @@ import { onMounted, ref } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { save } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { Download, Copy, Mail } from '@lucide/vue'
+import { check } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { Download, Copy, Mail, RefreshCw } from '@lucide/vue'
 import { getLogs, type LogEntry } from '../../utils/logger'
 import { writeFile } from '../../utils/vault-fs'
 import { useToast } from '../../composables/useToast'
@@ -170,6 +184,38 @@ async function handleMailFeedback() {
     toast.error(`打开邮件客户端失败：${e instanceof Error ? e.message : String(e)}`)
   }
 }
+
+/** 检查更新中标记（防重复点击） */
+const checkingUpdate = ref(false)
+
+/**
+ * 检查更新：对比最新版本 → 下载安装 → 重启应用。
+ * 未配置更新服务（缺少签名公钥/更新仓库）或网络异常时降级为错误提示，不影响使用。
+ */
+async function handleCheckUpdate() {
+  if (checkingUpdate.value) return
+  checkingUpdate.value = true
+  try {
+    const update = await check()
+    if (!update) {
+      toast.success('已是最新版本')
+      return
+    }
+    toast.info(`发现新版本 v${update.version}，正在后台下载安装…`)
+    await update.downloadAndInstall((progress) => {
+      // 下载过程不打扰用户，仅在下载完成时提示
+      if (progress.event === 'Finished') {
+        toast.info('更新下载完成，正在安装…')
+      }
+    })
+    toast.success('更新已安装，应用即将重启')
+    await relaunch()
+  } catch (e) {
+    toast.error(`检查更新失败：${e instanceof Error ? e.message : String(e)}`)
+  } finally {
+    checkingUpdate.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -256,6 +302,46 @@ async function handleMailFeedback() {
   color: var(--ink-3);
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* 应用更新 */
+.about-section__update {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.about-section__update-info {
+  display: grid;
+  gap: 2px;
+}
+
+.about-section__update-label {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.about-section__update-hint {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.about-section__update .is-spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 反馈工具 */
