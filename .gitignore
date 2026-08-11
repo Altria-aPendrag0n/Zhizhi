@@ -26,3 +26,20 @@ partials/
 /*.png
 /*.png.jpg
 /*.jpg
+
+# 敏感信息文件（环境变量、密钥、凭据等，任何层级均忽略）
+.env
+.env.*
+*.env
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.secret
+*credentials*
+secrets/
+credentials/
+config/credentials
