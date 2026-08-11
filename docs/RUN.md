@@ -205,15 +205,15 @@ cargo build --release
 
 ### 4.1 分发文件清单
 
-> 大小估算已包含内置 Embedding 模型资源（约 60MB），实际以构建产物为准。
+> **体积为 v0.1.0 实测值**（Windows 已实测；macOS/Linux 需在对应平台构建后确认，此处为同架构资源的合理估算）。内置 Embedding 模型资源（约 60MB）经安装器压缩后显著减小。
 
-| 平台 | 文件 | 大小（估） | 说明 |
-|------|------|-----------|------|
-| Windows | `知枝_0.1.0_x64_zh-CN.msi` | ~90 MB | 推荐，支持静默安装和组策略部署 |
-| Windows | `知枝_0.1.0_x64-setup.exe` | ~90 MB | NSIS 安装程序，带语言选择界面 |
-| macOS | `知枝_0.1.0_x64.dmg` | ~95 MB | 拖拽到 Applications 文件夹 |
-| Linux | `知枝_0.1.0_amd64.deb` | ~90 MB | 适用于 Debian/Ubuntu 系 |
-| Linux | `知枝_0.1.0_amd64.AppImage` | ~95 MB | 免安装，直接运行 |
+| 平台 | 文件 | 大小（实测/估） | 说明 |
+|------|------|----------------|------|
+| Windows | `知枝_0.1.0_x64_zh-CN.msi` | ~29 MB（实测） | 推荐，支持静默安装和组策略部署 |
+| Windows | `知枝_0.1.0_x64-setup.exe` | ~28 MB（实测） | NSIS 安装程序，带语言选择界面（自更新的承载格式） |
+| macOS | `知枝_0.1.0_x64.dmg` | ~30 MB（估） | 拖拽到 Applications 文件夹 |
+| Linux | `知枝_0.1.0_amd64.deb` | ~30 MB（估） | 适用于 Debian/Ubuntu 系 |
+| Linux | `知枝_0.1.0_amd64.AppImage` | ~35 MB（估） | 免安装，直接运行 |
 
 ### 4.2 分发方式
 
@@ -224,17 +224,20 @@ cargo build --release
 | **网盘分享** | 小范围测试，快速分享 |
 | **包管理器** | 后续可上架 winget (Windows) / Homebrew (macOS) / Snap (Linux) |
 
-### 4.3 应用签名（可选，推荐正式发布前完成）
+### 4.3 应用签名（当前未签名）
 
-**Windows：**
-- 购买代码签名证书（EV Code Signing Certificate）
-- 用 `signtool` 对 `.msi` 和 `.exe` 签名
-- 避免 SmartScreen 拦截
+> **当前状态**：v0.1 测试版**未购买代码签名证书**，安装包未经数字签名。
+
+**Windows（未签名时的 SmartScreen 拦截）：**
+- 双击安装包时，Windows SmartScreen 可能提示"Windows 已保护你的电脑"
+- 点击 **「更多信息」→「仍要运行」** 即可完成安装（仅首次安装时出现）
+- 规避 SmartScreen 的正式方案是购买代码签名证书（EV Code Signing Certificate），用 `signtool` 对 `.msi` 和 `.exe` 签名
+- 由于自动更新采用 NSIS 自更新，正式版签名证书建议在 v0.1 反馈期后购置
 
 **macOS：**
 - 加入 Apple Developer Program（$99/年）
 - 用 `codesign` 签名，通过公证（notarization）
-- 避免 Gatekeeper 拦截
+- 未签名时 Gatekeeper 会拦截，需在「系统设置 → 隐私与安全性」中点击「仍要打开」
 
 **Linux：**
 - 一般不需要签名，可直接分发
