@@ -112,7 +112,7 @@ reviewFollowupStream(question, answer, note, provider): AsyncIterable<StreamChun
 流程（反馈）：`getFeedbackSkill()` → 注入 `note_content` → 以「复习问题/我的回答」两条 user 消息流式调用（temperature 0.5，maxTokens 2048），异常包装为 `error` chunk。
 
 **SKILL.md 要点**：
-- `review-quiz`（version 1.2.0）：复习伴读出题，3-5 个递进问题（识别→应用→解释），问题不透露答案，按画像调整难度分布（low/空→recognize 为主；medium→recognize+apply 均衡；high→explain 为主；标注"可能已掌握"→只出 explain 挑战题或建议跳过，P3-4）；**题型覆盖强制约束**——整组尽量覆盖多种题型（优先六类各一题，debate 至少一道），避免单一题型（P5 测试各题型交互）。
+- `review-quiz`（version 1.0.0）：复习伴读出题，3-5 个递进问题（识别→应用→解释），问题不透露答案，按画像调整难度分布（low/空→recognize 为主；medium→recognize+apply 均衡；high→explain 为主；标注"可能已掌握"→只出 explain 挑战题或建议跳过，P3-4）。
 - `review-feedback`（version 1.0.0）：费曼式反馈，先肯定再指出缺口，用引导性问题让用户自己补齐，不重复基础概念；提供簇上下文时明确指出回答涉及/应涉及哪条笔记（P4-2）。
 - `review-cluster-quiz`（version 1.0.0，P4-2）：知识网络复习伴读，基于 2-5 条簇内笔记 + wikilink 关系生成关系型问题（联系/区别/因果/适用场景），每问携带 `notes` 标注涉及笔记标题。
 
