@@ -29,14 +29,15 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/<OWNER>/<REPO>/releases/latest/download/latest.json"
+        "https://github.com/Altria-aPendrag0n/Zhizhi/releases/latest/download/latest.json"
       ],
-      "pubkey": "REPLACE_WITH_YOUR_PUBLIC_KEY"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY2OTMwQTY5ODhGN0EzNgpSV1EyZW8rWXBqQnBCZzRxbUVCZVFRTVN1YlRwQ2pDZUFzQ3locUhpQU9oRG54bHEwQSsvUVRqbQo="
     }
   },
   "bundle": {
     "active": true,
     "targets": ["msi", "nsis"],
+    "createUpdaterArtifacts": "v1Compatible",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
