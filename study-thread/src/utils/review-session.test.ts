@@ -15,6 +15,7 @@ import {
   getReviewSessionFilePath,
   findIncompleteReviewSession,
   listReviewSessions,
+  listOngoingReviewNotePaths,
 } from './review-session'
 
 const note: Note = {
@@ -285,6 +286,46 @@ describe('listReviewSessions（资源库「复习会话」列表）', () => {
     const sessions = await listReviewSessions('/vault')
     expect(sessions).toHaveLength(1)
     expect(sessions[0].id).toBe(target.id)
+  })
+})
+
+describe('listOngoingReviewNotePaths（「继续复习」按钮依据）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('收集有未完成会话的笔记路径（跳过已完成与目录）', async () => {
+    const ongoing = createReviewSession(note, questions, new Date('2026-08-10T08:00:00.000Z'))
+    const done = createReviewSession(note, questions, new Date('2026-08-10T09:00:00.000Z'))
+    done.review_completed = true
+    listDir.mockResolvedValue([
+      { name: `review-${ongoing.id}.md`, path: `/vault/sessions/review-${ongoing.id}.md`, is_dir: false },
+      { name: `review-${done.id}.md`, path: `/vault/sessions/review-${done.id}.md`, is_dir: false },
+      { name: 'sub', path: '/vault/sessions/sub', is_dir: true },
+    ])
+    readFile.mockImplementation((path: string) => {
+      if (path.includes(done.id)) return Promise.resolve(serializeSession(done))
+      return Promise.resolve(serializeSession(ongoing))
+    })
+
+    const paths = await listOngoingReviewNotePaths('/vault')
+    expect(paths).toEqual(['notes/费曼学习法.md'])
+  })
+
+  it('路径按规范化键返回（分隔符归一 + 小写），供跨分隔符匹配', async () => {
+    const upper = createReviewSession(makeNote({ path: 'Notes/虾的分类.md', title: '虾的分类' }), questions)
+    listDir.mockResolvedValue([
+      { name: `review-${upper.id}.md`, path: `/vault/sessions/review-${upper.id}.md`, is_dir: false },
+    ])
+    readFile.mockResolvedValue(serializeSession(upper))
+
+    const paths = await listOngoingReviewNotePaths('/vault')
+    expect(paths).toEqual(['notes/虾的分类.md'])
+  })
+
+  it('sessions 目录缺失时返回空数组', async () => {
+    listDir.mockRejectedValue(new Error('ENOENT'))
+    expect(await listOngoingReviewNotePaths('/vault')).toEqual([])
   })
 })
 

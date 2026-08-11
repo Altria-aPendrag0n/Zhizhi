@@ -189,13 +189,14 @@ noteStore.loadNote ──► 合并 Note.review 镜像
   - `loadReviewSession(vaultPath, sessionId)`：解析复习会话文件 → Session（含出题结果、消息与 `review_completed`）。
   - `findIncompleteReviewSession(vaultPath, notePath)`：遍历 `sessions/` 下 `review-*.md`，按 `reviewed_note` 规范化路径（分隔符归一 + 小写）匹配，**跳过 `review_completed: true` 的会话**，返回**最新创建**的未完成会话 id；文件损坏/目录缺失静默跳过。
   - `listReviewSessions(vaultPath)`：列出全部复习会话元信息（id/标题/创建时间/被复习笔记/是否完成/题目数，按创建时间倒序），供资源库「复习会话」分类展示。
+  - `listOngoingReviewNotePaths(vaultPath)`：收集所有存在**未完成**复习会话的笔记规范化路径（跳过 `review_completed: true`），供学习地图判断到期卡片显示「开始复习」还是「继续复习」。
 - **临时会话复用与完成标记（P6）**：复习会话是**按笔记临时生成**的——学习地图「开始复习」前先 `findIncompleteReviewSession`，命中则直接跳转已有会话（**不重复调用 LLM 出题**，出题结果已随会话文件持久化，节省 token）；重新打开时按已作答 user 消息数恢复答题进度。完成复习后（单条模式评级完成 / 簇模式点「完成复习」）将 `review_completed: true` 写回 frontmatter 并持久化——**不再删除会话文件**，保留在资源库「复习会话」分类供回看错题；已完成会话不会被「开始复习」复用，下次到期重新出题。
 - **协作链路**：`LearningHub 开始复习 → findIncompleteReviewSession（未完成则复用，完成则跳过）→ generateReviewQuestions → createReviewSession → saveSessionToVault(isReview) → 复习会话页 → 逐题 reviewFollowupStream → 完成评级/结束 → 标记 review_completed 持久化（保留）`
 
 ### 9.3 复习会话交互 UI（`src/views/ReviewChatPage.vue`）
 
 - **路由**：`/review/:sessionId`（`router/index.ts`）；App 布局中 `/review*` 映射项目 1、隐藏会话列、显示返回按钮。
-- **入口**：学习地图复习视图 `ReviewDueList` 卡片新增「开始复习」按钮 → `LearningHubPage.handleStartReview`（出题 → 创建复习会话 → 跳转）。
+- **入口**：学习地图复习视图 `ReviewDueList` 卡片提供复习按钮 → `LearningHubPage.handleStartReview`（出题 → 创建复习会话 → 跳转）。**「开始复习 / 继续复习」切换**：`LearningHubPage` 挂载时调 `listOngoingReviewNotePaths` 收集有进行中会话的笔记，`ReviewDueList` 通过 `ongoingPaths` prop（规范化路径集合）判断——存在未完成会话的卡片显示黄绿色「继续复习」按钮，其余显示品牌绿「开始复习」。
 - **页面**：复用 `ChatView` + `Composer`；顶部展示被复习笔记标题（可跳详情）与答题进度；`handleSend` 调 `reviewFollowupStream` 流式反馈，逐题推进。
 - **一问一答标注**：题目以 assistant 消息形式**逐题注入会话流**（`appendQuestionMessage`：题号「第 X 题 / 共 N 题」+ 题型标签 + 题干，选择题附选项、排序题附乱序步骤），每次推进题目（含辩论末轮总结）后注入下一题，恢复会话时按当前进度补注入且不重复；结构化题型（选择/判对错/填空/排序）与简答/辩论作答时题目都在会话中可见，用户明确知道当前选项/输入对应哪道题；出题会话首条引导消息不再一次性列出全部问题（改为"共 N 道题，题目会逐题显示在会话中，请在下方作答"），避免"一次回答全部"的误解。
 - **答错红色提示随消息流（P5-6 增强）**：AI 反馈首行的"判定：正确/部分正确/错误"解析后**不再渲染为页面底部固定徽章**，而是转换为内联徽章 HTML（`renderVerdictHtml`：`<div class="review-verdict is-correct|is-partial|is-wrong">`）注入反馈消息开头，**随消息流显示在该题下方、下一道题之前**；判定行从正文移除（`stripVerdictLine`），样式由 `ChatMessage.vue` 的 `:deep(.review-verdict)` 提供（正确绿 / 部分正确黄 / 错误红）。

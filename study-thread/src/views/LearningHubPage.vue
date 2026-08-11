@@ -43,6 +43,7 @@
           :tasks="reviewStore.dueTasks"
           :boosted-paths="reviewStore.boostedNotePaths"
           :graduated-tasks="reviewStore.graduatedTasks"
+          :ongoing-paths="ongoingNotePaths"
           @rate="handleRate"
           @open="handleOpenReview"
           @start="handleStartReview"
@@ -143,7 +144,7 @@ import { createProvider } from '../api/provider-factory'
 import { generateReviewQuestions, generateClusterQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
 import { loadLearnerProfile, describeLearnerProfile } from '../utils/learner-profile'
 import { describeDifficultyContext } from '../utils/review-difficulty'
-import { buildReviewRelatedNotes, createReviewSession, findIncompleteReviewSession } from '../utils/review-session'
+import { buildReviewRelatedNotes, createReviewSession, findIncompleteReviewSession, listOngoingReviewNotePaths } from '../utils/review-session'
 import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
 import ReviewDueList from '../components/review/ReviewDueList.vue'
@@ -158,6 +159,9 @@ const toast = useToast()
 
 /** 当前视图：由左侧"学习地图切换管理栏"控制；默认复习视图，支持 ?view=review|network 深链接 */
 const currentView = ref<'review' | 'network'>(route.query.view === 'network' ? 'network' : 'review')
+
+/** 存在未完成复习会话的笔记路径集合（规范化键），供 ReviewDueList 显示「继续复习」 */
+const ongoingNotePaths = ref<Set<string>>(new Set())
 
 /** 切换学习地图视图并同步 URL query，保证外部入口（主界面待复习 → view=review）可直达 */
 function switchView(view: 'review' | 'network') {
@@ -189,8 +193,21 @@ onMounted(() => {
   // 加载复习队列（vault 就绪时；未打开 vault 时队列为空），并补录存量笔记（幂等）
   if (vaultStore.vaultPath) {
     void reviewStore.syncQueueWithNotes(vaultStore.vaultPath)
+    // 收集有进行中复习会话的笔记，供「开始复习 / 继续复习」按钮切换
+    void refreshOngoingSessions()
   }
 })
+
+/** 刷新进行中复习会话的笔记路径集合（失败静默置空，不影响复习列表） */
+async function refreshOngoingSessions() {
+  const vaultPath = vaultStore.vaultPath
+  if (!vaultPath) return
+  try {
+    ongoingNotePaths.value = new Set(await listOngoingReviewNotePaths(vaultPath))
+  } catch {
+    ongoingNotePaths.value = new Set()
+  }
+}
 
 /** 复习评级：回写复习队列并轻提示下一次间隔 */
 async function handleRate(task: ReviewTask, rating: ReviewRating) {

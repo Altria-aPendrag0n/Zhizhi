@@ -44,11 +44,12 @@
       <div class="review-card__actions" @click.stop>
         <button
           class="review-card__start"
+          :class="{ 'is-ongoing': isOngoing(task) }"
           type="button"
-          title="进入 AI 复习会话"
+          :title="isOngoing(task) ? '继续上次的复习会话' : '进入 AI 复习会话'"
           @click="$emit('start', task)"
         >
-          开始复习
+          {{ isOngoing(task) ? '继续复习' : '开始复习' }}
         </button>
         <button
           v-for="rating in RATINGS"
@@ -102,7 +103,13 @@
 import { ref, computed } from 'vue'
 import type { ReviewRating, ReviewTask } from '../../types'
 
-const props = defineProps<{ tasks: ReviewTask[]; boostedPaths?: string[]; graduatedTasks?: ReviewTask[] }>()
+const props = defineProps<{
+  tasks: ReviewTask[]
+  boostedPaths?: string[]
+  graduatedTasks?: ReviewTask[]
+  /** 存在未完成复习会话的笔记路径集合（规范化：分隔符归一 + 小写），命中显示「继续复习」 */
+  ongoingPaths?: Set<string>
+}>()
 
 defineEmits<{
   rate: [task: ReviewTask, rating: ReviewRating]
@@ -118,6 +125,16 @@ const graduatedList = computed(() => props.graduatedTasks ?? [])
 /** 该笔记是否关联到画像 low/medium 置信度概念（画像弱项，P3-3 提权标记） */
 function isBoosted(task: ReviewTask): boolean {
   return props.boostedPaths?.includes(task.notePath) ?? false
+}
+
+/** 路径规范化键：统一分隔符 + 小写（与 review-session 收集的 ongoing 路径一致） */
+function pathKey(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase()
+}
+
+/** 该笔记是否存在未完成的复习会话（有则按钮显示「继续复习」） */
+function isOngoing(task: ReviewTask): boolean {
+  return props.ongoingPaths?.has(pathKey(task.notePath)) ?? false
 }
 
 const RATINGS: { value: ReviewRating; label: string; hint: string }[] = [
@@ -397,6 +414,19 @@ function ratingLabel(rating: ReviewRating | null): string {
   background: var(--brand-strong);
   box-shadow: 0 3px 10px rgba(36, 92, 77, 0.3);
   transform: translateY(-1px);
+}
+
+/* 「继续复习」：存在未完成复习会话时黄绿色按钮 */
+.review-card__start.is-ongoing {
+  border-color: #a3b72f;
+  background: #bdd441;
+  color: #37450c;
+  box-shadow: 0 2px 6px rgba(150, 176, 40, 0.3);
+}
+
+.review-card__start.is-ongoing:hover {
+  background: #a9be35;
+  box-shadow: 0 3px 10px rgba(150, 176, 40, 0.38);
 }
 
 .review-card__rate:hover {

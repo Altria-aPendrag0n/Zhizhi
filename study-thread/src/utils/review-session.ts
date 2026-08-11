@@ -276,3 +276,34 @@ export async function listReviewSessions(vaultPath: string): Promise<ReviewSessi
   result.sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0))
   return result
 }
+
+/**
+ * 收集所有存在"未完成复习会话"的笔记规范化路径（学习地图「继续复习」按钮依据）。
+ *
+ * 遍历 `sessions/` 下 `review-*.md`，过滤掉 `review_completed: true` 的已完成会话，
+ * 返回其 `reviewed_note` 的规范化路径列表（分隔符归一 + 小写，与 notePathKey 一致），
+ * 供 ReviewDueList 判断某张到期卡片是「开始复习」还是「继续复习」。
+ * 目录缺失/文件损坏静默跳过。
+ */
+export async function listOngoingReviewNotePaths(vaultPath: string): Promise<string[]> {
+  let entries: Awaited<ReturnType<typeof listDir>>
+  try {
+    entries = await listDir(`${vaultPath}/sessions`)
+  } catch {
+    return []
+  }
+  const result = new Set<string>()
+  for (const entry of entries) {
+    if (entry.is_dir || !entry.name.startsWith('review-') || !entry.name.endsWith('.md')) continue
+    try {
+      const raw = await readFile(entry.path)
+      const { meta } = parseFrontmatter(raw)
+      if (meta.kind !== 'review' || !meta.reviewed_note) continue
+      if (meta.review_completed === true) continue
+      result.add(notePathKey(toString(meta.reviewed_note)))
+    } catch {
+      // 损坏/不可读文件跳过，不影响收集
+    }
+  }
+  return [...result]
+}
