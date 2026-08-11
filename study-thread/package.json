@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "npm run check:models && vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fetch:models": "node scripts/fetch-models.mjs",
+    "check:models": "node scripts/fetch-models.mjs --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

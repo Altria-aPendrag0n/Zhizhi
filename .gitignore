@@ -11,7 +11,8 @@ progress.json
 
 # 测试与验证产物
 /test vault/
-study-thread/scripts/
+study-thread/scripts/*
+!study-thread/scripts/fetch-models.mjs
 study-thread.design
 pages/
 partials/

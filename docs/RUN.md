@@ -131,12 +131,25 @@ npm run tauri build
 ```
 
 **构建过程：**
-1. `vue-tsc --noEmit` 检查 TypeScript 类型
-2. `vite build` 打包前端为静态文件
-3. `cargo build --release` 编译 Rust 后端为优化二进制
-4. 将前端 + 后端 + 资源文件打包为安装包
+1. `check:models` 校验内置 Embedding 模型资源（缺失则报错，见下方 3.2）
+2. `vue-tsc --noEmit` 检查 TypeScript 类型
+3. `vite build` 打包前端为静态文件
+4. `cargo build --release` 编译 Rust 后端为优化二进制
+5. 将前端 + 后端 + 资源文件打包为安装包
 
 **构建耗时：** 首次约 5-10 分钟（Rust 编译），后续增量约 2-3 分钟。
+
+### 3.2 内置 Embedding 模型资源（构建前置条件）
+
+应用内置离线 Embedding 模型（约 60MB，含 onnxruntime wasm），用于本地知识检索。这些二进制资源不纳入版本库，**换机器/CI 构建前需先补齐**：
+
+```bash
+npm run fetch:models            # 下载模型 + 复制 ort wasm（幂等，已存在跳过）
+npm run fetch:models -- --mirror  # 国内网络使用 hf-mirror 镜像下载
+```
+
+- 构建时 `npm run build` 会自动执行 `check:models` 校验；资源缺失会**直接报错**并提示运行上面的命令，不会产出残缺安装包。
+- 开发机本地已缓存该目录时无需重复执行。
 
 ### 3.2 构建产物位置
 
@@ -176,7 +189,7 @@ cargo build --release
 
 产物在 `src-tauri/target/release/study-thread.exe`（Windows）。
 
-### 3.6 更新版本号
+### 3.7 更新版本号
 
 打包前在以下文件中更新版本号：
 
@@ -190,13 +203,15 @@ cargo build --release
 
 ### 4.1 分发文件清单
 
+> 大小估算已包含内置 Embedding 模型资源（约 60MB），实际以构建产物为准。
+
 | 平台 | 文件 | 大小（估） | 说明 |
 |------|------|-----------|------|
-| Windows | `知枝_0.1.0_x64_zh-CN.msi` | ~5 MB | 推荐，支持静默安装和组策略部署 |
-| Windows | `知枝_0.1.0_x64-setup.exe` | ~5 MB | NSIS 安装程序，带语言选择界面 |
-| macOS | `知枝_0.1.0_x64.dmg` | ~8 MB | 拖拽到 Applications 文件夹 |
-| Linux | `知枝_0.1.0_amd64.deb` | ~5 MB | 适用于 Debian/Ubuntu 系 |
-| Linux | `知枝_0.1.0_amd64.AppImage` | ~8 MB | 免安装，直接运行 |
+| Windows | `知枝_0.1.0_x64_zh-CN.msi` | ~90 MB | 推荐，支持静默安装和组策略部署 |
+| Windows | `知枝_0.1.0_x64-setup.exe` | ~90 MB | NSIS 安装程序，带语言选择界面 |
+| macOS | `知枝_0.1.0_x64.dmg` | ~95 MB | 拖拽到 Applications 文件夹 |
+| Linux | `知枝_0.1.0_amd64.deb` | ~90 MB | 适用于 Debian/Ubuntu 系 |
+| Linux | `知枝_0.1.0_amd64.AppImage` | ~95 MB | 免安装，直接运行 |
 
 ### 4.2 分发方式
 

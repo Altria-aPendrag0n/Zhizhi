@@ -31,6 +31,11 @@ env.backends.onnx.wasm.wasmPaths = '/models/ort/'
 - `Xenova/all-MiniLM-L6-v2/`：config.json、tokenizer.json、tokenizer_config.json、special_tokens_map.json、vocab.txt、onnx/model_quantized.onnx（≥5MB）。
 - `ort/`：`ort-wasm-simd-threaded.wasm`、`ort-wasm-simd.wasm`、`ort-wasm-threaded.wasm`、`ort-wasm.wasm`（各 ≥1MB）。
 
+**资源获取与构建门禁**（v0.1 发布准备）：`public/models/` 被 `.gitignore` 忽略，换机器/CI 构建会静默缺失。`scripts/fetch-models.mjs` 负责补齐：
+- `npm run fetch:models`：从 HuggingFace 下载模型文件 + 从 `node_modules/onnxruntime-web/dist` 复制 ort wasm（幂等，已存在跳过）；`--mirror` 走 hf-mirror 国内镜像，`--force` 强制覆盖。
+- `npm run check:models`（`--check`）：校验必需文件存在且体积达标，缺失时非零退出并提示先运行 `fetch:models`。
+- `package.json` 的 `build` 脚本前置 `check:models`，因此 `npm run tauri build` 在资源缺失时会直接报错，杜绝"打包出无模型应用"。
+
 ### 2.2 类 `EmbeddingEngine`
 
 | 成员 | 说明 |
