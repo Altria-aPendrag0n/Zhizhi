@@ -33,6 +33,8 @@ export interface Session {
   review_questions?: ReviewQuestion[]
   /** 复习簇内全部笔记路径（P4 簇复习，首条为中心被复习笔记；单条复习不设置） */
   review_cluster?: string[]
+  /** 复习会话是否已完成（评级/结束复习后置 true）；已完成会话保留在资源库供回看，不再被「开始复习」复用 */
+  review_completed?: boolean
 }
 
 export interface Message {

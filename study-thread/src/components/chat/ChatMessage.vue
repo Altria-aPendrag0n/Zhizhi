@@ -233,6 +233,55 @@ function handleBodyClick(event: MouseEvent) {
   font-weight: 650;
 }
 
+/* 复习判定徽章（P5-6）：AI 反馈消息首行的正误判定，随消息流渲染在该题下、下一道题前 */
+.chat-message__body :deep(.review-verdict) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+}
+
+.chat-message__body :deep(.review-verdict b) {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.chat-message__body :deep(.review-verdict span) {
+  color: var(--ink-2);
+  font-size: 11px;
+}
+
+.chat-message__body :deep(.review-verdict.is-correct) {
+  background: color-mix(in srgb, var(--state-success) 10%, transparent);
+}
+
+.chat-message__body :deep(.review-verdict.is-correct b) {
+  background: var(--state-success);
+}
+
+.chat-message__body :deep(.review-verdict.is-partial) {
+  background: color-mix(in srgb, var(--state-warning) 12%, transparent);
+}
+
+.chat-message__body :deep(.review-verdict.is-partial b) {
+  background: var(--state-warning);
+}
+
+.chat-message__body :deep(.review-verdict.is-wrong) {
+  background: color-mix(in srgb, var(--state-error) 10%, transparent);
+}
+
+.chat-message__body :deep(.review-verdict.is-wrong b) {
+  background: var(--state-error);
+}
+
 .chat-message__body :deep(blockquote) {
   margin: 24px 0;
   padding: 17px 19px;

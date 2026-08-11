@@ -181,6 +181,7 @@ export async function loadReviewSession(vaultPath: string, sessionId: string): P
       reviewed_note: toString(meta.reviewed_note) || undefined,
       review_questions: reviewQuestions,
       review_cluster: parseReviewCluster(meta.review_cluster),
+      review_completed: meta.review_completed === true,
     }
   } catch {
     return null
@@ -191,11 +192,12 @@ export async function loadReviewSession(vaultPath: string, sessionId: string): P
  * 查找指定笔记是否存在未完成的复习会话（临时会话复用：不重复调用 AI 出题）。
  *
  * 遍历 `sessions/` 下 `review-*.md` 文件，解析 frontmatter 的 `reviewed_note`，
- * 按规范化路径（分隔符归一 + 小写）匹配该笔记；命中则返回**最新创建**的一个会话 id，
- * 无匹配返回 null。文件缺失/损坏的条目静默跳过，不抛错。
+ * 按规范化路径（分隔符归一 + 小写）匹配该笔记；命中且**未完成**（`review_completed` 非 true）
+ * 则返回**最新创建**的一个会话 id，无匹配返回 null。文件缺失/损坏的条目静默跳过，不抛错。
  *
  * 调用方（学习地图「开始复习」）命中后直接跳转已有会话，节省一次 LLM 出题 token；
- * 复习会话文件在用户完成复习（评级/结束）后由 ReviewChatPage 删除。
+ * 复习会话在用户完成复习（评级/结束）后被标记 `review_completed: true` 保留在资源库，
+ * 不再被本函数命中，下次到期复习会重新出题。
  */
 export async function findIncompleteReviewSession(vaultPath: string, notePath: string): Promise<string | null> {
   const key = notePathKey(notePath)
@@ -212,6 +214,7 @@ export async function findIncompleteReviewSession(vaultPath: string, notePath: s
       const raw = await readFile(entry.path)
       const { meta } = parseFrontmatter(raw)
       if (meta.kind !== 'review' || !meta.reviewed_note) continue
+      if (meta.review_completed === true) continue
       if (notePathKey(toString(meta.reviewed_note)) !== key) continue
       candidates.push({
         id: toString(meta.session_id) || sessionIdFromFileName(entry.name),
@@ -224,4 +227,52 @@ export async function findIncompleteReviewSession(vaultPath: string, notePath: s
   if (candidates.length === 0) return null
   candidates.sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0))
   return candidates[0].id || null
+}
+
+/** 复习会话列表条目（资源库「复习会话」分类展示用） */
+export interface ReviewSessionMeta {
+  id: string
+  title: string
+  created: string
+  /** 被复习笔记路径（可缺省，兼容损坏/旧文件） */
+  reviewedNote?: string
+  /** 会话是否已完成（评级/结束复习后标记） */
+  completed: boolean
+  /** 出题数量（frontmatter review_questions 解析失败时为 0） */
+  questionCount: number
+}
+
+/**
+ * 列出 vault 中全部复习会话（按创建时间倒序），供资源库「复习会话」分类展示。
+ * 遍历 `sessions/` 下 `review-*.md`，解析 frontmatter；目录缺失/文件损坏静默跳过。
+ */
+export async function listReviewSessions(vaultPath: string): Promise<ReviewSessionMeta[]> {
+  let entries: Awaited<ReturnType<typeof listDir>>
+  try {
+    entries = await listDir(`${vaultPath}/sessions`)
+  } catch {
+    return []
+  }
+  const result: ReviewSessionMeta[] = []
+  for (const entry of entries) {
+    if (entry.is_dir || !entry.name.startsWith('review-') || !entry.name.endsWith('.md')) continue
+    try {
+      const raw = await readFile(entry.path)
+      const { meta } = parseFrontmatter(raw)
+      if (meta.kind !== 'review') continue
+      const questions = parseReviewQuestions(meta.review_questions)
+      result.push({
+        id: toString(meta.session_id) || sessionIdFromFileName(entry.name),
+        title: toString(meta.title) || '复习会话',
+        created: toString(meta.created) || '1970-01-01T00:00:00.000Z',
+        reviewedNote: toString(meta.reviewed_note) || undefined,
+        completed: meta.review_completed === true,
+        questionCount: questions?.length ?? 0,
+      })
+    } catch {
+      // 损坏/不可读文件跳过，不影响列表
+    }
+  }
+  result.sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0))
+  return result
 }

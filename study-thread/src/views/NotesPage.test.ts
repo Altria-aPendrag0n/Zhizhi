@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
   deleteReference: vi.fn().mockResolvedValue(true),
   updateReference: vi.fn().mockImplementation((meta: unknown) => Promise.resolve(meta)),
   loadReferencePreview: vi.fn().mockResolvedValue(''),
+  listReviewSessions: vi.fn().mockResolvedValue([]),
 }))
 
 interface NotesPageTestGlobals {
@@ -93,6 +94,10 @@ vi.mock('../composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
+vi.mock('../utils/review-session', () => ({
+  listReviewSessions: state.listReviewSessions,
+}))
+
 function testGlobals() {
   return globalThis as unknown as NotesPageTestGlobals
 }
@@ -130,6 +135,8 @@ describe('NotesPage', () => {
     state.deleteReference.mockClear()
     state.updateReference.mockClear()
     state.loadReferencePreview.mockClear()
+    state.listReviewSessions.mockClear()
+    state.listReviewSessions.mockResolvedValue([])
     const globals = testGlobals()
     if (globals.__notesPageRoute) globals.__notesPageRoute.query = {}
     if (globals.__notesPageVaultPath) globals.__notesPageVaultPath.value = null
@@ -210,6 +217,56 @@ describe('NotesPage', () => {
     const notesButton = wrapper.findAll('.sidebar-item').find((b) => b.text() === '笔记')!
     await notesButton.trigger('click')
     expect(state.routerPush).toHaveBeenCalledWith({ query: {} })
+    wrapper.unmount()
+  })
+
+  it('点击「复习会话」携带 tab query 并展示复习会话列表', async () => {
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    state.listReviewSessions.mockResolvedValue([
+      {
+        id: 'review_1',
+        title: '复习：费曼学习法',
+        created: '2026-08-10T08:00:00.000Z',
+        reviewedNote: '/vault/notes/费曼学习法.md',
+        completed: true,
+        questionCount: 3,
+      },
+    ])
+    const wrapper = createWrapper()
+
+    const reviewsButton = wrapper.findAll('.sidebar-item').find((b) => b.text() === '复习会话')!
+    await reviewsButton.trigger('click')
+    expect(state.routerPush).toHaveBeenCalledWith({ query: { tab: 'reviews' } })
+
+    testGlobals().__notesPageRoute!.query = { tab: 'reviews' }
+    await flushPromises()
+
+    expect(state.listReviewSessions).toHaveBeenCalledWith('/vault')
+    expect(wrapper.text()).toContain('复习：费曼学习法')
+    expect(wrapper.text()).toContain('已完成')
+    wrapper.unmount()
+  })
+
+  it('点击复习会话条目跳转到对应复习页', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'reviews' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    state.listReviewSessions.mockResolvedValue([
+      {
+        id: 'review_1',
+        title: '复习：费曼学习法',
+        created: '2026-08-10T08:00:00.000Z',
+        reviewedNote: '/vault/notes/费曼学习法.md',
+        completed: false,
+        questionCount: 3,
+      },
+    ])
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    await wrapper.find('.review-session-item').trigger('click')
+    expect(state.routerPush).toHaveBeenCalledWith('/review/review_1')
     wrapper.unmount()
   })
 

@@ -209,7 +209,7 @@ describe('ReviewChatPage', () => {
     expect(wrapper.text()).toContain('1 / 2')
   })
 
-  it('反馈首行带判定时显示 AI 正误徽章，并从消息中移除判定行（P5-6）', async () => {
+  it('反馈首行带判定时转换为消息流内联徽章（位于该题下、下一道题前）（P5-6）', async () => {
     mocks.reviewFollowupStream.mockReturnValue((async function* () {
       yield { type: 'text', content: '判定：正确\n你的理解很准确。' }
     })())
@@ -220,9 +220,11 @@ describe('ReviewChatPage', () => {
     await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '通过教别人来检验理解')
     await flushPromises()
 
+    // 判定转换为内联徽章 HTML 注入反馈消息（消息流中该题下、下一道题前），不再有底部独立徽章
     expect(wrapper.text()).toContain('回答正确')
     expect(wrapper.text()).toContain('由 AI 依据标准答案/笔记原文判断')
-    // 判定行已从消息文本中移除，避免与徽章重复
+    expect(wrapper.find('.review-chat-page__judgment').exists()).toBe(false)
+    // 判定行已从正文移除，避免与徽章重复
     expect(wrapper.text()).not.toContain('判定：正确')
   })
 
@@ -378,7 +380,7 @@ describe('ReviewChatPage', () => {
     expect(badges[0].text()).toContain('AI 缺口')
   })
 
-  it('单条模式评级完成后删除临时复习会话文件（下次开始复习重新出题）', async () => {
+  it('单条模式评级完成后标记会话完成并持久化，不删除会话文件（资源库保留供回看）', async () => {
     const wrapper = createWrapper()
     await flushPromises()
     await wrapper.find('.review-chat-page__end').trigger('click')
@@ -386,11 +388,13 @@ describe('ReviewChatPage', () => {
     await wrapper.find('.review-chat-page__rate--good').trigger('click')
     await flushPromises()
 
-    // getReviewSessionFilePath('/vault', 'review_1') = /vault/sessions/review-review_1.md
-    expect(mocks.deleteFile).toHaveBeenCalledWith('/vault/sessions/review-review_1.md')
+    // 不再删除临时会话文件，而是标记 review_completed 并重新持久化
+    expect(mocks.deleteFile).not.toHaveBeenCalled()
+    const lastCall = mocks.saveSessionToVault.mock.calls[mocks.saveSessionToVault.mock.calls.length - 1]
+    expect(lastCall[1]).toMatchObject({ id: 'review_1', review_completed: true })
   })
 
-  it('簇模式完成复习后删除临时复习会话文件', async () => {
+  it('簇模式完成复习后标记会话完成并持久化，不删除会话文件', async () => {
     mocks.loadReviewSession.mockResolvedValue(
       makeSession({ review_cluster: ['notes/费曼学习法.md', 'notes/主动回忆.md'] }),
     )
@@ -406,11 +410,14 @@ describe('ReviewChatPage', () => {
     await items[1].find('.review-chat-page__rate--easy').trigger('click')
     await flushPromises()
 
-    // 评级完成前不删除；点「完成复习」后删除临时会话文件
+    // 评级完成前不标记完成、不删除
     expect(mocks.deleteFile).not.toHaveBeenCalled()
     await wrapper.find('.review-chat-page__finish').trigger('click')
     await flushPromises()
-    expect(mocks.deleteFile).toHaveBeenCalledWith('/vault/sessions/review-review_1.md')
+    // 完成后标记 review_completed 持久化，文件保留
+    expect(mocks.deleteFile).not.toHaveBeenCalled()
+    const lastCall = mocks.saveSessionToVault.mock.calls[mocks.saveSessionToVault.mock.calls.length - 1]
+    expect(lastCall[1]).toMatchObject({ id: 'review_1', review_completed: true })
   })
 
   it('重新打开会话时按已作答消息数恢复答题进度（复用题目不重复出题）', async () => {

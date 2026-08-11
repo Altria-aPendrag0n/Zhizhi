@@ -19,6 +19,14 @@
           >
             参考资料
           </button>
+          <button
+            class="sidebar-item"
+            :class="{ active: activeTab === 'reviews' }"
+            type="button"
+            @click="goReviews"
+          >
+            复习会话
+          </button>
         </nav>
       </aside>
 
@@ -55,7 +63,7 @@
             />
           </template>
 
-          <template v-else>
+          <template v-else-if="activeTab === 'references'">
             <section class="intro">
               <div>
                 <div class="eyebrow">Reference library</div>
@@ -82,6 +90,24 @@
               @delete="handleEditDelete"
             />
           </template>
+
+          <template v-else>
+            <section class="intro">
+              <div>
+                <div class="eyebrow">Review history</div>
+                <h2>复习过的会话都在这里</h2>
+              </div>
+              <p>
+                完成复习后会话不再删除，随时回来重看错题、反馈与缺口笔记。
+              </p>
+            </section>
+
+            <ReviewSessionList
+              :sessions="reviewSessions"
+              :loading="reviewSessionsLoading"
+              @open="handleOpenReviewSession"
+            />
+          </template>
         </template>
       </div>
     </div>
@@ -98,6 +124,8 @@ import { useToast } from '../composables/useToast'
 import NoteList from '../components/notes/NoteList.vue'
 import ReferenceList from '../components/references/ReferenceList.vue'
 import ReferenceEditDialog from '../components/references/ReferenceEditDialog.vue'
+import ReviewSessionList from '../components/review/ReviewSessionList.vue'
+import { listReviewSessions, type ReviewSessionMeta } from '../utils/review-session'
 import type { ReferenceMeta } from '../types'
 
 const route = useRoute()
@@ -109,20 +137,38 @@ const toast = useToast()
 const selectedNotePath = ref<string>()
 const selectedReferencePath = ref<string>()
 const editVisible = ref(false)
+const reviewSessions = ref<ReviewSessionMeta[]>([])
+const reviewSessionsLoading = ref(false)
 
 const selectedReference = computed<ReferenceMeta | null>(
   () => referenceStore.references.find((item) => item.path === selectedReferencePath.value) ?? null,
 )
 
-const activeTab = computed(() => (route.query.tab === 'references' ? 'references' : 'notes'))
+const activeTab = computed(() => {
+  const tab = route.query.tab
+  return tab === 'references' ? 'references' : tab === 'reviews' ? 'reviews' : 'notes'
+})
 
 function loadCurrentTabData() {
   const vaultPath = vaultStore.vaultPath
   if (!vaultPath) return
   if (activeTab.value === 'references') {
     referenceStore.loadAllReferences(vaultPath)
+  } else if (activeTab.value === 'reviews') {
+    loadReviewSessions(vaultPath)
   } else {
     noteStore.loadAllNotes(vaultPath)
+  }
+}
+
+async function loadReviewSessions(vaultPath: string) {
+  reviewSessionsLoading.value = true
+  try {
+    reviewSessions.value = await listReviewSessions(vaultPath)
+  } catch {
+    reviewSessions.value = []
+  } finally {
+    reviewSessionsLoading.value = false
   }
 }
 
@@ -148,6 +194,14 @@ function goNotes() {
 
 function goReferences() {
   router.push({ query: { tab: 'references' } })
+}
+
+function goReviews() {
+  router.push({ query: { tab: 'reviews' } })
+}
+
+function handleOpenReviewSession(sessionId: string) {
+  router.push(`/review/${encodeURIComponent(sessionId)}`)
 }
 
 function handleSelectNote(path: string) {

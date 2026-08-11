@@ -35,14 +35,15 @@ interface Note {
 
 ### 3.1 `NotesPage.vue`（路由 `/notes`）— 资料库
 
-- 两个 tab：`笔记` 与 `参考资料`（由 `route.query.tab === 'references'` 决定，`activeTab` 本地状态）。
-- 组合组件：`NoteList`、`ReferenceList`、`ReferenceEditDialog`。
+- 三个 tab：`笔记`、`参考资料` 与 `复习会话`（由 `route.query.tab` 决定：`references` / `reviews`，缺省为 `notes`）。
+- 组合组件：`NoteList`、`ReferenceList`、`ReferenceEditDialog`、`ReviewSessionList`。
 - 逻辑：
-  - watch `vaultPath` 与 `query.tab` 按需 `loadAllNotes` / `loadAllReferences`。
+  - watch `vaultPath` 与 `query.tab` 按需 `loadAllNotes` / `loadAllReferences` / `listReviewSessions`。
   - **防闪烁**：启动时 vault 恢复未完成（`vaultStore.vaultReady === false`）先显示"正在打开资料库"加载占位；恢复完成后无论是否打开 vault 都直接渲染内容——vault 未打开时展示**本地缓存笔记**（`noteStore.notes` 初值来自 localStorage `study-thread-extracted-notes`）并附"未连接 Vault"提示横幅（去 `/settings` 打开），不再显示旧版"请先打开 Vault"死胡同页。
   - **进入资料库的跳转路径**：点击 rail「资料库」（`App.vue handleProjectSelect('2')`）只会 `push({ path: '/notes' })` 一次，源码路由表无任何旧资料库路由。若运行的是**过期构建产物**（`dist/` 未重新 build，例如 `tauri build`/`npm run preview` 跑的是旧 `dist`），打包的是旧版 NotesPage，会在未打开 vault 时显示"请先打开 Vault"死胡同页——这是构建产物不同步导致的，源码改动后需重新 `npm run build`（`tauri build` 的 `beforeBuildCommand` 会自动执行）。
   - 删除笔记/参考资料均先 `window.confirm` 再调 store。
   - 参考资料上传走隐藏 file input → `referenceStore.uploadReference`。
+  - **复习会话 tab**：`ReviewSessionList` 展示 `listReviewSessions` 返回的复习会话列表（标题/被复习笔记/题目数/完成状态/时间，按创建倒序），点击条目跳转 `/review/:id` 回看错题与反馈（完成复习后会话保留，见 [14-review-module.md](./14-review-module.md)）。
 
 ### 3.2 `NoteDetailPage.vue`（路由 `/notes/:id`）— 笔记详情
 

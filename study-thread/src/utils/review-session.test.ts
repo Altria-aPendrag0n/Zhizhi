@@ -14,6 +14,7 @@ import {
   loadReviewSession,
   getReviewSessionFilePath,
   findIncompleteReviewSession,
+  listReviewSessions,
 } from './review-session'
 
 const note: Note = {
@@ -80,6 +81,18 @@ describe('序列化 round-trip', () => {
     expect(meta.review_questions).toEqual(questions)
   })
 
+  it('review_completed 标记序列化到 frontmatter（完成复习后保留会话）', () => {
+    const session = createReviewSession(note, questions)
+    session.review_completed = true
+    const { meta } = parseFrontmatter(serializeSession(session))
+    expect(meta.review_completed).toBe(true)
+
+    // 未完成时不输出该字段
+    const pending = createReviewSession(note, questions)
+    const pendingMeta = parseFrontmatter(serializeSession(pending)).meta
+    expect(pendingMeta.review_completed).toBeUndefined()
+  })
+
   it('正文消息可解析 round-trip', () => {
     const session = createReviewSession(note, questions)
     const markdown = serializeSession(session)
@@ -114,6 +127,19 @@ describe('loadReviewSession', () => {
     readFile.mockRejectedValue(new Error('ENOENT'))
     const loaded = await loadReviewSession('/vault', 'review_1')
     expect(loaded).toBeNull()
+  })
+
+  it('解析 review_completed 标记（完成复习后保留的会话）', async () => {
+    const session = createReviewSession(note, questions)
+    session.review_completed = true
+    readFile.mockResolvedValue(serializeSession(session))
+    const loaded = await loadReviewSession('/vault', session.id)
+    expect(loaded!.review_completed).toBe(true)
+
+    const pending = createReviewSession(note, questions)
+    readFile.mockResolvedValue(serializeSession(pending))
+    const loadedPending = await loadReviewSession('/vault', pending.id)
+    expect(loadedPending!.review_completed).toBe(false)
   })
 
   it('旧会话（无 type）的问题加载后降级为 short_answer（P5 兼容）', async () => {
@@ -198,6 +224,67 @@ describe('findIncompleteReviewSession（复用进行中的复习会话）', () =
 
     const id = await findIncompleteReviewSession('/vault', 'notes/费曼学习法.md')
     expect(id).toBe(target.id)
+  })
+
+  it('已完成（review_completed）的会话不再复用，返回 null（下次到期重新出题）', async () => {
+    const done = createReviewSession(note, questions)
+    done.review_completed = true
+    listDir.mockResolvedValue([
+      { name: `review-${done.id}.md`, path: `/vault/sessions/review-${done.id}.md`, is_dir: false },
+    ])
+    readFile.mockResolvedValue(serializeSession(done))
+
+    expect(await findIncompleteReviewSession('/vault', 'notes/费曼学习法.md')).toBeNull()
+  })
+})
+
+describe('listReviewSessions（资源库「复习会话」列表）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('列出全部复习会话并按创建时间倒序', async () => {
+    const older = createReviewSession(note, questions, new Date('2026-08-09T08:00:00.000Z'))
+    const newer = createReviewSession(note, questions, new Date('2026-08-10T08:00:00.000Z'))
+    newer.review_completed = true
+    listDir.mockResolvedValue([
+      { name: `review-${older.id}.md`, path: `/vault/sessions/review-${older.id}.md`, is_dir: false },
+      { name: `review-${newer.id}.md`, path: `/vault/sessions/review-${newer.id}.md`, is_dir: false },
+      { name: 'new_1.md', path: '/vault/sessions/new_1.md', is_dir: false }, // 非 review 文件忽略
+      { name: 'notes', path: '/vault/sessions/notes', is_dir: true }, // 目录忽略
+    ])
+    readFile.mockImplementation((path: string) => {
+      if (path.includes(older.id)) return Promise.resolve(serializeSession(older))
+      return Promise.resolve(serializeSession(newer))
+    })
+
+    const sessions = await listReviewSessions('/vault')
+    expect(sessions.map((s) => s.id)).toEqual([newer.id, older.id])
+    expect(sessions[0].completed).toBe(true)
+    expect(sessions[0].questionCount).toBe(2)
+    expect(sessions[0].reviewedNote).toBe('notes/费曼学习法.md')
+    expect(sessions[1].completed).toBe(false)
+  })
+
+  it('sessions 目录不存在或读取失败时返回空数组', async () => {
+    listDir.mockRejectedValue(new Error('ENOENT'))
+    expect(await listReviewSessions('/vault')).toEqual([])
+  })
+
+  it('损坏的 review 文件跳过，不影响列表', async () => {
+    const target = createReviewSession(note, questions)
+    listDir.mockResolvedValue([
+      { name: `review-${target.id}.md`, path: `/vault/sessions/review-${target.id}.md`, is_dir: false },
+      { name: 'review-broken.md', path: '/vault/sessions/review-broken.md', is_dir: false },
+    ])
+    readFile.mockImplementation((path: string) => {
+      if (path.includes('broken')) return Promise.reject(new Error('corrupt'))
+      return Promise.resolve(serializeSession(target))
+    })
+
+    const sessions = await listReviewSessions('/vault')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].id).toBe(target.id)
   })
 })
 

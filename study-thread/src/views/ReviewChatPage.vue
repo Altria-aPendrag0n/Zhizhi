@@ -80,14 +80,6 @@
       未配置 AI，当前为原文复习模式：先自行回顾，再点击「结束复习」自评。
     </p>
 
-    <!-- AI 正误判定徽章（P5-6：反馈首行"判定：xxx"解析） -->
-    <div v-if="judgment && !isStreaming" class="review-chat-page__judgment" :class="`is-${judgment}`">
-      <span class="review-chat-page__judgment-badge">
-        {{ judgment === 'correct' ? '回答正确' : judgment === 'partial' ? '部分正确' : '回答错误' }}
-      </span>
-      <span class="review-chat-page__judgment-note">由 AI 依据标准答案/笔记原文判断</span>
-    </div>
-
     <!-- 输入区 / 自评面板 -->
     <div v-if="showRating" class="review-chat-page__rating">
       <!-- 簇模式：逐条评级（每条笔记独立 applyReview） -->
@@ -239,7 +231,7 @@ import { saveSessionToVault } from '../utils/session-serializer'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { resolveMessageIndex } from '../utils/message-locator'
 import { extractNoteRefsFromSession, type NoteReference } from '../utils/session-linker'
-import { readFile, deleteFile } from '../utils/vault-fs'
+import { readFile } from '../utils/vault-fs'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
 import AddToNoteDialog from '../components/notes/AddToNoteDialog.vue'
@@ -278,8 +270,6 @@ const extractedNotes = ref<NoteReference[]>([])
 /** 辩论状态（P5-5）：round 为用户第几次发言（1 起）；turns 为同题历史论点（含 AI 开场/反驳） */
 const debateRound = ref(1)
 const debateTurns = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
-/** AI 对上一轮回答的正误判定（从反馈首行解析，展示为徽章；辩论题不判定） */
-const judgment = ref<'correct' | 'partial' | 'wrong' | null>(null)
 const addToNoteDialog = reactive({
   visible: false,
   highlightedText: '',
@@ -414,8 +404,7 @@ async function handleSend(content: string) {
 
   // 用户消息携带时间戳（复习会话文件 review-* 不计入主界面问答统计，保持一致便于追溯）
   messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
-  // 新一轮作答开始，清空上一轮的 AI 判定徽章
-  judgment.value = null
+  // 新一轮作答开始（判定徽章随反馈消息注入，无需清除全局状态）
   const aiMessage: Message = { role: 'assistant', content: '' }
   messages.value.push(aiMessage)
   isStreaming.value = true
@@ -464,7 +453,6 @@ async function handleSend(content: string) {
       if (isFinal) {
         debateRound.value = 1
         debateTurns.value = []
-        judgment.value = null
         currentQuestionIndex.value++
         // 辩论总结完成进入下一题：注入新题目消息
         appendQuestionMessage()
@@ -488,12 +476,11 @@ async function handleSend(content: string) {
       }
       aiMessage.content = streamingText.value
       aiMessage.thinking = streamingThinking.value || undefined
-      // P5-6 正误判定：解析反馈首行"判定：xxx"为徽章状态，并从消息文本中移除该行
-      judgment.value = extractJudgment(aiMessage.content)
-      if (judgment.value) {
-        aiMessage.content = aiMessage.content
-          .replace(/^判定[:：]\s*(正确|部分正确|错误)[^\n]*\n?/, '')
-          .trimStart()
+      // P5-6 正误判定：解析反馈首行"判定：xxx"为徽章状态，并转换为内联徽章 HTML 注入
+      // 反馈消息（位于该题下、下一道题前）；判定行从正文中移除避免重复展示
+      const verdict = extractJudgment(aiMessage.content)
+      if (verdict) {
+        aiMessage.content = renderVerdictHtml(verdict) + '\n\n' + stripVerdictLine(aiMessage.content)
       }
       // P4-4 缺口定位：从 AI 反馈解析被标注的簇内缺口笔记（回答涉及/应涉及的笔记）
       if (hasCluster.value) {
@@ -558,34 +545,25 @@ async function handleRate(notePath: string, rating: ReviewRating) {
   toast.success(`已评级「${ratingLabel(rating)}」，已更新复习计划`)
   // 单条模式：评级即完成，自动返回；簇模式：等待逐条评级后手动返回
   if (!hasCluster.value) {
+    // 单条模式评级即完成：标记会话完成并持久化（不删除文件，资源库「复习会话」保留供回看错题）
+    if (session.value) {
+      session.value.review_completed = true
+      await persist()
+    }
     rated.value = true
-    // 单条模式评级即完成：删除临时复习会话文件（下次「开始复习」将重新出题）
-    void removeReviewSessionFile()
     setTimeout(() => router.push('/hub'), 800)
   }
 }
 
 /** 簇模式：结束逐条评级并返回学习地图 */
-function finishReview() {
-  rated.value = true
-  // 簇模式完成复习：删除临时复习会话文件（下次「开始复习」将重新出题）
-  void removeReviewSessionFile()
-  void router.push('/hub')
-}
-
-/**
- * 删除临时复习会话文件（完成复习后调用）。
- *
- * 复习会话是按笔记临时生成并持久化出题结果的，用户中途退出时由学习地图复用（不重复出题）；
- * 完成后删除该文件，下次「开始复习」重新出题。删除失败静默忽略，不影响评级返回。
- */
-async function removeReviewSessionFile() {
-  if (!vaultStore.vaultPath || !session.value) return
-  try {
-    await deleteFile(getReviewSessionFilePath(vaultStore.vaultPath, session.value.id))
-  } catch {
-    // 删除失败不影响评级返回
+async function finishReview() {
+  // 簇模式完成复习：标记会话完成并持久化（不删除文件，资源库「复习会话」保留供回看错题）
+  if (session.value) {
+    session.value.review_completed = true
+    await persist()
   }
+  rated.value = true
+  void router.push('/hub')
 }
 
 function ratingLabel(rating: ReviewRating): string {
@@ -597,6 +575,25 @@ function extractJudgment(text: string): 'correct' | 'partial' | 'wrong' | null {
   const match = text.match(/^判定[:：]\s*(正确|部分正确|错误)/)
   if (!match) return null
   return match[1] === '正确' ? 'correct' : match[1] === '部分正确' ? 'partial' : 'wrong'
+}
+
+/** 判定徽章内联 HTML：随反馈消息渲染在消息流中（该题下、下一道题前） */
+function renderVerdictHtml(verdict: 'correct' | 'partial' | 'wrong'): string {
+  const labels: Record<'correct' | 'partial' | 'wrong', string> = {
+    correct: '回答正确',
+    partial: '部分正确',
+    wrong: '回答错误',
+  }
+  return (
+    `<div class="review-verdict is-${verdict}">` +
+    `<b>${labels[verdict]}</b><span>由 AI 依据标准答案/笔记原文判断</span>` +
+    `</div>`
+  )
+}
+
+/** 从反馈正文移除首行判定标记（已被徽章 HTML 取代，避免重复展示） */
+function stripVerdictLine(content: string): string {
+  return content.replace(/^判定[:：]\s*(正确|部分正确|错误)[^\n]*\n?/, '').trimStart()
 }
 
 /** 划线 → 生成新笔记（自动加入复习队列） */
@@ -884,44 +881,6 @@ function handleNavigateNote(path: string) {
   font-size: 12px;
   flex-shrink: 0;
   background: var(--surface);
-}
-
-/* AI 正误判定徽章（P5-6） */
-.review-chat-page__judgment {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  padding: 10px 20px;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.review-chat-page__judgment-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 650;
-  color: #fff;
-}
-
-.review-chat-page__judgment.is-correct .review-chat-page__judgment-badge {
-  background: var(--state-success);
-}
-
-.review-chat-page__judgment.is-partial .review-chat-page__judgment-badge {
-  background: var(--state-warning);
-}
-
-.review-chat-page__judgment.is-wrong .review-chat-page__judgment-badge {
-  background: var(--state-error);
-}
-
-.review-chat-page__judgment-note {
-  font-size: 11px;
-  color: var(--ink-3);
 }
 
 .review-chat-page__rating {

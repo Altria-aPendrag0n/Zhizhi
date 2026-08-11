@@ -65,6 +65,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     // 复习簇笔记路径列表（P4 簇复习），JSON 字符串保证 YAML 解析安全
     lines.push(`review_cluster: ${JSON.stringify(session.review_cluster)}`)
   }
+  if (session.review_completed) {
+    // 已完成标记：资源库「复习会话」据此区分完成态；「开始复习」跳过已完成会话重新出题
+    lines.push('review_completed: true')
+  }
   lines.push('---')
   lines.push('')
 
