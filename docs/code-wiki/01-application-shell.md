@@ -177,6 +177,7 @@ CSS Grid 五区布局，全部为具名插槽：
 - **反馈工具**（v0.1 反馈收集核心通道）：
   - 「导出调试日志」：`dialog.save` 选择保存路径 → `vault-fs.writeFile` 写入格式化反馈全文（版本/平台/最近 30 条日志/反馈指引）；
   - 「复制反馈信息」：`navigator.clipboard.writeText` 复制同样的反馈全文；
+  - 「邮件反馈」：`opener.openUrl` 打开 `mailto:` 链接，预填收件人（`FEEDBACK_EMAIL` 常量，当前 `1074253861@qq.com`）/主题/正文模板，日志文件由用户拖入附件；
   - 平台描述由 `navigator.platform` + `userAgent` 推断（Windows / macOS / Linux），避免 WebView 禁用 `platform` 时崩溃。
 - 样式与 `VaultSettings` 卡片一致（`--surface` / `--line` 边框 / `--r-md` 圆角）。
 

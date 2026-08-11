@@ -35,7 +35,7 @@
     <div class="about-section__feedback">
       <div class="about-section__feedback-head">
         <h3 class="about-section__feedback-title">反馈与帮助</h3>
-        <span class="about-section__feedback-hint">便于我们定位问题，反馈请附带版本与日志</span>
+        <span class="about-section__feedback-hint">便于我们定位问题，反馈请附带版本与日志，发送至 {{ FEEDBACK_EMAIL }}</span>
       </div>
       <div class="about-section__feedback-actions">
         <button class="btn btn-secondary" type="button" @click="handleExportLogs">
@@ -46,6 +46,10 @@
           <Copy :size="15" />
           复制反馈信息
         </button>
+        <button class="btn btn-secondary" type="button" @click="handleMailFeedback">
+          <Mail :size="15" />
+          邮件反馈
+        </button>
       </div>
     </div>
   </section>
@@ -55,11 +59,14 @@
 import { onMounted, ref } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { save } from '@tauri-apps/plugin-dialog'
-import { Download, Copy } from '@lucide/vue'
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { Download, Copy, Mail } from '@lucide/vue'
 import { getLogs, type LogEntry } from '../../utils/logger'
 import { writeFile } from '../../utils/vault-fs'
 import { useToast } from '../../composables/useToast'
 
+/** 反馈邮箱（测试版用户问题/建议统一收件地址） */
+const FEEDBACK_EMAIL = '1074253861@qq.com'
 /** 兜底版本号（非 Tauri 环境 / getVersion 失败时展示） */
 const version = ref('0.1.0')
 const toast = useToast()
@@ -108,7 +115,7 @@ function buildFeedbackText(): string {
     `最近调试日志（共 ${recent.length} 条）:`,
     ...recent.map(logToLine),
     '================================',
-    '反馈指引: 请将以上信息与问题描述一起发送给知枝团队，便于定位问题。',
+    `反馈指引: 请将以上信息与问题描述一起通过「邮件反馈」发送至 ${FEEDBACK_EMAIL}，便于定位问题。`,
   ].join('\n')
 }
 
@@ -135,6 +142,32 @@ async function handleCopyFeedback() {
     toast.success('反馈信息已复制，请连同问题描述一起发送')
   } catch {
     toast.error('复制失败，请尝试截图「调试日志」面板')
+  }
+}
+
+/** 组装 mailto 链接：预填收件人/主题/正文模板，日志文件由用户拖入附件 */
+function buildMailtoHref(): string {
+  const subject = `知枝 v${version.value} 反馈`
+  const body = [
+    `知枝 v${version.value} 反馈`,
+    '',
+    `平台: ${describePlatform()}`,
+    `时间: ${new Date().toLocaleString('zh-CN')}`,
+    '',
+    '问题描述:',
+    '',
+    '（请将「导出调试日志」生成的 .txt 文件拖入邮件附件）',
+  ].join('\n')
+  return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+}
+
+/** 一键打开邮件客户端反馈 */
+async function handleMailFeedback() {
+  try {
+    await openUrl(buildMailtoHref())
+    toast.info(`已打开邮件客户端，请填写问题描述并附上日志，发送至 ${FEEDBACK_EMAIL}`)
+  } catch (e) {
+    toast.error(`打开邮件客户端失败：${e instanceof Error ? e.message : String(e)}`)
   }
 }
 </script>

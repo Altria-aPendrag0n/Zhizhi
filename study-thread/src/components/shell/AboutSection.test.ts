@@ -19,6 +19,14 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: dialogState.save,
 }))
 
+const openerState = vi.hoisted(() => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: openerState.openUrl,
+}))
+
 vi.mock('../../utils/vault-fs', () => ({
   writeFile: fsState.writeFile,
 }))
@@ -114,5 +122,29 @@ describe('AboutSection 关于知枝', () => {
     const text = writeText.mock.calls[0][0] as string
     expect(text).toContain('版本: v0.1.0-beta')
     expect(text).toContain('复制用日志')
+    expect(text).toContain('1074253861@qq.com')
+  })
+
+  it('点击「邮件反馈」打开 mailto 链接，预填收件人/主题/正文模板', async () => {
+    const wrapper = await mountAbout()
+
+    await findButton(wrapper, '邮件反馈').trigger('click')
+    await flushPromises()
+
+    expect(openerState.openUrl).toHaveBeenCalledTimes(1)
+    const href = openerState.openUrl.mock.calls[0][0] as string
+    expect(href).toContain('mailto:1074253861@qq.com')
+    expect(decodeURIComponent(href)).toContain('subject=知枝 v0.1.0-beta 反馈')
+    expect(decodeURIComponent(href)).toContain('问题描述')
+  })
+
+  it('邮件反馈：打开失败时给出错误提示', async () => {
+    openerState.openUrl.mockRejectedValueOnce(new Error('no mail client'))
+    const wrapper = await mountAbout()
+
+    await findButton(wrapper, '邮件反馈').trigger('click')
+    await flushPromises()
+
+    expect(openerState.openUrl).toHaveBeenCalledTimes(1)
   })
 })
