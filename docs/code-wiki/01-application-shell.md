@@ -25,6 +25,7 @@
 | `src/components/shell/ThreadList.vue` | 会话列表列（含分支树、右键菜单） |
 | `src/components/shell/ThreadBranch.vue` | 会话列内分支树节点（递归） |
 | `src/components/shell/TopBar.vue` | 顶栏（面包屑 + 内联标题编辑） |
+| `src/components/shell/AboutSection.vue` | 设置页「关于知枝」区块（版本号 + 测试版声明） |
 
 ## 3. 路由表（`src/router/index.ts`）
 
@@ -166,6 +167,13 @@ CSS Grid 五区布局，全部为具名插槽：
   - 会话界面（`/chat*`）：新建会话（Ctrl+N）、打开资料库（Ctrl+B）、打开学习地图（Ctrl+H）、收起/展开会话栏（非 compact 时）；
   - 资料库（`/notes*`）：查看笔记 / 查看参考资料（切换 `query.tab`）、打开学习地图、返回学习会话；
   - 学习地图/设置：打开资料库、打开学习地图、返回学习会话。
+
+### 6.5 `AboutSection.vue`
+
+- 设置页底部「关于知枝」区块（v0.1 发布前新增，为反馈定位版本）。
+- 展示产品名、发布状态（测试版徽标）、数据存放说明（本地 Vault，不自动上传）。
+- 版本号通过 `@tauri-apps/api/app` 的 `getVersion()` 获取（权限由 `core:default` 覆盖）；非 Tauri 环境或获取失败时降级展示默认版本号 `0.1.0`。
+- 样式与 `VaultSettings` 卡片一致（`--surface` / `--line` 边框 / `--r-md` 圆角）。
 
 ## 7. 全局类型（跨模块使用）
 

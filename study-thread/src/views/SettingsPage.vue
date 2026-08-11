@@ -160,6 +160,9 @@
         </div>
       </div>
     </div>
+
+    <!-- 关于与版本信息 -->
+    <AboutSection class="settings-page__about" />
   </div>
 </template>
 
@@ -356,6 +359,10 @@ onMounted(() => {
 
 .settings-page__vault {
   margin-bottom: 28px;
+}
+
+.settings-page__about {
+  margin-top: 36px;
 }
 
 .settings-page__form {
