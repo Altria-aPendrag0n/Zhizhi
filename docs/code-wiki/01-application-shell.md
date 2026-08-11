@@ -173,6 +173,10 @@ CSS Grid 五区布局，全部为具名插槽：
 - 设置页底部「关于知枝」区块（v0.1 发布前新增，为反馈定位版本）。
 - 展示产品名、发布状态（测试版徽标）、数据存放说明（本地 Vault，不自动上传）。
 - 版本号通过 `@tauri-apps/api/app` 的 `getVersion()` 获取（权限由 `core:default` 覆盖）；非 Tauri 环境或获取失败时降级展示默认版本号 `0.1.0`。
+- **反馈工具**（v0.1 反馈收集核心通道）：
+  - 「导出调试日志」：`dialog.save` 选择保存路径 → `vault-fs.writeFile` 写入格式化反馈全文（版本/平台/最近 30 条日志/反馈指引）；
+  - 「复制反馈信息」：`navigator.clipboard.writeText` 复制同样的反馈全文；
+  - 平台描述由 `navigator.platform` + `userAgent` 推断（Windows / macOS / Linux），避免 WebView 禁用 `platform` 时崩溃。
 - 样式与 `VaultSettings` 卡片一致（`--surface` / `--line` 边框 / `--r-md` 圆角）。
 
 ## 7. 全局类型（跨模块使用）

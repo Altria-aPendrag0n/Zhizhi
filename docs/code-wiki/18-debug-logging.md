@@ -43,6 +43,7 @@ interface LogEntry {
 - 设置页底部「调试日志」区块：展示最近日志（时间 / 模块 / 消息 / meta），error 红 / warn 琥珀 / info 灰左边条区分级别。
 - 「清空」按钮调用 `clearLogs()` 并刷新列表。
 - `onMounted` 时 `loadLogs()` 读取一次；V1 不做实时订阅，查看新日志需重新进入设置页。
+- 同页「关于知枝」区块提供**导出调试日志**（`dialog.save` + `writeFile` 写入最近 30 条 + 版本/平台）与**复制反馈信息**（`clipboard.writeText`），供用户反馈时携带日志上下文——详见 [01 应用外壳与路由](./01-application-shell.md) §6.5。
 
 ## 5. 全局错误收集（`src/utils/global-errors.ts`）
 
