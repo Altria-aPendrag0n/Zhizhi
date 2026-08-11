@@ -598,10 +598,11 @@ onMounted(() => {
       })
     })
     .catch((error) => {
-      // 网络被拦截时常见表现为“Unexpected token '<'”(模型请求返回了 HTML 拦截页)，
-      // 此时需要开启代理/VPN 后重启应用，成功下载后模型会缓存到本地，之后可离线使用
+      // 模型已随应用本地打包（public/models），失败通常为资源缺失或缓存被污染，
+      // 不再提示「开启代理/VPN」（该指引属于旧版在线下载模型的场景）
       console.warn(
-        'Embedding 模型加载失败（若报错为 Unexpected token "<" 且返回 HTML，说明模型下载被网络拦截，请开启代理/VPN 后重启应用）:',
+        '内置 Embedding 模型加载失败（请确认安装包包含 public/models 下的完整模型文件；' +
+          '如需排查可通过设置页「关于知枝」导出调试日志反馈）:',
         error,
       )
     })

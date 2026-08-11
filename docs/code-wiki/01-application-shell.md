@@ -104,6 +104,7 @@ window.addEventListener('keydown', handleKeydown)
 ```
 
 - 监听 `vaultStore.vaultPath`：Vault 就绪后调用 `sessionStore.initSessionTree(path)` 加载分支树，供左侧会话列表展开分支。
+- Embedding 引擎加载失败（`engine.initialize().catch`）仅降级为 `console.warn`，不影响应用主体功能；提示文案为**本地模型资源缺失**（请确认安装包包含 `public/models` 完整模型文件），不再提示旧版在线下载场景的「开启代理/VPN」。
 - 删除会话/分支走 `sessionStore.deleteSessionNodeFromVault`（级联删除 vault 文件），无 vault 时视为本地会话直接放行；有 vault 但节点不在会话树中（本地模拟会话，如空的新会话改名而来的"知枝学习"）同样放行——否则这类会话无法从列表删除。
 
 ## 5. 布局骨架 `AppShell.vue`
