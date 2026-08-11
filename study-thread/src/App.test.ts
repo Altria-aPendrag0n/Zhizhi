@@ -50,6 +50,12 @@ vi.mock('./stores/session', () => ({
   }),
 }))
 
+vi.mock('./stores/notes', () => ({
+  useNoteStore: () => ({
+    notes: [],
+  }),
+}))
+
 function createWrapper() {
   return mount(App, {
     global: {
@@ -63,6 +69,7 @@ function createWrapper() {
         ThreadList: { name: 'ThreadList', props: ['threads', 'activeId'], template: '<div />' },
         TopBar: { name: 'TopBar', props: ['breadcrumbs', 'showBack'], template: '<div />' },
         Toast: true,
+        WelcomeOverlay: true,
         RouterView: true,
       },
       mocks: {
@@ -248,6 +255,7 @@ describe('App 冷启动项目与会话选择', () => {
           ThreadList: { name: 'ThreadList', props: ['threads', 'activeId'], template: '<div />' },
           TopBar: true,
           Toast: true,
+          WelcomeOverlay: true,
           RouterView: true,
         },
         mocks: { $route: route },
@@ -299,6 +307,7 @@ describe('App 冷启动会话迁移', () => {
           ThreadList: { name: 'ThreadList', props: ['threads'], template: '<div />' },
           TopBar: true,
           Toast: true,
+          WelcomeOverlay: true,
           RouterView: true,
         },
         mocks: { $route: route },

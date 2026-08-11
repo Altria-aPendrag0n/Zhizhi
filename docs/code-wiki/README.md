@@ -288,7 +288,7 @@ npm run tauri build    # vue-tsc + vite build + cargo build --release
 
 ### 7.5 首次使用流程
 
-1. 打开应用（1440×900 窗口）。
+1. 打开应用（1440×900 窗口），首次启动展示欢迎引导（测试版声明 + 三步指引，可关闭或跳转设置）。
 2. 进入设置页配置 Vault 路径与 LLM 服务商（Anthropic / OpenAI / DeepSeek / 通义千问 / 智谱 / Ollama / 自定义）。
 3. 返回"学习会话"开始对话；第一次对话前 `embedding` 引擎会加载内置模型并构建笔记向量索引（非阻塞，失败不影响对话）。
 

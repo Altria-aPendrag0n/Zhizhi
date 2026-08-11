@@ -57,6 +57,7 @@
   </AppShell>
   <AiBusyOverlay />
   <Toast />
+  <WelcomeOverlay />
 </template>
 
 <script setup lang="ts">
@@ -69,6 +70,7 @@ import ThreadList from './components/shell/ThreadList.vue'
 import TopBar, { type TopBarMenuItem } from './components/shell/TopBar.vue'
 import Toast from './components/common/Toast.vue'
 import AiBusyOverlay from './components/common/AiBusyOverlay.vue'
+import WelcomeOverlay from './components/common/WelcomeOverlay.vue'
 import { useToast } from './composables/useToast'
 import { useBusyStore } from './stores/busy'
 import type { Project } from './components/shell/ProjectRail.vue'
@@ -76,6 +78,7 @@ import type { Thread } from './components/shell/ThreadList.vue'
 import { getEmbeddingEngine } from './embedding/engine'
 import { useVaultStore } from './stores/vault'
 import { useSessionStore } from './stores/session'
+import { useNoteStore } from './stores/notes'
 import type { SessionTreeNode } from './utils/session-tree'
 
 const router = useRouter()
@@ -84,6 +87,7 @@ const toast = useToast()
 const busyStore = useBusyStore()
 const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
+const noteStore = useNoteStore()
 const LOCAL_SESSION_LIST_KEY = 'study-thread-session-list'
 const LOCAL_THREAD_MESSAGES_KEY = 'study-thread-messages'
 
@@ -244,7 +248,7 @@ const displayedBreadcrumbs = computed(() => {
 const titleEditable = computed(() => route.name === 'chat' || route.name === 'branch-chat')
 const activeProject = computed(() => projects.value.find((project) => project.id === activeProjectId.value) ?? null)
 const threadCount = computed(() => threads.value.length)
-const noteCount = computed(() => (activeProjectId.value === '1' ? 2 : 0))
+const noteCount = computed(() => noteStore.notes.length)
 
 /** 每个主会话 → 其顶层分支列表（来自 vault 会话树） */
 const branchesByThread = computed<Record<string, SessionTreeNode[]>>(() => {
