@@ -44,7 +44,17 @@ interface LogEntry {
 - 「清空」按钮调用 `clearLogs()` 并刷新列表。
 - `onMounted` 时 `loadLogs()` 读取一次；V1 不做实时订阅，查看新日志需重新进入设置页。
 
-## 5. 接入示例（出题解析失败）
+## 5. 全局错误收集（`src/utils/global-errors.ts`）
+
+v0.1 发布准备新增：把**未被业务代码捕获的运行时错误**写入日志系统，使真实用户侧的错误能随反馈一并上报。
+
+- `installGlobalErrorCapture()`：在应用挂载前（`main.ts`）安装两个监听：
+  - `window 'error'` → `logError('global', message, { filename, lineno, colno, error })`
+  - `window 'unhandledrejection'` → `logError('global', '未处理的 Promise 拒绝', { reason })`
+- `serializeUnknown(value)`：将任意异常值序列化为字符串（Error 取 name/message/stack；字符串/基础值原样；循环引用对象退化 `String()`），保证 rejection 原因无论为何种类型都能记录。
+- 返回卸载函数，便于测试清理；捕获本身不抛异常、不影响主流程。
+
+## 6. 接入示例（出题解析失败）
 
 `src/api/skills/review-quiz.ts` 的 `parseQuizResponseText`：
 
@@ -54,6 +64,8 @@ interface LogEntry {
 ## 6. 测试
 
 `src/utils/logger.test.ts`（4 用例）：三级日志写入（时间戳 / 模块 / meta）、环形截断（只保留最近 `MAX_LOGS` 条）、清空、存储损坏容错（返回空数组并恢复写入）。
+
+`src/utils/global-errors.test.ts`（4 用例）：捕获 `error` 事件（message/filename/行列号/meta 序列化）、捕获 `unhandledrejection`（Error 原因）、字符串与循环引用原因的容错记录、`serializeUnknown` 各类型序列化。
 
 ---
 
