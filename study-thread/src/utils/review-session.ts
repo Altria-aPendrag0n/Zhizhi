@@ -72,11 +72,11 @@ export function createReviewSession(
   now: Date = new Date(),
   cluster?: Note[],
 ): Session {
-  // 有出题结果时提示逐题作答（题目在答题区单独展示，避免"问题列表"造成一次回答全部的误解）；
+  // 有出题结果时提示逐题作答（题目逐题展示在会话中，避免"问题列表"造成一次回答全部的误解）；
   // 无出题（未配置 AI / 出题失败）时展示笔记原文，进入原文复习模式
   const introContent =
     reviewQuestions.length > 0
-      ? `## 复习目标\n${note.title}\n\n共 ${reviewQuestions.length} 道题，请逐题作答（答题区会显示当前题目）。`
+      ? `## 复习目标\n${note.title}\n\n共 ${reviewQuestions.length} 道题，题目会逐题显示在会话中，请在下方作答。`
       : `## 复习目标\n${note.title}\n\n## 原文\n${note.content}`
   const intro: Message = {
     role: 'assistant',

@@ -153,29 +153,6 @@
       </template>
     </div>
     <template v-else>
-      <!-- 当前题目（一问一答）：每题单独展示题干，自定义拖拽手柄上下拉伸、长题干内部滚动 -->
-      <div
-        v-if="activeQuestion"
-        ref="questionBoxRef"
-        class="review-chat-page__question"
-        :style="questionBoxStyle"
-      >
-        <!-- 自定义拉伸手柄（置于问题框最顶部；向上拖拉高、向下拖拉低，兼容 WebView2） -->
-        <div
-          class="review-chat-page__question-resize"
-          :class="{ 'is-dragging': isResizing }"
-          @mousedown="startResize"
-        >
-          <span class="review-chat-page__question-resize-bar"></span>
-        </div>
-        <div class="review-chat-page__question-head">
-          <span class="review-chat-page__question-tag">第 {{ currentQuestionIndex + 1 }} 题 / 共 {{ questions.length }} 题</span>
-          <span class="review-chat-page__question-type">{{ QUESTION_TYPE_LABELS[activeQuestion.type] }}</span>
-        </div>
-        <div class="review-chat-page__question-scroll">
-          <p class="review-chat-page__question-text">{{ activeQuestion.question }}</p>
-        </div>
-      </div>
       <!-- 辩论题轮次指示（P5-5）：活跃题为 debate 时展示当前轮次与 AI 持方，仍走 Composer 文本作答 -->
       <div
         v-if="activeQuestion && activeQuestion.type === 'debate'"
@@ -244,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Message, Note, ReviewQuestion, ReviewQuestionType, ReviewRating, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
@@ -254,7 +231,7 @@ import { useReviewStore } from '../stores/review'
 import { useToast } from '../composables/useToast'
 import { createProvider } from '../api/provider-factory'
 import { reviewFollowupStream, reviewDebateStream } from '../api/skills/review-quiz'
-import { DEFAULT_MAX_ROUNDS, QUESTION_TYPE_LABELS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
+import { DEFAULT_MAX_ROUNDS, OPTION_LETTERS, QUESTION_TYPE_LABELS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
 import { extractNote } from '../api/skills/extract-note'
 import { loadReviewSession, getReviewSessionFilePath } from '../utils/review-session'
 import { parseMentionedNotes } from '../utils/review-gap'
@@ -311,53 +288,6 @@ const addToNoteDialog = reactive({
 })
 let abortController: AbortController | null = null
 
-/** 问题框自定义拖拽拉伸（替代 CSS resize，兼容 WebView2） */
-const questionBoxRef = ref<HTMLElement | null>(null)
-const questionHeight = ref<number | null>(null) // null = 自适应高度；拖拽后为像素值
-const isResizing = ref(false)
-let resizeStartY = 0
-let resizeStartHeight = 0
-const QUESTION_MIN_HEIGHT = 108
-const QUESTION_MAX_VH = 0.55
-
-const questionBoxStyle = computed(() =>
-  questionHeight.value !== null ? { height: `${questionHeight.value}px` } : {},
-)
-
-function startResize(event: MouseEvent) {
-  if (!questionBoxRef.value) return
-  isResizing.value = true
-  resizeStartY = event.clientY
-  resizeStartHeight = questionBoxRef.value.offsetHeight
-  document.body.style.cursor = 'ns-resize'
-  document.body.style.userSelect = 'none'
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-  event.preventDefault()
-}
-
-function onResizeMove(event: MouseEvent) {
-  if (!isResizing.value) return
-  // 手柄在顶部：向上拖（delta 为负）拉高，向下拖（delta 为正）拉低
-  const delta = event.clientY - resizeStartY
-  const maxHeight = Math.floor(window.innerHeight * QUESTION_MAX_VH)
-  const newHeight = Math.max(QUESTION_MIN_HEIGHT, Math.min(maxHeight, resizeStartHeight - delta))
-  questionHeight.value = newHeight
-}
-
-function stopResize() {
-  isResizing.value = false
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-}
-
-onBeforeUnmount(() => {
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-})
-
 const sessionId = computed(() => String(route.params.sessionId || ''))
 const questions = computed<ReviewQuestion[]>(() => session.value?.review_questions ?? [])
 const hasQuestions = computed(() => questions.value.length > 0)
@@ -384,6 +314,30 @@ const RATINGS: { value: ReviewRating; label: string; hint: string }[] = [
 ]
 
 onMounted(load)
+
+/**
+ * 把当前题目作为 assistant 消息注入会话流（每题注入一次，避免重复）。
+ * 题目直接展示在对话区，随会话一起滚动/持久化；下方保留结构化答题区。
+ */
+function appendQuestionMessage() {
+  const q = activeQuestion.value
+  if (!q) return
+  const tag = `**第 ${currentQuestionIndex.value + 1} 题 / 共 ${questions.value.length} 题 · ${QUESTION_TYPE_LABELS[q.type]}**`
+  // 最后一条 assistant 已是当前题目标记（如恢复会话时该题已展示）则不重复注入
+  const last = messages.value[messages.value.length - 1]
+  if (last && last.role === 'assistant' && last.content.startsWith(tag)) return
+  let content = `${tag}\n\n${q.question}`
+  if (q.type === 'choice' && q.options) {
+    content += '\n\n' + q.options.map((o, i) => `${OPTION_LETTERS[i]}. ${o}`).join('\n')
+  }
+  if (q.type === 'ordering' && q.steps) {
+    content += '\n\n' + q.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')
+  }
+  if (q.type === 'fill_blank' && q.blanks && q.blanks > 1) {
+    content += `\n\n（共 ${q.blanks} 个空位）`
+  }
+  messages.value.push({ role: 'assistant', content, timestamp: new Date().toISOString() })
+}
 
 async function load() {
   if (!vaultStore.vaultPath) {
@@ -424,6 +378,8 @@ async function load() {
   } catch {
     extractedNotes.value = []
   }
+  // 题目注入会话流（恢复会话时当前未答题目展示在对话区）
+  appendQuestionMessage()
 }
 
 async function loadNoteRefs(): Promise<NoteReference[]> {
@@ -510,6 +466,8 @@ async function handleSend(content: string) {
         debateTurns.value = []
         judgment.value = null
         currentQuestionIndex.value++
+        // 辩论总结完成进入下一题：注入新题目消息
+        appendQuestionMessage()
       } else {
         debateRound.value++
       }
@@ -542,6 +500,8 @@ async function handleSend(content: string) {
         gapPaths.value = new Set(parseMentionedNotes(aiMessage.content, clusterNotes.value))
       }
       currentQuestionIndex.value++
+      // 推进下一题：注入新题目消息（会话中展示，供滚动查看）
+      appendQuestionMessage()
     }
     await persist()
   } catch (e) {
@@ -1110,101 +1070,6 @@ function handleNavigateNote(path: string) {
 
 .review-chat-page__finish:hover {
   background: var(--brand-strong);
-}
-
-/* ---- 当前题目（一问一答标注：题干 + 题号 + 题型）---- */
-.review-chat-page__question {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  margin: 12px 16px 0;
-  padding: 16px 20px 0;
-  min-height: 108px;
-  max-height: 55vh;
-  overflow: hidden; /* 内容滚动由内部 scroll 区处理 */
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-}
-
-.review-chat-page__question-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-
-.review-chat-page__question-tag {
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: var(--brand);
-  color: var(--brand-ink);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.review-chat-page__question-type {
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand-strong);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-/* 题干滚动区：长题干内部滚动，避免显示不全 */
-.review-chat-page__question-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  text-align: center;
-  padding: 2px 4px;
-}
-
-.review-chat-page__question-text {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 650;
-  line-height: 1.7;
-  color: var(--ink);
-}
-
-/* 自定义拉伸手柄（置于问题框顶部，向上拖拉高/向下拖拉低；替代 CSS resize，兼容 WebView2） */
-.review-chat-page__question-resize {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 16px;
-  margin: -16px -20px 6px;
-  cursor: ns-resize;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-2);
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
-  transition: background 0.15s;
-  user-select: none;
-}
-
-.review-chat-page__question-resize:hover,
-.review-chat-page__question-resize.is-dragging {
-  background: var(--brand-soft);
-}
-
-.review-chat-page__question-resize-bar {
-  width: 44px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--ink-3);
-  transition: background 0.15s;
-  pointer-events: none;
-}
-
-.review-chat-page__question-resize:hover .review-chat-page__question-resize-bar,
-.review-chat-page__question-resize.is-dragging .review-chat-page__question-resize-bar {
-  background: var(--brand);
 }
 
 /* ---- 结构化答题卡片容器 ---- */

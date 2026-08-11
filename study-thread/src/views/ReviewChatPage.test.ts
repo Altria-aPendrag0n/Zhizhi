@@ -122,7 +122,7 @@ function createWrapper() {
   return mount(ReviewChatPage, {
     global: {
       stubs: {
-        ChatView: { name: 'ChatView', props: ['messages', 'isStreaming', 'streamingText', 'streamingThinking', 'error', 'noteRefs'], template: '<div />' },
+        ChatView: { name: 'ChatView', props: ['messages', 'isStreaming', 'streamingText', 'streamingThinking', 'error', 'noteRefs'], template: '<div><div v-for="m in messages" :key="m.content + m.role">{{ m.content }}</div></div>' },
         Composer: { name: 'Composer', props: ['isStreaming', 'disabled', 'placeholder'], template: '<div />' },
         AddToNoteDialog: { name: 'AddToNoteDialog', template: '<div />' },
       },
@@ -430,7 +430,7 @@ describe('ReviewChatPage', () => {
     expect(wrapper.text()).toContain('1 / 2')
   })
 
-  it('答题区展示当前题目：题号 + 题型标签 + 题干（一问一答标注）', async () => {
+  it('题目直接展示在会话流：题号 + 题型标签 + 题干，答题区保留', async () => {
     mocks.loadReviewSession.mockResolvedValue(
       makeSession({
         review_questions: [
