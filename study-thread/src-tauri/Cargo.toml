@@ -1,8 +1,8 @@
 [package]
 name = "study-thread"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "知枝 (Study Thread)——本地优先的 AI 伴读桌面应用：对话式学习、原子笔记、间隔复习与本地知识检索"
+authors = ["Asahiiiasd"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

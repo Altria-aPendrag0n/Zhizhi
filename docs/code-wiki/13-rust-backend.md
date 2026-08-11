@@ -15,7 +15,7 @@
 
 ```
 src-tauri/
-├── Cargo.toml            # 依赖：tauri v2 / tauri-plugin-opener / tauri-plugin-dialog / serde / serde_json / notify v6
+├── Cargo.toml            # 依赖：tauri v2 / tauri-plugin-opener / tauri-plugin-dialog / tauri-plugin-updater / tauri-plugin-process / serde / serde_json / notify v6（元数据：作者 Asahiiiasd，描述见 MANIFEST）
 ├── tauri.conf.json       # 应用配置（产品名"知枝"、窗口、CSP、打包）
 ├── build.rs              # tauri-build
 ├── capabilities/default.json
