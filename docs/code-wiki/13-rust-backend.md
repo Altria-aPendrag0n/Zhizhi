@@ -15,7 +15,7 @@
 
 ```
 src-tauri/
-├── Cargo.toml            # 依赖：tauri v2 / tauri-plugin-opener / serde / serde_json / notify v6
+├── Cargo.toml            # 依赖：tauri v2 / tauri-plugin-opener / tauri-plugin-dialog / serde / serde_json / notify v6
 ├── tauri.conf.json       # 应用配置（产品名"知枝"、窗口、CSP、打包）
 ├── build.rs              # tauri-build
 ├── capabilities/default.json
@@ -46,6 +46,7 @@ use commands::vault::WatcherState;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())   // 系统文件/目录选择对话框（VaultSettings 选目录）
         .manage(WatcherState(Mutex::new(None)))        // 文件监听器状态
         .invoke_handler(tauri::generate_handler![
             commands::vault::read_file,
@@ -141,7 +142,7 @@ watcher.watch(Path::new(&watch_path), RecursiveMode::Recursive)?;
 {
   "identifier": "default",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": ["core:default", "opener:default", "dialog:default"]
 }
 ```
 

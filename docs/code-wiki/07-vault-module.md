@@ -89,9 +89,12 @@ await syncReferencesIndex(indexer)            // 参考资料：无缓存与否�
 
 - 位于设置页；无 props/emits。
 - 功能：打开 / 新建 / 切换 / 关闭 Vault；最近打开列表（`settingsStore.recentVaults`，最多 5 条）。
-- 打开/新建均用 `prompt()` 收集路径；**新建时创建 `notes/sessions/attachments/.study-thread` 四个子目录**。
+- 路径选择统一走 **tauri-plugin-dialog** 的系统资源管理器：`open({ directory: true })`（`@tauri-apps/plugin-dialog`），取消选择（返回 `null`）时静默返回，不执行任何操作；`multiple: false` 单选目录。
+- **打开/切换 Vault**：资源管理器选目录 → `vaultStore.openVault(path)`。
+- **新建 Vault**：先资源管理器选父目录，再用 `prompt()` 输入名称，`joinPath` 拼接后创建 `notes/sessions/attachments/.study-thread` 四个子目录，再打开。
 - `joinPath` 按平台分隔符拼接；`toErrorMessage` 统一错误文案。
 - 打开成功后 `settingsStore.addRecentVault(path)`。
+- 配套：Rust 端 `lib.rs` 注册 `tauri-plugin-dialog`，`capabilities/default.json` 授权 `dialog:default`（见 [13-rust-backend.md](./13-rust-backend.md)）。
 
 ## 5. 协作链路
 

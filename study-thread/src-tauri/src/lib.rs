@@ -6,6 +6,7 @@ use std::sync::Mutex;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(WatcherState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             commands::vault::read_file,

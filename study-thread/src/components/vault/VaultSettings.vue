@@ -46,6 +46,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { open } from '@tauri-apps/plugin-dialog'
 import { useSettingsStore } from '../../stores/settings'
 import { useVaultStore } from '../../stores/vault'
 import { createDir } from '../../utils/vault-fs'
@@ -55,18 +56,28 @@ const settingsStore = useSettingsStore()
 const errorMessage = ref('')
 
 async function handleOpenVault() {
-  const path = prompt('请输入已有 Vault 的目录路径：')?.trim()
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: '选择 Vault 目录',
+  })
+  const path = Array.isArray(selected) ? selected[0] : selected
   if (path) await openVault(path)
 }
 
 async function handleCreateVault() {
+  const parentPath = await open({
+    directory: true,
+    multiple: false,
+    title: '选择新 Vault 的父目录',
+  })
+  const resolvedParent = Array.isArray(parentPath) ? parentPath[0] : parentPath
+  if (!resolvedParent) return
+
   const name = prompt('请输入新 Vault 名称：')?.trim()
   if (!name) return
 
-  const parentPath = prompt('请输入父目录路径：')?.trim()
-  if (!parentPath) return
-
-  const path = joinPath(parentPath, name)
+  const path = joinPath(resolvedParent, name)
 
   try {
     await Promise.all([
