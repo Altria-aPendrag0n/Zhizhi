@@ -44,12 +44,10 @@
       <div class="review-card__actions" @click.stop>
         <button
           class="review-card__start"
-          :class="{ 'is-ongoing': isOngoing(task) }"
           type="button"
           :title="isOngoing(task) ? '继续上次的复习会话' : '进入 AI 复习会话'"
           @click="$emit('start', task)"
         >
-          <Play v-if="isOngoing(task)" :size="12" :stroke-width="2.6" aria-hidden="true" />
           {{ isOngoing(task) ? '继续复习' : '开始复习' }}
         </button>
         <button
@@ -102,7 +100,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Play } from '@lucide/vue'
 import type { ReviewRating, ReviewTask } from '../../types'
 
 const props = defineProps<{
@@ -399,9 +396,6 @@ function ratingLabel(rating: ReviewRating | null): string {
 }
 
 .review-card__start {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   padding: 7px 14px;
   border: 1px solid var(--brand);
   border-radius: var(--r-md);
@@ -418,26 +412,6 @@ function ratingLabel(rating: ReviewRating | null): string {
 .review-card__start:hover {
   background: var(--brand-strong);
   box-shadow: 0 3px 10px rgba(36, 92, 77, 0.3);
-  transform: translateY(-1px);
-}
-
-/* 「继续复习」：柔和黄绿渐变胶囊按钮（图标 + 内高光 + 柔光阴影） */
-.review-card__start.is-ongoing {
-  padding: 7px 15px 7px 13px;
-  border-color: rgba(140, 163, 42, 0.42);
-  border-radius: 999px;
-  background: linear-gradient(180deg, #e0ef9c 0%, #c3da5e 100%);
-  color: #39460f;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 2px 6px rgba(141, 165, 46, 0.28);
-}
-
-.review-card__start.is-ongoing:hover {
-  background: linear-gradient(180deg, #d6e88a 0%, #b6cf4b 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 3px 10px rgba(141, 165, 46, 0.36);
   transform: translateY(-1px);
 }
 
