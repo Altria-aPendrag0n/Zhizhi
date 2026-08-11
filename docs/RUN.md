@@ -301,6 +301,7 @@ npx @tauri-apps/cli signer generate
 
 - **客户端更新流程**：`check()` 读取 `latest.json` 比对版本 → `downloadAndInstall()` 后台下载安装 → `relaunch()` 重启。更新失败（网络/签名校验不通过）时应用内降级为错误提示，不影响正常使用。
 - **Windows 仅 NSIS 支持自更新**（MSI 不支持 updater），分发时请以 NSIS 安装包为准。
+- **资产名非 ASCII 字符会被 GitHub 剥离**：本地安装包名（如「知枝_0.1.0_x64-setup.exe」）上传到 GitHub Release 后，中文会被自动移除（存储名变为「_0.1.0_x64-setup.exe」）。`release-latest.mjs` 已内置相同规范化生成下载 URL，请直接上传本地原文件即可，无需手动改名。
 - 未签名安装包仍会触发 SmartScreen 拦截，正式版建议购买代码签名证书（见 §4.3）。
 
 ---

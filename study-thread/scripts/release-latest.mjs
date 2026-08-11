@@ -134,6 +134,19 @@ function pickBestPerPlatform(found) {
   return [...best.values()]
 }
 
+/**
+ * GitHub 会对 Release 资产名做规范化：实测非 ASCII 字符（如中文产品名）会在
+ * 上传时被剥离（`知枝_0.1.0_x64-setup.exe` → `_0.1.0_x64-setup.exe`）。
+ * 这里与 GitHub 行为保持一致，生成与实际存储名匹配的下载 URL。
+ */
+function sanitizeAssetName(name) {
+  const sanitized = name.replace(/[^\x20-\x7E]/g, '')
+  if (sanitized !== name) {
+    log(`资产名含非 ASCII 字符，GitHub 将剥离为：${sanitized}`)
+  }
+  return sanitized
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const outputIdx = args.indexOf('--output')
@@ -175,9 +188,10 @@ async function main() {
       signature = (await readFile(item.sigPath, 'utf-8')).trim()
     }
     const fileName = relative(BUNDLE_ROOT, item.artifactPath).split(/[\\/]/).pop()
+    const assetName = sanitizeAssetName(fileName)
     platforms[item.platform] = {
       signature,
-      url: `${baseUrl}/${encodeURIComponent(fileName)}`,
+      url: `${baseUrl}/${encodeURIComponent(assetName)}`,
     }
   }
 
