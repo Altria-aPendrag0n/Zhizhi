@@ -15,6 +15,7 @@
 | [开发设计文档](docs/DEVELOPMENT.md) | 开发者 | 产品设计、功能规格 |
 | [Code Wiki](docs/code-wiki/README.md) | 开发者 | 代码实现角度的模块文档 |
 | [发布计划](docs/v0.1-release-plan.md) | 维护者 | v0.1 测试版发布评审与待办存档 |
+| [更新日志](CHANGELOG.md) | 所有人 | 版本迭代记录 |
 
 ## 仓库结构
 
@@ -32,3 +33,9 @@ npm run tauri dev
 ```
 
 详见 [docs/RUN.md](docs/RUN.md)。
+
+## 许可证
+
+[Apache-2.0](LICENSE) © 2026 Asahiiiasd。允许自由使用、修改与分发（含商用），需保留版权声明与许可证文本。
+
+> 说明：本项目为 AI 辅助生成代码，借鉴了 Obsidian（Vault + Markdown 双向链接）与对话式智能导师等产品的**设计理念**，源码为原创。若后续发现混入受 GPL 约束的第三方代码片段，将单独替换并在此说明。
