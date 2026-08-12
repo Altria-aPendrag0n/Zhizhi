@@ -63,7 +63,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { loadStoredValue, saveStoredValue } from './utils/local-storage'
 import AppShell from './components/shell/AppShell.vue'
 import ProjectRail from './components/shell/ProjectRail.vue'
 import ThreadList from './components/shell/ThreadList.vue'
@@ -88,8 +87,6 @@ const busyStore = useBusyStore()
 const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
-const LOCAL_SESSION_LIST_KEY = 'study-thread-session-list'
-const LOCAL_THREAD_MESSAGES_KEY = 'study-thread-messages'
 
 const defaultProjects: Project[] = [
   { id: '1', name: '知枝学习' },
@@ -97,42 +94,38 @@ const defaultProjects: Project[] = [
   { id: '3', name: '学习地图' },
 ]
 
-const defaultProjectThreads: Record<string, Thread[]> = {
-  '1': [
-    { id: '1', title: '用费曼法拆解一个概念', meta: '12:40' },
-    { id: '2', title: '工作记忆的边界', meta: '09:15' },
-    { id: '3', title: '间隔重复笔记', meta: '昨天 16:20' },
-    { id: '4', title: '形成性测验设计', meta: '7月24日 14:30' },
-  ],
-  '2': [
-    { id: '5', title: '认知科学论文索引', meta: '11:20' },
-    { id: '6', title: '机器学习基础', meta: '昨天 09:40' },
-  ],
-  // 学习地图（项目3）为纯视图切换界面，不含会话；
-  // 旧版 /hub?thread=7（知识图谱总览）/thread=8（概念关系网络）的示例会话已废弃移除
-}
-
-type StoredSessionList = {
-  projects: Project[]
-  projectThreads: Record<string, Thread[]>
-  activeProjectId: string
-  activeThreadId?: string | null
-}
-
-const storedSessionList = loadStoredValue<StoredSessionList>(LOCAL_SESSION_LIST_KEY)
-const projectThreads: Record<string, Thread[]> = storedSessionList?.projectThreads ?? defaultProjectThreads
-const storedProjects = storedSessionList?.projects?.length ? storedSessionList.projects : defaultProjects
-const didMigrateSessionMeta = migrateSessionMeta(projectThreads, loadStoredValue<Record<string, unknown[]>>(LOCAL_THREAD_MESSAGES_KEY) ?? {})
-const initialProjectId = '1'
-const initialThreads = projectThreads[initialProjectId] ?? []
-const initialThreadId = initialThreads[0]?.id ?? null
-
-const projects = ref<Project[]>(storedProjects)
-const activeProjectId = ref(initialProjectId)
-const threads = ref<Thread[]>([...initialThreads])
-const activeThreadId = ref<string | null>(initialThreadId)
-const breadcrumbs = ref(initialThreadId ? ['学习会话', initialThreads.find((thread) => thread.id === initialThreadId)?.title ?? ''] : ['学习会话'])
+const projects = ref<Project[]>(defaultProjects)
+const activeProjectId = ref('1')
+const activeThreadId = ref<string | null>(null)
 const noteDetailTitle = ref('')
+
+/**
+ * 会话栏列表：来自 vault sessions/*.md（仓库即真相，无本地缓存），
+ * 仅「知枝学习」项目展示；会话创建时间格式化为侧边栏元信息。
+ */
+const threads = computed<Thread[]>(() => {
+  if (activeProjectId.value !== '1') return []
+  return sessionStore.sessionList.map((session) => ({
+    id: session.id,
+    title: session.title,
+    meta: formatSessionTime(session.created),
+  }))
+})
+const activeThread = computed(() => threads.value.find((thread) => thread.id === activeThreadId.value) ?? null)
+const breadcrumbs = computed(() => activeThread.value ? ['学习会话', activeThread.value.title] : ['学习会话'])
+
+/** 会话创建时间 → 侧边栏元信息：今天显示时刻，昨天显示「昨天 HH:MM」，往年显示完整日期 */
+function formatSessionTime(created: string): string {
+  const date = new Date(created)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  if (date.toDateString() === now.toDateString()) return time
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  if (date.toDateString() === yesterday.toDateString()) return `昨天 ${time}`
+  if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
+}
 
 /** 小窗口模式：会话列表不占主网格列，以抽屉形式从左侧滑出 */
 const COMPACT_BREAKPOINT = 860
@@ -151,71 +144,6 @@ function updateViewport() {
 
 function handleToggleThreads() {
   drawerOpen.value = !drawerOpen.value
-}
-
-if (didMigrateSessionMeta) {
-  saveStoredValue(LOCAL_SESSION_LIST_KEY, {
-    projects: storedProjects,
-    projectThreads,
-    activeProjectId: initialProjectId,
-    activeThreadId: initialThreadId,
-  })
-}
-
-function migrateSessionMeta(projectThreads: Record<string, Thread[]>, threadMessages: Record<string, unknown[]>): boolean {
-  let migrated = false
-
-  // 学习地图（项目3）是纯视图切换界面，不包含会话；
-  // 旧版 /hub?thread=7/8 的示例会话（知识图谱总览/概念关系网络）已废弃，加载时清理持久化残留
-  if (projectThreads['3']?.length) {
-    projectThreads['3'] = []
-    migrated = true
-  }
-
-  for (const threads of Object.values(projectThreads)) {
-    for (const thread of threads) {
-      const normalizedMeta = normalizeThreadMeta(thread.meta)
-      if (normalizedMeta !== thread.meta) {
-        thread.meta = normalizedMeta
-        migrated = true
-      }
-      if (thread.id.startsWith('new_') && thread.title === '新会话' && !threadMessages[thread.id]?.length) {
-        thread.title = '知枝学习'
-        migrated = true
-      }
-    }
-  }
-
-  return migrated
-}
-
-function normalizeThreadMeta(meta: string): string {
-  const time = meta.match(/(?:(?:\d{1,2}月)?\d{1,2}日\s*|(?:今天|昨天)\s*)?\d{1,2}:\d{2}/)?.[0]
-  return time?.trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-}
-
-function saveSessionList() {
-  saveStoredValue(LOCAL_SESSION_LIST_KEY, {
-    projects: projects.value,
-    projectThreads,
-    activeProjectId: activeProjectId.value,
-    activeThreadId: activeThreadId.value,
-  })
-}
-
-function removeThreadMessages(threadId: string) {
-  const storedMessages = loadStoredValue<Record<string, unknown>>(LOCAL_THREAD_MESSAGES_KEY)
-  if (!storedMessages || !(threadId in storedMessages)) return
-
-  delete storedMessages[threadId]
-  saveStoredValue(LOCAL_THREAD_MESSAGES_KEY, storedMessages)
-}
-
-function syncActiveThread(id: string | null) {
-  activeThreadId.value = id
-  const thread = id ? threads.value.find((item) => item.id === id) : null
-  breadcrumbs.value = thread ? ['学习会话', thread.title] : ['学习会话']
-  saveSessionList()
 }
 
 /** 主界面（/home）：品牌按钮高亮、隐藏会话栏 */
@@ -265,21 +193,12 @@ const activeBranchId = computed(() =>
   route.name === 'branch-chat' ? (route.params.branchId as string) : null,
 )
 
-function updateThreadTitle(threadId: string, title: string) {
+/** 重命名会话：改写 vault 会话 md 的 frontmatter title（仓库即真相），并刷新侧边栏列表 */
+async function updateThreadTitle(threadId: string, title: string) {
   const normalizedTitle = title.trim()
-  const projectList = projectThreads[activeProjectId.value]
-  if (!normalizedTitle || !projectList) return
-
-  const thread = projectList.find((item) => item.id === threadId)
-  if (!thread) return
-
-  thread.title = normalizedTitle
-  thread.meta = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-  threads.value = [...projectList]
-  if (activeThreadId.value === threadId) {
-    breadcrumbs.value = ['学习会话', normalizedTitle]
-  }
-  saveSessionList()
+  if (!normalizedTitle || !vaultStore.vaultPath) return
+  const ok = await sessionStore.renameSessionTitle(vaultStore.vaultPath, threadId, normalizedTitle)
+  if (!ok) toast.error('重命名会话失败')
 }
 
 provide('updateThreadTitle', updateThreadTitle)
@@ -319,8 +238,7 @@ function getProjectRoute(projectId: string, threadId: string | null) {
 }
 
 function handleProjectSelect(id: string) {
-  const currentThreads = projectThreads[id] ?? []
-  const nextThreadId = currentThreads[0]?.id ?? null
+  const nextThreadId = id === '1' ? (sessionStore.sessionList[0]?.id ?? null) : null
   const targetRoute = getProjectRoute(id, nextThreadId)
 
   if (activeProjectId.value === id) {
@@ -335,23 +253,18 @@ function handleProjectSelect(id: string) {
 
   activeProjectId.value = id
   if (targetRoute.path === '/notes') {
-    // 资料库目标路由（/notes）会隐藏会话栏：不提前切换 threads，
-    // 否则会在 /chat 上先闪现一帧资料库项目的会话栏（如 知枝学习/认知科学论文索引/机器学习基础）再跳转
+    // 资料库目标路由（/notes）会隐藏会话栏：不切换会话激活状态（threads 为计算属性，
+    // 会话栏始终展示 vault 会话，/notes 下隐藏不显示）
     router.push(targetRoute)
-    // 会话激活状态与持久化在导航发起后同步（threads 列表保持原样，/notes 隐藏会话栏）
-    syncActiveThread(nextThreadId)
     return
   }
   if (targetRoute.path === '/hub') {
-    // 学习地图为纯视图切换界面（无会话）：同步空会话列表并清空激活会话，
-    // 避免 /hub 异步加载期间在 /chat 上闪现旧版废弃的会话栏（知识图谱总览/概念关系网络）
-    threads.value = []
-    syncActiveThread(null)
+    // 学习地图为纯视图切换界面（无会话）：清空激活会话，避免旧会话残留
+    activeThreadId.value = null
     router.push(targetRoute)
     return
   }
-  threads.value = [...currentThreads]
-  syncActiveThread(nextThreadId)
+  if (nextThreadId) activeThreadId.value = nextThreadId
   router.push(targetRoute)
 }
 
@@ -367,7 +280,7 @@ function handleBrand() {
 function handleThreadSelect(id: string) {
   if (!threads.value.some((thread) => thread.id === id)) return
 
-  syncActiveThread(id)
+  activeThreadId.value = id
   router.push(getProjectRoute(activeProjectId.value, id))
 }
 
@@ -390,38 +303,27 @@ async function handleDeleteBranch(sessionId: string, branchId: string) {
 }
 
 function handleThreadRename(id: string, title: string) {
-  updateThreadTitle(id, title)
+  void updateThreadTitle(id, title)
 }
 
 function handleActiveThreadTitleUpdate(title: string) {
   if (activeThreadId.value) {
-    updateThreadTitle(activeThreadId.value, title)
+    void updateThreadTitle(activeThreadId.value, title)
   }
 }
 
 async function handleThreadDelete(id: string) {
-  const projectList = projectThreads[activeProjectId.value]
-  if (!projectList) return
-
-  const deletedIndex = projectList.findIndex((thread) => thread.id === id)
-  if (deletedIndex === -1) return
-
   // 级联删除该会话及其下所有分支的 vault 文件（无 vault 时视为本地会话放行）
   if (!(await sessionStore.deleteSessionNodeFromVault(vaultStore.vaultPath, id))) {
-    toast.error('删除 Vault 会话文件失败，未删除本地会话')
+    toast.error('删除 Vault 会话文件失败')
     return
   }
-
-  removeThreadMessages(id)
-  projectList.splice(deletedIndex, 1)
-  threads.value = [...projectList]
+  // 刷新会话列表（仓库即真相）
+  if (vaultStore.vaultPath) await sessionStore.loadSessionsFromVault(vaultStore.vaultPath)
 
   if (activeThreadId.value === id) {
-    const nextThread = projectList[deletedIndex] ?? projectList[deletedIndex - 1] ?? null
-    syncActiveThread(nextThread?.id ?? null)
-    router.replace(getProjectRoute(activeProjectId.value, nextThread?.id ?? null))
-  } else {
-    saveSessionList()
+    activeThreadId.value = null
+    router.replace({ path: '/chat' })
   }
 
   toast.success('已删除会话')
@@ -433,15 +335,9 @@ function handleNewThread(projectId = activeProjectId.value) {
     toast.info('学习地图为视图界面，不支持新建会话')
     return
   }
+  // 新会话以 md 保存在仓库：首条消息发送后才会落盘并出现在侧边栏，此处仅导航到空会话
   const newId = `new_${Date.now()}`
-  const newThread: Thread = {
-    id: newId,
-    title: '新会话',
-    meta: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
-  }
-  projectThreads[projectId] = [newThread, ...(projectThreads[projectId] ?? [])]
-  threads.value = [...projectThreads[projectId]]
-  syncActiveThread(newId)
+  activeThreadId.value = newId
   router.push(getProjectRoute(projectId, newId))
   toast.success('已创建新会话')
 }
@@ -558,20 +454,8 @@ function handleKeydown(event: KeyboardEvent) {
 watch(
   () => route.query.thread,
   (threadId) => {
-    if (typeof threadId !== 'string') return
-
-    const matchingProjectId = Object.entries(projectThreads).find(([, projectList]) =>
-      projectList.some((thread) => thread.id === threadId),
-    )?.[0]
-    if (!matchingProjectId) return
-
-    if (activeProjectId.value !== matchingProjectId) {
-      activeProjectId.value = matchingProjectId
-      threads.value = [...projectThreads[matchingProjectId]]
-    }
-    if (activeThreadId.value !== threadId) {
-      syncActiveThread(threadId)
-    }
+    // 会话激活状态跟随路由：新会话（new_*）尚未落盘、不在列表中，仍标记为激活
+    activeThreadId.value = typeof threadId === 'string' && threadId ? threadId : null
   },
   { immediate: true },
 )
@@ -579,8 +463,13 @@ watch(
 watch(
   () => vaultStore.vaultPath,
   (path) => {
-    // vault 就绪后加载会话树，供左侧会话列表展开分支
-    if (path) void sessionStore.initSessionTree(path)
+    if (path) {
+      // vault 就绪后加载会话列表与会话树（仓库即真相：侧边栏会话来自 sessions/*.md）
+      void sessionStore.loadSessionsFromVault(path)
+    } else {
+      sessionStore.sessionList = []
+      sessionStore.sessionTree = null
+    }
   },
   { immediate: true },
 )

@@ -12,7 +12,7 @@
 |-------|------|--------------------------|
 | `settings` | LLM 服务商配置 + 最近 Vault 列表 | `study-thread-settings`、`study-thread-recent-vaults` |
 | `vault` | 当前 Vault 路径、文件树、索引构建编排 | `study-thread-last-vault` |
-| `session` | 会话列表、当前会话消息、分支树 | `.study-thread/session-tree.json`（vault 内） |
+| `session` | 会话列表（`sessionList`）、当前会话消息、分支树 | 会话列表/消息来自 vault `sessions/*.md`（仓库即真相）；分支树在 `.study-thread/session-tree.json` |
 | `notes` | 笔记列表/详情缓存、笔记读写 | `study-thread-extracted-notes`（本地元数据缓存） |
 | `references` | 参考资料列表与增删改 | 无（数据全在 vault `references/` 目录） |
 
@@ -65,6 +65,7 @@
 | `currentSessionId` / `messages: Message[]` | 当前会话与消息 |
 | `isStreaming` | 流式标记（UI 使用） |
 | `sessionTree: SessionTreeNode \| null` | 分支树（来自 `.study-thread/session-tree.json`） |
+| `sessionList: SessionMeta[]` | 侧边栏会话列表（来自 vault `sessions/*.md`，排除 branch-/review- 前缀文件） |
 | `MAX_BRANCH_DEPTH = 3` | 分支嵌套上限（主会话为 0 层） |
 
 | 动作 | 说明 |
@@ -74,6 +75,8 @@
 | `createBranch(parentId, forkMessageId, title)` | 内存中创建 `branch_<ts>_<n>` 分支 |
 | `loadBranchContext(sessionId)` | 读取分支已存消息（内存版） |
 | `initSessionTree(vaultPath)` | 读取 session-tree.json |
+| `loadSessionsFromVault(vaultPath)` | **扫描 `sessions/*.md` 解析 frontmatter 构建会话列表**（仓库即真相：侧边栏无本地缓存），按 created 倒序，同时加载分支树 |
+| `renameSessionTitle(vaultPath, sessionId, title)` | **重命名改写会话 md 的 frontmatter `title`** 并刷新列表（仓库即真相） |
 | `addBranchToSessionTree` / `saveSessionTree` | 分支树维护与持久化 |
 | `createBranchInVault(vaultPath, parentSession, forkMessageIndex, branchTitle, parentSessionFile?)` | 完整分支创建流程：深度校验 → 保存父会话文件 → 建根节点/分支 → 写树（详见 [02-chat-module.md](./02-chat-module.md)） |
 | `getBranches(nodeId)` / `getNodeBranchDepth(nodeId)` | 查询分支与深度 |

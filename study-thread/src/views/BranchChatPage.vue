@@ -79,8 +79,9 @@ import { createProvider } from '../api/provider-factory'
 import { branchFollowupStream } from '../api/skills/branch-followup'
 import { extractNote } from '../api/skills/extract-note'
 import type { Message, Session, ExtractedNote } from '../types'
-import { loadBranchContext, buildForkContextPreview, stripInheritedContext, extractForkContext, parseMessages } from '../utils/branch-context'
+import { loadBranchContext, buildForkContextPreview, stripInheritedContext, extractForkContext } from '../utils/branch-context'
 import { parseFrontmatter } from '../parser/frontmatter'
+import { parseSessionMessages } from '../utils/session-serializer'
 import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
@@ -207,7 +208,8 @@ async function loadContext() {
     }
     forkHighlight.value = typeof meta.fork_highlight === 'string' ? meta.fork_highlight : ''
     forkContextFromFile = extractForkContext(body)
-    savedMessages = parseMessages(body, Number.MAX_SAFE_INTEGER)
+    // 用带时间戳的消息解析器加载分支自身对话：重存会话时不丢失消息级时间戳（主界面统计依赖）
+    savedMessages = parseSessionMessages(body)
   } catch {
     // 新分支：下方为干净的新对话界面，不显示主会话历史
     currentRaw = ''

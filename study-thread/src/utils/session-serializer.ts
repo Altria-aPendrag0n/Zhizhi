@@ -6,7 +6,8 @@
 import type { Session, Message } from '../types'
 import type { NoteReference } from './session-linker'
 import { writeFile, createDir } from './vault-fs'
-import { serializeForkContext } from './branch-context'
+import { serializeForkContext, FORK_CONTEXT_START, FORK_CONTEXT_END } from './branch-context'
+import { parseFrontmatter } from '../parser/frontmatter'
 
 /**
  * 生成会话标题（取首条用户消息前 30 字）
@@ -128,4 +129,134 @@ export async function saveSessionToVault(
   await writeFile(filePath, content)
 
   return filePath
+}
+
+// ===================== 从 vault 加载会话 =====================
+
+/** 会话列表元数据（侧边栏展示用）：仅解析 frontmatter，不读正文消息 */
+export interface SessionMeta {
+  id: string
+  title: string
+  /** ISO 创建时间（frontmatter created 缺失时回退为 1970，排序沉底） */
+  created: string
+  filePath: string
+}
+
+/** 消息头：`## 用户/知枝/系统`，可带 ` · <ISO 时间戳>`（统计问答按天归属） */
+const MSG_HEADER_RE = /^## (用户|知枝|系统)(?: · (.+))?\s*$/
+/** 划线引用标记行（已生成笔记/分支），解析消息内容时跳过，不混入正文 */
+const REF_LINE_RE = /^> 已生成(笔记|分支):\s*\[\[/
+
+function toString(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function toTags(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : []
+}
+
+/** frontmatter session_id 缺失时按文件名兜底（sess_xxx.md → sess_xxx） */
+function sessionIdFromFileName(filePath: string): string {
+  const name = filePath.split(/[\\/]/).pop() || ''
+  return name.replace(/\.md$/i, '')
+}
+
+/** 移除正文中的分叉点上下文区块（解析消息前调用，避免区块内容被当作消息） */
+function removeForkContextBlock(body: string): string {
+  const start = body.indexOf(FORK_CONTEXT_START)
+  if (start === -1) return body
+  const end = body.indexOf(FORK_CONTEXT_END, start)
+  if (end === -1) return body
+  return body.slice(0, start) + body.slice(end + FORK_CONTEXT_END.length)
+}
+
+/** 提取正文中的分叉点上下文区块内容（无区块返回空串） */
+function extractForkContextBlock(body: string): string {
+  const start = body.indexOf(FORK_CONTEXT_START)
+  if (start === -1) return ''
+  const end = body.indexOf(FORK_CONTEXT_END, start)
+  if (end === -1) return ''
+  return body.slice(start + FORK_CONTEXT_START.length, end).trim()
+}
+
+/**
+ * 轻量解析会话文件元数据（侧边栏会话列表用，不解析正文消息）。
+ * frontmatter 缺失/损坏时按文件名兜底 id 与标题。
+ */
+export function parseSessionMeta(content: string, filePath: string): SessionMeta {
+  const { meta } = parseFrontmatter(content)
+  return {
+    id: toString(meta.session_id) || sessionIdFromFileName(filePath),
+    title: toString(meta.title) || sessionIdFromFileName(filePath),
+    created: toString(meta.created) || '1970-01-01T00:00:00.000Z',
+    filePath,
+  }
+}
+
+/**
+ * 从会话正文解析消息列表（保留消息级时间戳）。
+ *
+ * 消息头 `## 用户/知枝/系统` 带 ` · <ISO>` 时时间戳保留到 message.timestamp
+ * （主界面按天统计问答依赖该字段）；存量文件无时间戳时为 undefined。
+ * 分叉点上下文区块与 `> 已生成笔记/分支` 引用行是特殊标记，跳过不混入正文。
+ */
+export function parseSessionMessages(body: string): Message[] {
+  const messages: Message[] = []
+  const lines = removeForkContextBlock(body).split('\n')
+  let current: { role: Message['role']; timestamp?: string; content: string[] } | null = null
+
+  const flush = () => {
+    if (!current || current.content.length === 0) return
+    const message: Message = { role: current.role, content: current.content.join('\n').trim() }
+    if (current.timestamp) message.timestamp = current.timestamp
+    messages.push(message)
+  }
+
+  for (const line of lines) {
+    const match = line.match(MSG_HEADER_RE)
+    if (match) {
+      flush()
+      const role = match[1] === '用户' ? 'user' : match[1] === '知枝' ? 'assistant' : 'system'
+      current = { role, timestamp: match[2]?.trim() || undefined, content: [] }
+      continue
+    }
+    if (!current) continue
+    // 跳过划线引用标记行，避免混入消息正文
+    if (REF_LINE_RE.test(line)) continue
+    current.content.push(line)
+  }
+  flush()
+
+  return messages
+}
+
+/**
+ * 从会话 md 文件内容解析完整会话（frontmatter + 正文消息）。
+ *
+ * 会话以 md + 特殊标记符（frontmatter、`## 角色 · 时间戳` 消息头、
+ * `<!-- fork-context -->` 区块、`> 已生成笔记/分支` 引用行）持久化在 vault，
+ * 本函数是读取侧的唯一入口。复习会话（kind: review）建议走
+ * review-session 的 loadReviewSession（含出题结果规范化），此处不解析 review_questions。
+ */
+export function parseSessionFile(content: string, filePath = ''): Session {
+  const { meta, body } = parseFrontmatter(content)
+  const createdAt = toString(meta.created) || '1970-01-01T00:00:00.000Z'
+  const forkPoint = meta.fork_point
+  return {
+    id: toString(meta.session_id) || sessionIdFromFileName(filePath),
+    title: toString(meta.title) || sessionIdFromFileName(filePath),
+    created: createdAt,
+    parent_session: toString(meta.parent_session) || null,
+    fork_point: forkPoint != null ? String(forkPoint) : null,
+    tags: toTags(meta.tags),
+    messages: parseSessionMessages(body),
+    fork_context: extractForkContextBlock(body) || undefined,
+    fork_highlight: toString(meta.fork_highlight) || undefined,
+    kind: meta.kind === 'review' ? 'review' : undefined,
+    reviewed_note: toString(meta.reviewed_note) || undefined,
+    review_cluster: Array.isArray(meta.review_cluster) && meta.review_cluster.every((item): item is string => typeof item === 'string')
+      ? meta.review_cluster
+      : undefined,
+    review_completed: meta.review_completed === true,
+  }
 }

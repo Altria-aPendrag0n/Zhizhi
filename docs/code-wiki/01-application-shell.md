@@ -8,7 +8,7 @@
 ## 1. 模块职责
 
 - 组装 Vue 应用（Pinia + Router），并渲染全局布局骨架。
-- 维护"项目 → 会话"两级导航模型，持久化到 `localStorage`（键 `study-thread-session-list`）。
+- 维护"项目 → 会话"两级导航模型；**会话列表来自 vault `sessions/*.md`**（仓库即真相，无 localStorage 缓存）。
 - 定义 6 个路由页面并处理路由参数（`query.thread` 联动激活会话）。
 - 注册全局键盘快捷键与顶栏/面包屑/标题注入回调。
 - 应用启动时恢复上次 Vault 并初始化 Embedding 引擎与向量索引。
@@ -46,15 +46,14 @@
 ### 4.1 导航状态模型
 
 ```ts
-projects: Project[]                          // { id, name }
-projectThreads: Record<projectId, Thread[]>  // Thread = { id, title, meta }
+projects: Project[]                          // { id, name }，固定 3 个项目
 activeProjectId / activeThreadId
 breadcrumbs                                  // ['学习会话', 会话标题]
+threads = computed(sessionStore.sessionList) // 来自 vault sessions/*.md，无本地缓存
 ```
 
-- 初始数据有 3 个内置项目：`1 知枝学习`、`2 资料库`、`3 学习地图`。**v0.1 起初始会话列表为空**（不再内置示例会话，避免误导真实用户）；**学习地图为纯视图切换界面、不含任何会话**（旧版 `/hub?thread=7/8` 的示例会话"知识图谱总览/概念关系网络"已废弃移除）。
-- 持久化：`saveSessionList()` 写入 `study-thread-session-list`；会话消息持久化在 `study-thread-messages`（由 `MainChatPage` 使用）。
-- 启动时执行一次元数据迁移 `migrateSessionMeta`（归一化 `meta` 时间、修正空"新会话"标题、**清理持久化中学习地图项目的残留会话**——旧版 `/hub?thread=7/8` 的示例会话已废弃，加载时清空避免再次闪现废弃界面）。
+- 固定 3 个项目：`1 知枝学习`、`2 资料库`、`3 学习地图`；**学习地图为纯视图切换界面、不含任何会话**（旧版 `/hub?thread=7/8` 的示例会话"知识图谱总览/概念关系网络"已废弃移除）。
+- **仓库即真相（本次改造）**：会话列表由 `sessionStore.sessionList`（`loadSessionsFromVault` 扫描 `sessions/*.md` 解析 frontmatter）派生，`meta` 由 `created` 格式化（今天显示时刻、昨天「昨天 HH:MM」、往年完整日期）；会话消息由 `MainChatPage` 按 `query.thread` 读取 md 并经 `parseSessionFile` 解析。新建会话（`new_*`）首条消息落盘后才出现在侧边栏；重命名改写 md frontmatter `title`（`renameSessionTitle`），删除级联删除文件并刷新列表。**曾用 localStorage `study-thread-session-list` 持久化会话列表、`study-thread-messages` 缓存消息及冷启动迁移逻辑 `migrateSessionMeta`，已全部移除。**
 - **首次运行欢迎引导**：`WelcomeOverlay`（`localStorage['study-thread-welcomed-v0.1']` 标记）——首次启动展示测试版声明与"建 Vault / 配 API Key / 开始会话"三步指引，按钮跳转设置页或直接关闭。侧栏笔记数统计由硬编码值改为 `noteStore.notes.length` 实时计数。
 
 ### 4.2 项目路由映射

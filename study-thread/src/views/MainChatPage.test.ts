@@ -2,10 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import MainChatPage from './MainChatPage.vue'
 
-const { route, saveCurrentSession, saveStoredValue, chat, retrieveKnowledgeContext } = vi.hoisted(() => ({
+const { route, saveCurrentSession, chat, retrieveKnowledgeContext } = vi.hoisted(() => ({
   route: { query: { thread: 'new_test' } },
   saveCurrentSession: vi.fn().mockResolvedValue('session-path'),
-  saveStoredValue: vi.fn(),
   chat: vi.fn(),
   retrieveKnowledgeContext: vi.fn(),
 }))
@@ -23,7 +22,7 @@ vi.mock('../stores/settings', () => ({
 
 vi.mock('../stores/vault', () => ({
   useVaultStore: () => ({
-    vaultPath: '',
+    vaultPath: '/vault',
     saveCurrentSession,
   }),
 }))
@@ -46,11 +45,10 @@ vi.mock('../utils/session-serializer', () => ({
   generateSessionTitle: vi.fn(() => '测试会话'),
   getSessionFilePath: vi.fn(),
 }))
-vi.mock('../utils/vault-fs', () => ({ readFile: vi.fn() }))
+vi.mock('../utils/vault-fs', () => ({ readFile: vi.fn().mockRejectedValue(new Error('会话文件不存在')) }))
 vi.mock('../utils/knowledge-retrieval', () => ({ retrieveKnowledgeContext }))
-vi.mock('../utils/local-storage', () => ({
-  loadStoredValue: vi.fn(() => ({})),
-  saveStoredValue,
+vi.mock('../stores/session', () => ({
+  useSessionStore: () => ({ loadSessionsFromVault: vi.fn().mockResolvedValue(undefined) }),
 }))
 
 function createWrapper() {
@@ -77,7 +75,6 @@ describe('MainChatPage', () => {
     retrieveKnowledgeContext.mockReset()
     retrieveKnowledgeContext.mockResolvedValue('')
     saveCurrentSession.mockClear()
-    saveStoredValue.mockClear()
   })
 
   it('重复 stop 不会用空 streamingText 覆盖已提交的 AI 回答', async () => {
@@ -95,7 +92,8 @@ describe('MainChatPage', () => {
     ])
     expect(chatView.props('streamingText')).toBe('')
     expect(chatView.props('isStreaming')).toBe(false)
-    expect(saveStoredValue).toHaveBeenCalled()
+    // 回答持久化到 vault 会话文件（仓库即真相，无本地缓存）
+    expect(saveCurrentSession).toHaveBeenCalled()
   })
 
   it('流结束但未发送 stop 时仍会提交并持久化 AI 回答', async () => {
@@ -109,7 +107,7 @@ describe('MainChatPage', () => {
       { role: 'user', content: '测试问题', timestamp: expect.any(String) },
       { role: 'assistant', content: '正常结束的回答' },
     ])
-    expect(saveStoredValue).toHaveBeenCalled()
+    expect(saveCurrentSession).toHaveBeenCalled()
   })
 
   it('思考内容与回答分离：流式分别输出，结束后保存到 message.thinking', async () => {

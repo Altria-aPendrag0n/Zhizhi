@@ -13,8 +13,8 @@ import {
   serializeTree,
   deserializeTree,
 } from '../utils/session-tree'
-import { readFile, writeFile, createDir, fileExists, deleteFile } from '../utils/vault-fs'
-import { getSessionFilePath, saveSessionToVault } from '../utils/session-serializer'
+import { readFile, writeFile, createDir, fileExists, deleteFile, listDir } from '../utils/vault-fs'
+import { getSessionFilePath, saveSessionToVault, parseSessionMeta, type SessionMeta } from '../utils/session-serializer'
 import { buildForkContextPreview } from '../utils/branch-context'
 import { removeSessionReferences } from '../utils/session-linker'
 
@@ -27,6 +27,8 @@ export const useSessionStore = defineStore('session', () => {
   const messages = ref<Message[]>([])
   const isStreaming = ref(false)
   const sessionTree = ref<SessionTreeNode | null>(null)
+  /** 侧边栏顶层会话列表（来自 vault sessions/*.md，分支/复习会话不在此列） */
+  const sessionList = ref<SessionMeta[]>([])
   let sessionCounter = 0
   let branchCounter = 0
 
@@ -102,6 +104,73 @@ export const useSessionStore = defineStore('session', () => {
     } catch {}
 
     sessionTree.value = null
+  }
+
+  /**
+   * 从 vault 加载侧边栏会话列表（仓库即真相：扫描 sessions/*.md 解析 frontmatter）。
+   *
+   * 分支（branch-*.md）在会话树中按父会话嵌套展示、复习会话（review-*.md）在资源库
+   * 「复习会话」分类展示，均不进入顶层会话列表；按创建时间倒序排列。
+   */
+  async function loadSessionsFromVault(vaultPath: string): Promise<void> {
+    try {
+      const entries = await listDir(`${vaultPath}/sessions`)
+      const metas: SessionMeta[] = []
+      for (const entry of entries) {
+        if (entry.is_dir || !entry.name.toLowerCase().endsWith('.md')) continue
+        if (entry.name.startsWith('branch-') || entry.name.startsWith('review-')) continue
+        try {
+          const content = await readFile(entry.path)
+          const meta = parseSessionMeta(content, entry.path)
+          if (meta.id) metas.push(meta)
+        } catch {
+          // 单个文件损坏跳过，不影响列表
+        }
+      }
+      metas.sort((a, b) => b.created.localeCompare(a.created))
+      sessionList.value = metas
+    } catch {
+      sessionList.value = []
+    }
+    await initSessionTree(vaultPath)
+  }
+
+  /** 重写会话 md frontmatter 中的 title 字段（保持其余内容不变） */
+  function replaceFrontmatterTitle(content: string, title: string): string {
+    const lines = content.split('\n')
+    let inFrontmatter = false
+    let replaced = false
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (line.trim() === '---') {
+        if (!inFrontmatter) {
+          inFrontmatter = true
+          continue
+        }
+        break
+      }
+      if (inFrontmatter && !replaced && /^title\s*:/.test(line)) {
+        lines[i] = `title: ${title}`
+        replaced = true
+      }
+    }
+    return lines.join('\n')
+  }
+
+  /**
+   * 重命名会话：直接改写 vault 中会话 md 的 frontmatter title（仓库即真相），
+   * 并刷新侧边栏列表。分支/复习会话的重命名当前不在 UI 暴露，仅支持顶层会话。
+   */
+  async function renameSessionTitle(vaultPath: string, sessionId: string, title: string): Promise<boolean> {
+    const filePath = getSessionFilePath(vaultPath, sessionId, sessionId.startsWith('branch_'))
+    try {
+      const content = await readFile(filePath)
+      await writeFile(filePath, replaceFrontmatterTitle(content, title))
+      await loadSessionsFromVault(vaultPath)
+      return true
+    } catch {
+      return false
+    }
   }
 
   function addBranchToSessionTree(parentId: string, branchId: string, title: string, file: string): void {
@@ -235,6 +304,7 @@ export const useSessionStore = defineStore('session', () => {
     isStreaming,
     currentSession,
     sessionTree,
+    sessionList,
     MAX_BRANCH_DEPTH,
     createSession,
     switchSession,
@@ -242,6 +312,8 @@ export const useSessionStore = defineStore('session', () => {
     createBranch,
     loadBranchContext,
     initSessionTree,
+    loadSessionsFromVault,
+    renameSessionTitle,
     addBranchToSessionTree,
     saveSessionTree,
     createBranchInVault,

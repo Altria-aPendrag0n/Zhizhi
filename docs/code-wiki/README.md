@@ -316,7 +316,7 @@ npm run tauri build    # vue-tsc + vite build + cargo build --release
      ├─ 若模型发起 tool_call（如 read_reference）→ executeClientTool 本地执行 → 结果作为 tool 消息回传 → 下一轮
      └─ 无工具调用 → 透传最终回答
   4. 流式渲染：thinking 折叠块 + StreamText / ChatMessage（marked 渲染）
-  5. 会话持久化：saveSessionToVault → <vault>/sessions/<id>.md；messages 同步 localStorage
+  5. 会话持久化：saveSessionToVault → <vault>/sessions/<id>.md（仓库即真相，无 localStorage 缓存；侧边栏列表由 loadSessionsFromVault 扫描该目录重建）
 ```
 
 ### 8.2 划线摘录 → 原子笔记

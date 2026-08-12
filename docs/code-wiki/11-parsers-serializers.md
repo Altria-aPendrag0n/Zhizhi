@@ -55,6 +55,9 @@ parseHeadings(markdown): MarkdownHeading[]
 | `serializeSession(session, noteRefs)` | 生成 Markdown：frontmatter（session_id/title/created/tags/parent_session/fork_point）+ 消息（`## 用户|知枝|系统 · 时间`）+ 笔记引用行（`> 已生成笔记: [[path|title]]`） |
 | `getSessionFilePath(vaultPath, sessionId, isBranch)` | `sessions/{id}.md` 或 `sessions/branch-{id}.md` |
 | `saveSessionToVault(vaultPath, session, isBranch, noteRefs)` | 建目录 + 写文件，返回文件路径 |
+| `parseSessionMeta(content, filePath)` | 轻量解析 frontmatter（id/title/created），侧边栏会话列表用；缺失时按文件名兜底 |
+| `parseSessionMessages(body)` | 解析正文消息（保留 `## 角色 · 时间戳` 的消息级时间戳；跳过 `<!-- fork-context -->` 区块与 `> 已生成笔记/分支` 引用标记行） |
+| `parseSessionFile(content, filePath?)` | 完整会话解析（frontmatter + 消息），读取侧唯一入口；复习会话建议走 `review-session.loadReviewSession`（含出题结果规范化） |
 
 ## 4. 分支树（`utils/session-tree.ts`）
 

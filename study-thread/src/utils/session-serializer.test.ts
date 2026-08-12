@@ -3,6 +3,9 @@ import {
   generateSessionTitle,
   sanitizeFileName,
   serializeSession,
+  parseSessionMeta,
+  parseSessionMessages,
+  parseSessionFile,
 } from './session-serializer'
 import type { Session } from '../types'
 
@@ -191,5 +194,165 @@ describe('serializeSession', () => {
     }
     const result = serializeSession(session, [{ path: 'notes/a.md', title: 'A', messageIndex: 0 }])
     expect(result).toContain('> 已生成笔记: [[notes/a.md|A]]')
+  })
+})
+
+describe('parseSessionMeta 仓库会话列表元数据', () => {
+  it('解析 frontmatter 的 id/标题/创建时间', () => {
+    const content = '---\nsession_id: sess_1\ntitle: 测试会话\ncreated: 2026-01-02T03:04:05.000Z\n---\n'
+    expect(parseSessionMeta(content, '/vault/sessions/sess_1.md')).toEqual({
+      id: 'sess_1',
+      title: '测试会话',
+      created: '2026-01-02T03:04:05.000Z',
+      filePath: '/vault/sessions/sess_1.md',
+    })
+  })
+
+  it('frontmatter 缺失时按文件名兜底 id 与标题', () => {
+    const meta = parseSessionMeta('# 无 frontmatter\n正文', '/vault/sessions/sess_9.md')
+    expect(meta.id).toBe('sess_9')
+    expect(meta.title).toBe('sess_9')
+    expect(meta.created).toBe('1970-01-01T00:00:00.000Z')
+  })
+})
+
+describe('parseSessionMessages 消息解析', () => {
+  it('解析带时间戳的消息并保留 timestamp', () => {
+    const body = [
+      '## 用户 · 2026-01-02T03:04:05.000Z',
+      '',
+      '第一条问题',
+      '',
+      '## 知枝 · 2026-01-02T03:04:10.000Z',
+      '',
+      '这是回答',
+    ].join('\n')
+
+    expect(parseSessionMessages(body)).toEqual([
+      { role: 'user', content: '第一条问题', timestamp: '2026-01-02T03:04:05.000Z' },
+      { role: 'assistant', content: '这是回答', timestamp: '2026-01-02T03:04:10.000Z' },
+    ])
+  })
+
+  it('存量消息无时间戳时为 undefined，不误匹配正文中的 ## 标题', () => {
+    const body = [
+      '## 用户',
+      '',
+      '问题中的 ## 用户 不应作为消息头',
+      '',
+      '## 知枝',
+      '',
+      '回答',
+    ].join('\n')
+
+    const messages = parseSessionMessages(body)
+    expect(messages).toHaveLength(2)
+    expect(messages[0].timestamp).toBeUndefined()
+    expect(messages[0].content).toBe('问题中的 ## 用户 不应作为消息头')
+    expect(messages[1].content).toBe('回答')
+  })
+
+  it('跳过已生成笔记/分支引用标记行，不混入消息内容', () => {
+    const body = [
+      '## 知枝 · 2026-01-02T03:04:10.000Z',
+      '',
+      '回答内容',
+      '> 已生成笔记: [[notes/a.md|笔记A]] 划线「重点」',
+      '> 已生成分支: [[branch_1|分支追问]] 划线「追问」',
+    ].join('\n')
+
+    const messages = parseSessionMessages(body)
+    expect(messages).toHaveLength(1)
+    expect(messages[0].content).toBe('回答内容')
+  })
+
+  it('分叉点上下文区块不参与消息解析', () => {
+    const body = [
+      '<!-- fork-context -->',
+      '（划线内容 · 知枝）',
+      '划线文本',
+      '<!-- /fork-context -->',
+      '',
+      '## 用户 · 2026-01-02T03:04:05.000Z',
+      '',
+      '问题',
+    ].join('\n')
+
+    const messages = parseSessionMessages(body)
+    expect(messages).toHaveLength(1)
+    expect(messages[0].content).toBe('问题')
+  })
+})
+
+describe('parseSessionFile 完整会话解析', () => {
+  it('解析 frontmatter + 消息为 Session', () => {
+    const content = [
+      '---',
+      'session_id: sess_1',
+      'title: 测试会话',
+      'created: 2026-01-02T03:04:05.000Z',
+      'tags: [学习, 方法]',
+      '---',
+      '',
+      '## 用户 · 2026-01-02T03:04:05.000Z',
+      '',
+      '问题',
+      '',
+      '## 知枝 · 2026-01-02T03:04:10.000Z',
+      '',
+      '回答',
+    ].join('\n')
+
+    const session = parseSessionFile(content, '/vault/sessions/sess_1.md')
+    expect(session.id).toBe('sess_1')
+    expect(session.title).toBe('测试会话')
+    expect(session.created).toBe('2026-01-02T03:04:05.000Z')
+    expect(session.tags).toEqual(['学习', '方法'])
+    expect(session.messages).toHaveLength(2)
+    expect(session.messages[0].timestamp).toBe('2026-01-02T03:04:05.000Z')
+  })
+
+  it('分支会话保留 parent_session / fork_point / fork_context', () => {
+    const content = [
+      '---',
+      'session_id: branch_1',
+      'title: 分支追问',
+      'created: 2026-01-02T03:04:05.000Z',
+      'parent_session: sess_1',
+      'fork_point: 3',
+      '---',
+      '',
+      '<!-- fork-context -->',
+      '（划线内容 · 知枝）',
+      '划线文本',
+      '<!-- /fork-context -->',
+      '',
+      '## 用户 · 2026-01-02T03:04:05.000Z',
+      '',
+      '分支问题',
+    ].join('\n')
+
+    const session = parseSessionFile(content, '/vault/sessions/branch-branch_1.md')
+    expect(session.parent_session).toBe('sess_1')
+    expect(session.fork_point).toBe('3')
+    expect(session.fork_context).toBe('（划线内容 · 知枝）\n划线文本')
+    expect(session.messages).toHaveLength(1)
+  })
+
+  it('序列化→解析往返保持消息内容一致', () => {
+    const session: Session = {
+      id: 'sess-7',
+      title: '往返测试',
+      created: '2024-01-01T00:00:00Z',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [
+        { role: 'user', content: '你好', timestamp: '2024-01-01T00:00:00Z' },
+        { role: 'assistant', content: '你好！', timestamp: '2024-01-01T00:00:01Z' },
+      ],
+    }
+    const parsed = parseSessionFile(serializeSession(session))
+    expect(parsed.messages).toEqual(session.messages)
   })
 })

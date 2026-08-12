@@ -22,7 +22,7 @@
 **使用的 store / api / utils**：
 - stores：`useSettingsStore`、`useVaultStore`、`useSessionStore`、`useNoteStore`
 - api：`createProvider`（provider-factory）、`extractNote`（skills/extract-note）、`chatWithTools`（chat-loop）、`CLIENT_TOOLS`（tools）
-- utils：`extractNoteRefsFromSession`、`insertHighlightAt` / `insertHighlightAtEnd`、`generateSessionTitle`、`getSessionFilePath`、`readFile`、`retrieveKnowledgeContext`、`loadStoredValue` / `saveStoredValue`
+- utils：`extractNoteRefsFromSession`、`insertHighlightAt` / `insertHighlightAtEnd`、`generateSessionTitle`、`getSessionFilePath`、`parseSessionFile`、`readFile`、`retrieveKnowledgeContext`
 - 注入：`inject('updateThreadTitle')`；`useToast`
 
 **关键函数**：
@@ -36,7 +36,7 @@
 | `handleRetry()` | 移除失败的 AI 消息后重发最后一条用户消息 |
 | `handleStop()` | 仅 abort 流式请求，不清空状态 |
 
-**会话消息持久化**：内置 6 个演示会话 + `dynamicThreadMessages`（localStorage `study-thread-messages`），watch `route.query.thread` 加载/保存。
+**会话消息持久化（仓库即真相，无本地缓存）**：会话以 md + 特殊标记符（frontmatter、`## 角色 · 时间戳` 消息头、`<!-- fork-context -->` 区块、`> 已生成笔记/分支` 引用行）保存在 vault `sessions/*.md`。`loadThreadMessages` 按 `route.query.thread` 读取对应 md 并经 `parseSessionFile` 解析消息（保留消息级时间戳，跳过分叉上下文区块与划线引用标记行）；新会话（`new_*`）首条消息 `saveCurrentSession` 落盘后由 `sessionStore.loadSessionsFromVault` 刷新侧边栏列表。曾用 localStorage `study-thread-messages` 缓存与内置演示会话，已随本次改造移除。
 
 ### 2.2 `BranchChatPage.vue`（路由 `/chat/branch/:sessionId/:branchId`）
 
