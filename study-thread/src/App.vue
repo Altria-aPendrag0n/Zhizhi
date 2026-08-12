@@ -105,11 +105,18 @@ const noteDetailTitle = ref('')
  */
 const threads = computed<Thread[]>(() => {
   if (activeProjectId.value !== '1') return []
-  return sessionStore.sessionList.map((session) => ({
+  const list = sessionStore.sessionList.map((session) => ({
     id: session.id,
     title: session.title,
     meta: formatSessionTime(session.created),
   }))
+  // 新建会话占位：首条消息发送前会话尚未落盘（sessions/*.md 不存在），
+  // 会话栏以「新对话」占位展示当前空白会话，发送首条消息落盘后由真实条目替换
+  const newId = activeThreadId.value
+  if (newId && newId.startsWith('new_') && !list.some((thread) => thread.id === newId)) {
+    list.unshift({ id: newId, title: '新对话', meta: '' })
+  }
+  return list
 })
 const activeThread = computed(() => threads.value.find((thread) => thread.id === activeThreadId.value) ?? null)
 const breadcrumbs = computed(() => activeThread.value ? ['学习会话', activeThread.value.title] : ['学习会话'])

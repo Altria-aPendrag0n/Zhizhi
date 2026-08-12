@@ -240,6 +240,8 @@ describe('App 仓库会话列表（vault 驱动）', () => {
     route.path = '/chat'
     route.query = {}
     push.mockReset()
+    // 重置仓库会话列表：各测试自行设置所需数据，避免上一个用例残留
+    sessionState.sessionList.value = []
   })
 
   it('会话栏从 sessionStore.sessionList 派生（仓库即真相，无本地缓存）', () => {
@@ -269,6 +271,33 @@ describe('App 仓库会话列表（vault 驱动）', () => {
     expect(push).toHaveBeenCalledWith(expect.objectContaining({ path: '/chat' }))
     const threadQuery = (push.mock.calls[0][0] as { query: { thread: string } }).query.thread
     expect(threadQuery).toMatch(/^new_\d+$/)
+  })
+
+  it('新建会话后会话栏出现「新对话」占位，首条消息落盘后被真实标题替换', async () => {
+    const wrapper = createWrapper()
+    await wrapper.findComponent({ name: 'ThreadList' }).vm.$emit('new-thread')
+    await flushPromises()
+
+    // 空白会话尚未落盘：会话栏显示「新对话」占位条目
+    let threads = wrapper.findComponent({ name: 'ThreadList' }).props('threads') as { id: string; title: string; meta: string }[]
+    expect(threads).toHaveLength(1)
+    expect(threads[0].title).toBe('新对话')
+    const newId = threads[0].id
+    expect(newId).toMatch(/^new_\d+$/)
+
+    // 发送首条消息后会话落盘（sessionList 出现同 id 条目）：占位被真实标题替换
+    route.query = { thread: newId }
+    sessionState.sessionList.value = [{
+      id: newId,
+      title: '费曼学习法是什么？',
+      created: new Date().toISOString(),
+      filePath: `/vault/sessions/${newId}.md`,
+    }]
+    await flushPromises()
+
+    threads = wrapper.findComponent({ name: 'ThreadList' }).props('threads') as { id: string; title: string; meta: string }[]
+    expect(threads).toHaveLength(1)
+    expect(threads[0].title).toBe('费曼学习法是什么？')
   })
 
   it('重命名会话改写仓库 md 并刷新列表', async () => {
