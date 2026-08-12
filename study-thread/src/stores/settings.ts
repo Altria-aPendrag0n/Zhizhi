@@ -61,6 +61,12 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(updated))
   }
 
+  /** 从最近打开列表移除（删除 Vault 后同步清理） */
+  function removeRecentVault(path: string) {
+    recentVaults.value = recentVaults.value.filter(v => v !== path)
+    localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(recentVaults.value))
+  }
+
   function getProviderConfig(): ProviderConfig {
     return {
       type: activeProvider.value,
@@ -87,6 +93,7 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings,
     loadSettings,
     addRecentVault,
+    removeRecentVault,
     getProviderConfig,
   }
 })

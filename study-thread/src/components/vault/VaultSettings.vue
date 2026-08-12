@@ -15,6 +15,7 @@
       <div class="vault-settings__actions">
         <button class="btn btn-primary" type="button" @click="handleOpenVault">切换 Vault</button>
         <button class="btn btn-secondary" type="button" @click="vaultStore.closeVault()">关闭</button>
+        <button class="btn btn-danger" type="button" @click="handleDeleteVault">删除 Vault…</button>
       </div>
     </template>
 
@@ -100,6 +101,29 @@ async function openVault(path: string) {
     settingsStore.addRecentVault(path)
   } catch (error) {
     errorMessage.value = toErrorMessage(error, '打开 Vault 失败')
+  }
+}
+
+/**
+ * 删除当前 Vault（永久删除文件夹，不可恢复）。
+ * 删除前 vaultStore 会先停止文件监听（Windows 下 watcher 占用目录句柄会导致删除失败），
+ * 删除当前打开的 vault 时同步清空状态并移除最近打开记录。
+ */
+async function handleDeleteVault() {
+  const path = vaultStore.vaultPath
+  if (!path) return
+  const confirmed = window.confirm(
+    `确定要删除 Vault「${path}」吗？\n\n该目录下的笔记、会话与参考资料将被永久删除，无法恢复。`,
+  )
+  if (!confirmed) return
+
+  errorMessage.value = ''
+  try {
+    const ok = await vaultStore.deleteVault(path)
+    if (!ok) throw new Error('目录删除失败')
+    settingsStore.removeRecentVault(path)
+  } catch (error) {
+    errorMessage.value = toErrorMessage(error, '删除 Vault 失败')
   }
 }
 
@@ -254,5 +278,15 @@ function toErrorMessage(error: unknown, fallback: string): string {
 
 .btn-secondary:hover {
   background: var(--line);
+}
+
+.btn-danger {
+  color: var(--state-error);
+  background: color-mix(in srgb, var(--state-error) 10%, transparent);
+}
+
+.btn-danger:hover {
+  color: #fff;
+  background: var(--state-error);
 }
 </style>

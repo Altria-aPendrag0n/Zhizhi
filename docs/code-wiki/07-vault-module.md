@@ -45,6 +45,7 @@
 |------|------|
 | `openVault(path)` | **先校验路径有效性**（`listDir` 探测：不存在/非目录/不可读时抛错，不改变状态）→ 设置路径 + `localStorage(study-thread-last-vault)` → `startWatching` → `listDir` 构建文件树 → 后台 `initIndex()` |
 | `closeVault()` | 清空状态 + 移除 localStorage + `stopWatching` |
+| `deleteVault(path)` | **永久删除 Vault 目录**：先 `await stopWatching()`（Windows 下 watcher 持有目录句柄，不先停会导致"文件夹正在使用中"删除失败）→ `deleteFile`（Rust 端对目录递归删除）→ 若删除的是当前打开的 vault 同步清空状态与 last-vault 记录，界面回到"未打开 Vault"空态 |
 | `restoreLastVault()` | 读取 `study-thread-last-vault` 恢复；路径失效（目录被删除/移动/重命名）时抛错 → 清除过期记录并返回 `false`，界面回到"未打开 Vault"空态 |
 | `refreshFileTree()` | 重新 `listDir` |
 | `saveCurrentSession(session, isBranch, noteRefs)` | 委托 `saveSessionToVault` 写入 `sessions/*.md` 并刷新文件树 |

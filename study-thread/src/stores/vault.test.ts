@@ -3,10 +3,12 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useVaultStore } from './vault'
 import type { IndexEntry } from '../embedding/indexer'
 
-const { listDirMock, readFileMock, isReadyMock, indexerMock } = vi.hoisted(() => ({
+const { listDirMock, readFileMock, isReadyMock, stopWatchingMock, deleteFileMock, indexerMock } = vi.hoisted(() => ({
   listDirMock: vi.fn(),
   readFileMock: vi.fn(),
   isReadyMock: vi.fn(),
+  stopWatchingMock: vi.fn().mockResolvedValue(undefined),
+  deleteFileMock: vi.fn().mockResolvedValue(undefined),
   indexerMock: {
     loadFromStorage: vi.fn(),
     buildIndex: vi.fn().mockResolvedValue(undefined),
@@ -21,8 +23,8 @@ vi.mock('../utils/vault-fs', () => ({
   listDir: listDirMock,
   readFile: readFileMock,
   startWatching: vi.fn().mockResolvedValue(undefined),
-  stopWatching: vi.fn().mockResolvedValue(undefined),
-  deleteFile: vi.fn().mockResolvedValue(undefined),
+  stopWatching: stopWatchingMock,
+  deleteFile: deleteFileMock,
   fileExists: vi.fn().mockResolvedValue(false),
 }))
 
@@ -83,6 +85,42 @@ describe('vault store openVault 路径校验', () => {
 
     expect(store.vaultPath).toBe('/valid/vault')
     expect(store.isOpen).toBe(true)
+  })
+})
+
+describe('vault store deleteVault', () => {
+  it('先停止文件监听再递归删除目录（Windows watcher 占用会导致删除失败）', async () => {
+    const store = useVaultStore()
+    store.vaultPath = '/vault'
+
+    const ok = await store.deleteVault('/vault')
+
+    expect(ok).toBe(true)
+    // 顺序：先 stopWatching 释放句柄，再 deleteFile 递归删除
+    expect(stopWatchingMock).toHaveBeenCalled()
+    expect(deleteFileMock).toHaveBeenCalledWith('/vault')
+  })
+
+  it('删除当前打开的 vault 时清空状态并移除 last-vault 记录', async () => {
+    const store = useVaultStore()
+    store.vaultPath = '/vault'
+    store.isOpen = true
+    localStorage.setItem('study-thread-last-vault', '/vault')
+
+    await store.deleteVault('/vault')
+
+    expect(store.vaultPath).toBeNull()
+    expect(store.isOpen).toBe(false)
+    expect(localStorage.getItem('study-thread-last-vault')).toBeNull()
+  })
+
+  it('删除失败时返回 false 且不改变状态', async () => {
+    deleteFileMock.mockRejectedValueOnce(new Error('目录被占用'))
+    const store = useVaultStore()
+    store.vaultPath = '/vault'
+
+    expect(await store.deleteVault('/vault')).toBe(false)
+    expect(store.vaultPath).toBe('/vault')
   })
 })
 

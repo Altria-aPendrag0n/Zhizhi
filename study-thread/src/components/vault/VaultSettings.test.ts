@@ -6,9 +6,12 @@ const state = vi.hoisted(() => ({
   open: vi.fn(),
   openVault: vi.fn().mockResolvedValue(undefined),
   closeVault: vi.fn().mockResolvedValue(undefined),
+  deleteVault: vi.fn().mockResolvedValue(true),
   addRecentVault: vi.fn(),
+  removeRecentVault: vi.fn(),
   createDir: vi.fn().mockResolvedValue(undefined),
   prompt: vi.fn(),
+  confirm: vi.fn(),
   vaultPath: '',
   recentVaults: [] as string[],
 }))
@@ -22,6 +25,7 @@ vi.mock('../../stores/vault', () => ({
     vaultPath: state.vaultPath,
     openVault: state.openVault,
     closeVault: state.closeVault,
+    deleteVault: state.deleteVault,
   }),
 }))
 
@@ -29,6 +33,7 @@ vi.mock('../../stores/settings', () => ({
   useSettingsStore: () => ({
     recentVaults: state.recentVaults,
     addRecentVault: state.addRecentVault,
+    removeRecentVault: state.removeRecentVault,
   }),
 }))
 
@@ -54,6 +59,7 @@ describe('VaultSettings 资料库选择', () => {
     state.vaultPath = ''
     state.recentVaults = []
     vi.stubGlobal('prompt', state.prompt)
+    vi.stubGlobal('confirm', state.confirm)
   })
 
   afterEach(() => {
@@ -125,5 +131,45 @@ describe('VaultSettings 资料库选择', () => {
     expect(state.prompt).not.toHaveBeenCalled()
     expect(state.createDir).not.toHaveBeenCalled()
     expect(state.openVault).not.toHaveBeenCalled()
+  })
+
+  describe('删除 Vault', () => {
+    it('确认后先停监听并递归删除目录，同步移除最近打开记录', async () => {
+      state.vaultPath = 'D:\\DeleteVault'
+      state.confirm.mockReturnValue(true)
+      const wrapper = await mountSettings()
+
+      await findButton(wrapper, '删除 Vault…').trigger('click')
+      await flushPromises()
+
+      expect(state.confirm).toHaveBeenCalled()
+      expect(state.deleteVault).toHaveBeenCalledWith('D:\\DeleteVault')
+      expect(state.removeRecentVault).toHaveBeenCalledWith('D:\\DeleteVault')
+    })
+
+    it('取消确认时不执行删除', async () => {
+      state.vaultPath = 'D:\\DeleteVault'
+      state.confirm.mockReturnValue(false)
+      const wrapper = await mountSettings()
+
+      await findButton(wrapper, '删除 Vault…').trigger('click')
+      await flushPromises()
+
+      expect(state.deleteVault).not.toHaveBeenCalled()
+      expect(state.removeRecentVault).not.toHaveBeenCalled()
+    })
+
+    it('删除失败时显示错误信息', async () => {
+      state.vaultPath = 'D:\\DeleteVault'
+      state.confirm.mockReturnValue(true)
+      state.deleteVault.mockResolvedValueOnce(false)
+      const wrapper = await mountSettings()
+
+      await findButton(wrapper, '删除 Vault…').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.vault-settings__error').text()).toContain('删除 Vault 失败')
+      expect(state.removeRecentVault).not.toHaveBeenCalled()
+    })
   })
 })

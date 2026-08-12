@@ -195,6 +195,31 @@ export const useVaultStore = defineStore('vault', () => {
     stopWatching().catch(console.error)
   }
 
+  /**
+   * 删除 Vault 目录（永久删除，不可恢复）。
+   *
+   * 删除前必须先停止文件监听：Windows 下 notify watcher 持有目录句柄，
+   * 直接删除会报"文件夹正在使用中"。删除当前打开的 vault 时同步清空状态
+   * 与 last-vault 记录，界面回到"未打开 Vault"空态。
+   */
+  async function deleteVault(path: string): Promise<boolean> {
+    try {
+      await stopWatching()
+      await deleteFile(path)
+      if (vaultPath.value === path) {
+        vaultPath.value = null
+        fileTree.value = []
+        isOpen.value = false
+        vaultReady.value = true
+        localStorage.removeItem(LAST_VAULT_KEY)
+      }
+      return true
+    } catch (e) {
+      console.error('删除 Vault 失败:', e)
+      return false
+    }
+  }
+
   async function refreshFileTree() {
     if (vaultPath.value) {
       try {
@@ -248,6 +273,7 @@ export const useVaultStore = defineStore('vault', () => {
     sessionCount,    openVault,
     restoreLastVault,
     closeVault,
+    deleteVault,
     refreshFileTree,
     saveCurrentSession,
     deleteSession,
