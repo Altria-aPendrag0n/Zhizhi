@@ -94,42 +94,55 @@
 
 累计学习数据、连续天数与学习频率一目了然。
 
-![学习总览](docs/screenshots/main-home.png)
+![主界面展示](docs/screenshots/主界面展示.png)
 
 ### 学习会话
 
 与 AI 对话学习，支持划选摘录与分支追问。
 
-![学习会话](docs/screenshots/chat-session.png)
+![主会话展示](docs/screenshots/主会话展示.png)
+
+### 划线摘录笔记
+
+在 AI 回答上划选关键内容，一键摘录为原子笔记卡片。
+
+![插入笔记展示](docs/screenshots/插入笔记展示.png)
+
+### 划线分支会话
+
+对划线内容分叉展开新分支，在不打断主线的前提下深挖追问。
+
+![分支会话展示](docs/screenshots/分支会话展示.png)
 
 ### 资料库（原子笔记）
 
 以卡片形式浏览、检索你的原子笔记。
 
-![资料库](docs/screenshots/notes-vault.png)
+![笔记界面展示](docs/screenshots/笔记界面展示.png)
 
-### 学习地图（复习中心）
+### 笔记关系图
 
-集中处理到期复习，查看学习节奏。
+笔记之间通过双向链接互相关联，形成知识网络。
 
-![学习地图](docs/screenshots/review-hub.png)
+![笔记关系图展示](docs/screenshots/笔记关系图展示.png)
 
-### 设置
+### 参考资料
 
-配置 Vault、AI 服务商与复习算法等。
+上传 PDF / Markdown / 图片作为参考资料，供对话检索引用。
 
-![设置](docs/screenshots/settings.png)
+![参考资料展示](docs/screenshots/参考资料展示.png)
 
-### 待补充截图
+### 间隔复习
 
-以下功能涉及交互操作，暂由维护者手动截图补充（截图后替换下方占位标记即可）：
+到期笔记自动进入复习队列，按记忆曲线间隔重复出题。
 
-- **划线摘录演示**：在 AI 回答上划选文本 → 弹出「摘录为笔记」菜单 → 生成原子笔记卡片。建议截 2–3 张步骤图，存放至 `docs/screenshots/`。
-- **划线分支会话演示**：对划线内容分叉 → 展开新分支会话。建议存放至 `docs/screenshots/`。
-- **复习答题界面**：复习任务进入后的出题与答题页（可展示填空 / 问答 / 判断等题型）。
+![复习界面展示](docs/screenshots/复习界面展示.png)
 
-<!-- 占位符说明：将上述截图放入 docs/screenshots/ 后，在本节下方插入
-     ![xxx](docs/screenshots/xxx.png) 并更新说明文字即可。 -->
+### 复习答题
+
+支持填空、问答、判断等多种题型，从不同角度检验记忆。
+
+![复习界面详细展示](docs/screenshots/复习界面详细展示.png)
 
 ---
 
