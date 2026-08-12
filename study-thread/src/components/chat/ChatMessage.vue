@@ -91,7 +91,8 @@ function applyMarkLinks() {
       // 整表包裹为可点击虚线链接（不拆分内部节点，避免破坏表格结构）
       wrapper = wrapTableInDOM(body, 'a', 'zhizhi-mark')
     } else {
-      wrapper = wrapHighlightInDOM(body, highlight, 'a', 'zhizhi-mark')
+      // 重复文本出现多次时按出现序号定位到用户实际划的位置（occurrence 缺省第 1 处）
+      wrapper = wrapHighlightInDOM(body, highlight, 'a', 'zhizhi-mark', mark.occurrence ?? 1)
     }
     if (!wrapper) continue
     wrapper.dataset.zhizhiKind = kind

@@ -51,6 +51,17 @@ Q2`
     expect(refs).toHaveLength(1)
     expect(refs[0].messageIndex).toBe(1)
   })
+
+  it('解析划线文本的出现序号〔N〕（重复文本精确定位），无序号时缺省第 1 处', () => {
+    const content = `## 知枝
+回答内容
+> 已生成笔记: [[notes/a.md|笔记A]] 划线「E = mc²」〔2〕
+> 已生成分支: [[branch_1|分支追问]] 划线「托卡马克」`
+    const refs = extractNoteRefsFromSession(content)
+    expect(refs[0]).toEqual({ path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: 'E = mc²', occurrence: 2 })
+    // 无 〔N〕 的引用不带 occurrence 字段
+    expect(refs[1]).toEqual({ path: 'branch_1', title: '分支追问', messageIndex: 0, kind: 'branch', highlight: '托卡马克' })
+  })
 })
 
 describe('removeSessionReferences', () => {

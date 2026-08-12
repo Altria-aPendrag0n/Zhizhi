@@ -50,6 +50,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     // 划线文本可能含引号/特殊字符，用 JSON 字符串保证 YAML 解析安全
     lines.push(`fork_highlight: ${JSON.stringify(session.fork_highlight)}`)
   }
+  if (session.fork_highlight_occ && session.fork_highlight_occ > 1) {
+    // 划线文本在消息中的出现序号（第 N 处），重复文本时 DOM 高亮按序号定位
+    lines.push(`fork_highlight_occ: ${session.fork_highlight_occ}`)
+  }
   // 复习会话标记：kind + 被复习笔记路径 + 出题结果（P2 复习会话）
   if (session.kind) {
     lines.push(`kind: ${session.kind}`)
@@ -94,8 +98,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     for (const noteRef of noteRefs.filter((ref) => ref.messageIndex === messageIndex)) {
       const kindLabel = noteRef.kind === 'branch' ? '已生成分支' : '已生成笔记'
       const highlight = noteRef.highlight ? ` 划线「${noteRef.highlight.replace(/\s+/g, ' ')}」` : ''
+      // 重复文本出现多次时记录出现序号（第 N 处），应用高亮时按序号定位到划线处
+      const occurrence = noteRef.occurrence && noteRef.occurrence > 1 ? `〔${noteRef.occurrence}〕` : ''
       lines.push('')
-      lines.push(`> ${kindLabel}: [[${noteRef.path}|${noteRef.title}]]${highlight}`)
+      lines.push(`> ${kindLabel}: [[${noteRef.path}|${noteRef.title}]]${highlight}${occurrence}`)
     }
     lines.push('')
   }
@@ -287,6 +293,9 @@ export function parseSessionFile(content: string, filePath = ''): Session {
     messages: parseSessionMessages(body),
     fork_context: extractForkContextBlock(body) || undefined,
     fork_highlight: toString(meta.fork_highlight) || undefined,
+    fork_highlight_occ: typeof meta.fork_highlight_occ === 'number' && meta.fork_highlight_occ > 1
+      ? meta.fork_highlight_occ
+      : undefined,
     kind: meta.kind === 'review' ? 'review' : undefined,
     reviewed_note: toString(meta.reviewed_note) || undefined,
     review_cluster: Array.isArray(meta.review_cluster) && meta.review_cluster.every((item): item is string => typeof item === 'string')

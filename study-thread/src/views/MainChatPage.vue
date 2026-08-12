@@ -346,7 +346,7 @@ async function maybeTriggerLearnerUpdate() {
   await triggerLearnerUpdate(session, newNotes, createProvider(config), vaultStore.vaultPath, noteStore.noteCount)
 }
 
-async function handleExtractNote(highlightedText: string, domMessageIndex: number | null = null) {
+async function handleExtractNote(highlightedText: string, domMessageIndex: number | null = null, occurrence = 1) {
   // 标题/标签均不允许 LLM 生成时，摘录完全不调用 LLM，无需 API Key
   const needLLM = settingsStore.autoGenerateNoteTitle || settingsStore.autoGenerateNoteTags
   const config = settingsStore.getProviderConfig()
@@ -375,15 +375,15 @@ async function handleExtractNote(highlightedText: string, domMessageIndex: numbe
 
     // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退（渲染文本与 markdown 源可能不一致）
     const messageIndex = resolveMessageIndex(highlightedText, messages.value, domMessageIndex, 'assistant')
-    // 记录划线文本，供原会话消息中以虚线标记并跳转笔记
-    extractedNotes.value.push({ path, title: note.title, messageIndex, kind: 'note', highlight: highlightedText })
+    // 记录划线文本与出现序号（重复文本定位），供原会话消息中以虚线标记并跳转笔记
+    extractedNotes.value.push({ path, title: note.title, messageIndex, kind: 'note', highlight: highlightedText, occurrence })
     if (threadId) await saveCurrentSession(threadId)
     toast.success('已提炼并保存为原子笔记')
   } catch (e) {
     toast.error(e instanceof Error ? e.message : '笔记提炼失败')
   }
 }
-async function handleAddToNote(highlightedText: string) {
+async function handleAddToNote(highlightedText: string, _occurrence = 1) {
   if (!vaultStore.vaultPath) {
     toast.error('请先在设置中选择本地 Vault')
     return
@@ -425,7 +425,7 @@ async function confirmAddToNote(target: AddToNoteTarget) {
   }
 }
 
-async function handleCreateBranch(highlightedText: string, domMessageIndex: number | null = null) {
+async function handleCreateBranch(highlightedText: string, domMessageIndex: number | null = null, occurrence = 1) {
   const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
   if (!threadId || !vaultStore.vaultPath) {
     toast.error('请先选择 Vault 并打开一个会话')
@@ -456,6 +456,7 @@ async function handleCreateBranch(highlightedText: string, domMessageIndex: numb
     branchTitle,
     undefined,
     highlightedText,
+    occurrence,
   )
 
   if (!branchId) {

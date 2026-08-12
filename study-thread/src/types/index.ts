@@ -25,6 +25,8 @@ export interface Session {
   fork_context?: string
   /** 划线文本（DOM 选择），供分叉点上下文渲染后高亮定位；仅分支会话持久化到 frontmatter */
   fork_highlight?: string
+  /** 划线文本在消息中的出现序号（第 N 处），重复文本时精确定位；默认第 1 处 */
+  fork_highlight_occ?: number
   /** 会话种类：'review' 为复习会话（独立根会话，不进入分支树）；学习会话不设置 */
   kind?: 'review'
   /** 复习会话关联的被复习笔记路径（kind=review 时存在），持久化到 frontmatter */

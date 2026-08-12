@@ -127,6 +127,8 @@ const forkContext = ref<string>('')
 const forkContextRef = ref<HTMLElement | null>(null)
 /** 划线文本（frontmatter fork_highlight），用于分叉点上下文渲染后 DOM 高亮定位 */
 const forkHighlight = ref<string>('')
+/** 划线文本在消息中的出现序号（frontmatter fork_highlight_occ），重复文本时按序号定位 */
+const forkHighlightOcc = ref(1)
 
 /** 分叉点上下文用 markdown 渲染（划线内容本身可能含 markdown 标记） */
 const renderedForkContext = computed(() => {
@@ -149,7 +151,8 @@ watch(renderedForkContext, async () => {
     wrapTableInDOM(body, 'mark', 'fork-highlight')
     return
   }
-  wrapHighlightInDOM(body, forkHighlight.value, 'mark', 'fork-highlight')
+  // 重复文本出现多次时按出现序号定位（forkHighlightOcc 缺省第 1 处）
+  wrapHighlightInDOM(body, forkHighlight.value, 'mark', 'fork-highlight', forkHighlightOcc.value)
 })
 
 /** 摘录为笔记弹窗状态 */
@@ -213,6 +216,8 @@ async function loadContext() {
       forkIndex.value = storedForkIndex
     }
     forkHighlight.value = typeof meta.fork_highlight === 'string' ? meta.fork_highlight : ''
+    const storedOcc = Number(meta.fork_highlight_occ)
+    forkHighlightOcc.value = storedOcc > 1 ? storedOcc : 1
     forkContextFromFile = extractForkContext(body)
     // 用带时间戳的消息解析器加载分支自身对话：重存会话时不丢失消息级时间戳（主界面统计依赖）
     savedMessages = parseSessionMessages(body)

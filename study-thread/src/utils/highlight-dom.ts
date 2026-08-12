@@ -12,8 +12,11 @@
  */
 
 /**
- * 把 body 内首次出现的 highlight 包裹为 `<tagName class="className">`。
+ * 把 body 内第 occurrence 次出现的 highlight 包裹为 `<tagName class="className">`。
  *
+ * @param occurrence - 第几次出现（从 1 开始）。同一消息内划线文本出现多次时
+ *   （如「E = mc²」在正文与列表各出现一次），用户划的是第 N 处，须按出现序号定位，
+ *   否则高亮总会落在第一处。默认 1。
  * @returns 包裹元素（调用方可设置 dataset 等属性）；定位不到返回 null
  */
 export function wrapHighlightInDOM(
@@ -21,6 +24,7 @@ export function wrapHighlightInDOM(
   highlight: string,
   tagName: 'span' | 'mark' | 'a' = 'span',
   className = '',
+  occurrence = 1,
 ): HTMLElement | null {
   // 收集全部文本节点并拼接，建立「拼接偏移 → 文本节点」的映射
   const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
@@ -35,8 +39,15 @@ export function wrapHighlightInDOM(
   }
   if (full.length === 0) return null
 
-  const start = full.indexOf(highlight)
-  if (start === -1) return null
+  // 定位第 occurrence 次出现
+  const normalizedOccurrence = Math.max(1, occurrence)
+  let start = -1
+  let fromIndex = 0
+  for (let k = 0; k < normalizedOccurrence; k++) {
+    start = full.indexOf(highlight, fromIndex)
+    if (start === -1) return null
+    fromIndex = start + highlight.length
+  }
   const end = start + highlight.length
 
   // 找出覆盖 [start, end) 的连续文本节点

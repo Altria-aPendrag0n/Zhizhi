@@ -202,15 +202,21 @@ function wrapHighlight(source: string, highlightedText: string): string | null {
  * 找不到完整子串。先尝试原文匹配，失败后用移除标记后的宽松匹配兜底。
  * 多行划线（选区落在表格内时，划线文本为整张表格的 Markdown 源码）按行切分后
  * 在句子列表中匹配连续行块。
+ * 同一划线文本在消息中可能多次出现（如「E = mc²」在正文与列表各一次），
+ * occurrence 指定匹配第几处（从 1 开始），与 fork_highlight 的 DOM 高亮一致。
  */
-function findHighlightBlock(sentences: string[], highlightedText: string): SentenceBlock | null {
+function findHighlightBlock(sentences: string[], highlightedText: string, occurrence = 1): SentenceBlock | null {
+  const target = Math.max(1, occurrence)
+  let matchedCount = 0
   // 单行划线：在任意一句中匹配
   if (!highlightedText.includes('\n')) {
     const normalized = normalizeForMatch(highlightedText)
     for (let i = 0; i < sentences.length; i++) {
       const sentence = sentences[i]
-      if (sentence.includes(highlightedText)) return { start: i, length: 1 }
-      if (normalized && normalizeForMatch(sentence).includes(normalized)) return { start: i, length: 1 }
+      if (sentence.includes(highlightedText) || (normalized && normalizeForMatch(sentence).includes(normalized))) {
+        matchedCount++
+        if (matchedCount === target) return { start: i, length: 1 }
+      }
     }
     return null
   }
@@ -232,7 +238,10 @@ function findHighlightBlock(sentences: string[], highlightedText: string): Sente
         break
       }
     }
-    if (matched) return { start, length: lines.length }
+    if (matched) {
+      matchedCount++
+      if (matchedCount === target) return { start, length: lines.length }
+    }
   }
   return null
 }
@@ -247,10 +256,10 @@ function findHighlightBlock(sentences: string[], highlightedText: string): Sente
  * 多行划线（整张表格）在源文本行块内插入 `<mark>` 会破坏表格渲染（marked 无法识别
  * `<mark>| 单元格 |` 行的表格语法），因此不注入标记，由前端在渲染后 DOM 上整表高亮。
  */
-function aroundHighlight(content: string, highlightedText: string | undefined, count = 3): string {
+function aroundHighlight(content: string, highlightedText: string | undefined, count = 3, occurrence = 1): string {
   const sentences = splitSentences(content)
   if (sentences.length === 0) return content
-  const block = highlightedText ? findHighlightBlock(sentences, highlightedText) : null
+  const block = highlightedText ? findHighlightBlock(sentences, highlightedText, occurrence) : null
   if (!block) {
     // 划线文本缺失或无法定位：退化为展示消息开头的若干句子
     const end = Math.min(sentences.length, count * 2 + 1)
@@ -276,12 +285,14 @@ function aroundHighlight(content: string, highlightedText: string | undefined, c
  * @param context - 分叉点前的会话消息（loadBranchContext 的返回值）
  * @param forkIndex - 划线所在消息的索引（分叉点）
  * @param highlightedText - 划线文本（用于在消息内定位划线内容）；缺失时退化为展示消息开头
+ * @param occurrence - 划线文本在消息中的出现序号（第 N 处，重复文本定位）；默认第 1 处
  * @returns 预览文本；context 为空时返回空串
  */
 export function buildForkContextPreview(
   context: Message[],
   forkIndex: number,
   highlightedText?: string,
+  occurrence = 1,
 ): string {
   if (context.length === 0) return ''
   const targetIndex = Math.min(forkIndex, context.length - 1)
@@ -294,7 +305,7 @@ export function buildForkContextPreview(
     const prevText = lastSentences(prev.content, 3)
     if (prevText) parts.push(`（前一条 · ${roleLabel(prev)}）\n${prevText}`)
   }
-  parts.push(`（划线内容 · ${roleLabel(target)}）\n${aroundHighlight(target.content, highlightedText)}`)
+  parts.push(`（划线内容 · ${roleLabel(target)}）\n${aroundHighlight(target.content, highlightedText, 3, occurrence)}`)
   return parts.join('\n\n')
 }
 

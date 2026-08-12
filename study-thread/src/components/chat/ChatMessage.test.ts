@@ -194,6 +194,22 @@ describe('ChatMessage', () => {
     expect(mark.text()).toBe('标记 的句子')
   })
 
+  it('同一文本出现多次时按 occurrence 定位到用户实际划的位置（第 2 处）', async () => {
+    const message: Message = { role: 'assistant', content: '根据爱因斯坦的 **E = mc²**，它变成能量。\n\n还有 **E = mc² 具体怎么算** 这个方向。' }
+    const wrapper = mount(ChatMessage, {
+      props: {
+        message,
+        marks: [{ path: 'notes/a.md', title: '质能方程', messageIndex: 0, kind: 'note', highlight: 'E = mc²', occurrence: 2 }],
+      },
+    })
+    await nextTick()
+    const mark = wrapper.find('a.zhizhi-mark[data-zhizhi-kind="note"]')
+    expect(mark.exists()).toBe(true)
+    // 第 2 处位于「具体怎么算」之前（第二次出现的段落内）
+    const markParent = mark.element.parentElement
+    expect(markParent?.textContent).toContain('E = mc² 具体怎么算')
+  })
+
   it('无划线文本的旧引用不注入链接', async () => {
     const message: Message = { role: 'assistant', content: '普通内容' }
     const wrapper = mount(ChatMessage, {

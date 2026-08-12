@@ -17,6 +17,8 @@ export interface NoteReference {
   messageIndex: number
   /** 划线文本（用于在原会话消息中以虚线标记并跳转） */
   highlight?: string
+  /** 划线文本在消息中的出现序号（第 N 处），重复文本时精确定位；默认第 1 处 */
+  occurrence?: number
   /** 引用类型：笔记（默认）或分支 */
   kind?: 'note' | 'branch'
 }
@@ -48,8 +50,8 @@ export async function getNoteSourceSession(
  *
  * 格式：
  *   > 已生成笔记: [[path|title]] 划线「划线文本」
- *   > 已生成分支: [[branchId|title]] 划线「划线文本」
- * 向后兼容无划线文本的旧格式（highlight 为空）。
+ *   > 已生成分支: [[branchId|title]] 划线「划线文本」〔N〕   # N 为划线文本在消息中的出现序号（重复文本定位）
+ * 向后兼容无划线文本的旧格式（highlight 为空）、无出现序号的格式（occurrence 缺省为第 1 处）。
  */
 export function extractNoteRefsFromSession(sessionContent: string): NoteReference[] {
   const refs: NoteReference[] = []
@@ -66,8 +68,8 @@ export function extractNoteRefsFromSession(sessionContent: string): NoteReferenc
       continue
     }
 
-    // 检测笔记/分支引用（含可选划线文本）
-    const refMatch = line.match(/已生成(笔记|分支):\s*\[\[(.+?)\]\](?:\s*划线「(.+?)」)?/)
+    // 检测笔记/分支引用（含可选划线文本与出现序号）
+    const refMatch = line.match(/已生成(笔记|分支):\s*\[\[(.+?)\]\](?:\s*划线「(.+?)」(?:\s*〔(\d+)〕)?)?/)
     if (refMatch && currentMessageIndex >= 0) {
       const kind = refMatch[1] === '分支' ? 'branch' : 'note'
       const reference = refMatch[2]
@@ -75,12 +77,14 @@ export function extractNoteRefsFromSession(sessionContent: string): NoteReferenc
       const path = separatorIndex >= 0 ? reference.slice(0, separatorIndex) : reference
       const title = separatorIndex >= 0 ? reference.slice(separatorIndex + 1) : reference.split('/').pop()?.replace(/\.md$/, '') || reference
       const highlight = refMatch[3]
+      const occurrence = refMatch[4] ? Number(refMatch[4]) : undefined
       refs.push({
         path,
         title,
         messageIndex: currentMessageIndex,
         kind,
         ...(highlight ? { highlight } : {}),
+        ...(occurrence && occurrence > 1 ? { occurrence } : {}),
       })
     }
   }

@@ -109,7 +109,7 @@ interface SessionTreeNode {
 | `utils/date.ts` | `parseNoteDate(value): Date \| null` | 空值/非法一律 null，杜绝 Invalid Date 泄漏 |
 | | `formatNoteShortDate(value)` | `6月15日`；无效返回 `''` |
 | | `formatNoteFullDate(value)` | `2026年6月15日`；无效回退原字符串 |
-| `utils/session-linker.ts` | `getNoteSourceSession` / `extractNoteRefsFromSession` / `findNotesBySession` | 会话 ↔ 笔记关联（见 [03-notes-module.md](./03-notes-module.md)） |
+| `utils/session-linker.ts` | `getNoteSourceSession` / `extractNoteRefsFromSession` / `findNotesBySession` | 会话 ↔ 笔记关联（见 [03-notes-module.md](./03-notes-module.md)）；引用行支持 `划线「text」〔N〕` 出现序号（重复文本精确定位） |
 | `utils/note-serializer.ts` | `serializeNote` / `generateNoteFileName` | 笔记落盘格式（见 [03]） |
 | `utils/note-insert.ts` | `insertHighlightAt` / `insertHighlightAtEnd` | 划线插入（见 [03]） |
 | `utils/knowledge-retrieval.ts` | RAG 检索（见 [10-embedding-module.md](./10-embedding-module.md)） | — |

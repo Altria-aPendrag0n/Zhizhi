@@ -182,6 +182,27 @@ describe('serializeSession', () => {
     expect(result).toContain('> 已生成笔记: [[notes/a.md|笔记A]] 划线「笔记划线」')
   })
 
+  it('序列化出现序号〔N〕（重复文本精确定位），第 1 处不写', () => {
+    const session: Session = {
+      id: 'sess-occ',
+      title: '重复文本',
+      created: '2024-01-01',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [{ role: 'assistant', content: '回答内容' }],
+    }
+    const withOcc = serializeSession(session, [
+      { path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: 'E = mc²', occurrence: 2 },
+    ])
+    expect(withOcc).toContain('> 已生成笔记: [[notes/a.md|笔记A]] 划线「E = mc²」〔2〕')
+    const firstOcc = serializeSession(session, [
+      { path: 'notes/a.md', title: '笔记A', messageIndex: 0, kind: 'note', highlight: 'E = mc²', occurrence: 1 },
+    ])
+    expect(firstOcc).toContain('> 已生成笔记: [[notes/a.md|笔记A]] 划线「E = mc²」')
+    expect(firstOcc).not.toContain('〔')
+  })
+
   it('序列化 AI 思考过程到消息正文的标记区块', () => {
     const session: Session = {
       id: 'sess-think',

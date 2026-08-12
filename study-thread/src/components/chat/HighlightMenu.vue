@@ -39,15 +39,17 @@ const props = defineProps<{
   highlightedText: string
   /** 划线所在的消息索引（DOM 定位，避免文本匹配失败）；无则为 null */
   messageIndex?: number | null
+  /** 划线文本在消息中的出现序号（第 N 处），重复文本定位用；默认第 1 处 */
+  occurrence?: number
   /** 是否显示"加入笔记"选项（仅会话划线菜单启用） */
   showAddToNote?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  'extract-note': [text: string, messageIndex: number | null]
-  'add-to-note': [text: string]
-  'create-branch': [text: string, messageIndex: number | null]
+  'extract-note': [text: string, messageIndex: number | null, occurrence: number]
+  'add-to-note': [text: string, occurrence: number]
+  'create-branch': [text: string, messageIndex: number | null, occurrence: number]
   copy: [text: string]
 }>()
 
@@ -59,17 +61,17 @@ const menuStyle = computed(() => ({
 }))
 
 function handleAddToNote() {
-  if (props.highlightedText) emit('add-to-note', props.highlightedText)
+  if (props.highlightedText) emit('add-to-note', props.highlightedText, props.occurrence ?? 1)
   emit('close')
 }
 
 function handleExtractNote() {
-  if (props.highlightedText) emit('extract-note', props.highlightedText, props.messageIndex ?? null)
+  if (props.highlightedText) emit('extract-note', props.highlightedText, props.messageIndex ?? null, props.occurrence ?? 1)
   emit('close')
 }
 
 function handleCreateBranch() {
-  if (props.highlightedText) emit('create-branch', props.highlightedText, props.messageIndex ?? null)
+  if (props.highlightedText) emit('create-branch', props.highlightedText, props.messageIndex ?? null, props.occurrence ?? 1)
   emit('close')
 }
 

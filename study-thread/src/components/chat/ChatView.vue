@@ -59,6 +59,7 @@
       :y="highlightMenu.y"
       :highlighted-text="highlightMenu.text"
       :message-index="highlightMenu.messageIndex"
+      :occurrence="highlightMenu.occurrence"
       show-add-to-note
       @close="closeHighlightMenu"
       @extract-note="handleExtractNote"
@@ -94,9 +95,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   retry: []
-  'extract-note': [text: string, messageIndex: number | null]
-  'add-to-note': [text: string]
-  'create-branch': [text: string, messageIndex: number | null]
+  'extract-note': [text: string, messageIndex: number | null, occurrence: number]
+  'add-to-note': [text: string, occurrence: number]
+  'create-branch': [text: string, messageIndex: number | null, occurrence: number]
   'navigate-note': [path: string]
   'navigate-branch': [branchId: string]
 }>()
@@ -120,6 +121,8 @@ const highlightMenu = reactive({
   text: '',
   /** 划线所在的消息索引（DOM 定位）；无则为 null */
   messageIndex: null as number | null,
+  /** 划线文本在消息中的出现序号（重复文本定位用），默认第 1 处 */
+  occurrence: 1,
 })
 
 /** 从选区祖先节点向上查找最近的消息容器，读取 data-message-index */
@@ -146,6 +149,35 @@ function findSelectionTable(range: Range, container: Element): HTMLTableElement 
     if (table && container.contains(table)) return table
   }
   return null
+}
+
+/**
+ * 计算划线文本在消息容器中从开头算起的出现序号（第 1 处=1）。
+ *
+ * 同一消息内划线文本可能多次出现（如「E = mc²」在正文与列表各一次），
+ * 应用高亮时须按出现序号定位到用户实际划的位置，否则总会落在第一处。
+ * 文本模型与 wrapHighlightInDOM 一致（TreeWalker 文本节点 nodeValue 直接拼接，
+ * 不插入块级分隔符）。选区起点为元素节点时无法精确定位，退化为 1。
+ */
+function selectionOccurrence(container: Element, range: Range, text: string): number {
+  if (!text || range.startContainer.nodeType !== Node.TEXT_NODE) return 1
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  let pre = ''
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    if (node === range.startContainer) {
+      pre += (node.nodeValue || '').slice(0, range.startOffset)
+      break
+    }
+    pre += node.nodeValue || ''
+  }
+  let count = 0
+  let idx = pre.indexOf(text)
+  while (idx !== -1) {
+    count++
+    idx = pre.indexOf(text, idx + text.length)
+  }
+  return count + 1
 }
 
 function handleMouseUp() {
@@ -182,25 +214,28 @@ function handleMouseUp() {
   highlightMenu.y = rect.top
   highlightMenu.text = text
   highlightMenu.messageIndex = findHighlightMessageIndex(ancestor)
+  // 重复文本出现多次时记录出现序号，应用高亮时按序号定位到划线处
+  highlightMenu.occurrence = selectionOccurrence(highlightableEl, range, text)
   highlightMenu.visible = true
 }
 function closeHighlightMenu() {
   highlightMenu.visible = false
   highlightMenu.text = ''
   highlightMenu.messageIndex = null
+  highlightMenu.occurrence = 1
   window.getSelection()?.removeAllRanges()
 }
 
-function handleExtractNote(text: string, messageIndex: number | null) {
-  emit('extract-note', text, messageIndex)
+function handleExtractNote(text: string, messageIndex: number | null, occurrence = 1) {
+  emit('extract-note', text, messageIndex, occurrence)
 }
 
-function handleAddToNote(text: string) {
-  emit('add-to-note', text)
+function handleAddToNote(text: string, occurrence = 1) {
+  emit('add-to-note', text, occurrence)
 }
 
-function handleCreateBranch(text: string, messageIndex: number | null) {
-  emit('create-branch', text, messageIndex)
+function handleCreateBranch(text: string, messageIndex: number | null, occurrence = 1) {
+  emit('create-branch', text, messageIndex, occurrence)
 }
 
 function handleCopy(_text: string) {}

@@ -57,7 +57,7 @@
 
 **分叉点上下文（页面顶部区域）**：
 - 内容 = 划线内容所在消息中**划线文本上下各三句话**（`aroundHighlight`，按句末标点或换行切分句子），前一条消息只取最后三句；划线文本以品牌色实底白字明显凸显，并在划线处下方渲染虚线。
-- 划线文本来自 DOM（渲染后），可能跨 markdown 标记（如 `**加粗**`）导致源文本匹配不到——先原文匹配、失败后用移除标记的宽松匹配（`normalizeForMatch`）定位划线所在句；定位不到时退化为消息开头若干句、不加高亮。**多行划线（选区落在表格内时划线文本为整张表格的 Markdown 源码）按行切分后在句子列表中匹配连续行块**（`findHighlightBlock`），上下文围绕整张表格。
+- 划线文本来自 DOM（渲染后），可能跨 markdown 标记（如 `**加粗**`）导致源文本匹配不到——先原文匹配、失败后用移除标记的宽松匹配（`normalizeForMatch`）定位划线所在句；定位不到时退化为消息开头若干句、不加高亮。**多行划线（选区落在表格内时划线文本为整张表格的 Markdown 源码）按行切分后在句子列表中匹配连续行块**（`findHighlightBlock`），上下文围绕整张表格。**重复文本精确定位**：同一划线文本多次出现时，`findHighlightBlock` 按 `occurrence`（fork_highlight_occ）匹配第 N 处，上下文围绕用户实际划的位置。
 - 高亮实现：**不在源文本中预插 `<mark>`（跨标记时会被 marked 破坏语法）**。创建分支时把划线文本持久化到分支文件 frontmatter `fork_highlight`（JSON 字符串保证 YAML 安全）；页面渲染分叉点上下文后，用 `wrapHighlightInDOM` 在 DOM 上把划线文本包裹为 `<mark class="fork-highlight">`（先 unwrap 旧标记保证幂等）。**表格划线例外**：划线文本为表格 Markdown 源码、渲染 DOM 文本无 `|` 分隔符无法定位，且跨单元格切分文本节点会破坏 `<table>` 结构——`isTableHighlight` 判定后改用 `wrapTableInDOM` 把整张渲染表格包裹为高亮标记（源文本不注入 mark，避免破坏表格语法）。
 - 创建分支时由 `createBranchInVault` 用 `buildForkContextPreview(父会话消息, forkMessageIndex, highlightedText)` 生成，随分支文件持久化。
 
@@ -118,7 +118,7 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 - **用户提问样式**：`.chat-message__prompt` 提示框背景 `#eae4d6`（较浅的 `#f6f4ed` 加深一级）、正文墨色 `var(--ink)`（原 `--ink-2` 偏灰不够醒目）、字号 15px（原 14px），让用户提问与 AI 回答在视觉上区分度更高。
 - **CJK 加粗预处理**：渲染前先经 `preprocessMarkdownForRendering`（`src/utils/markdown-preprocess.ts`）把 `**"X"**` 变换为 `"**X**"`（引号/括号移到 `**` 外侧）。GFM flanking 规则下，`**"濑尿虾"**是` 这类"标点紧贴 `**` 且外侧为非标点"的写法会使定界符不满足 left/right-flanking，加粗退化为字面 `**`（AI 回答常见输出）。变换后 `**` 两侧均为非标点，加粗正常；代码块与行内代码先以占位符保护避免被改写。分支页分叉点上下文（`BranchChatPage.renderedForkContext`）同样先预处理再 `marked.parse`。
 - 正文容器标记 `data-highlightable="true"` 供划线识别；`thinking` 非空时渲染 `ThinkingBlock`。
-- **划线标记**：先由 `marked` 渲染出完整 HTML，再用 `wrapHighlightInDOM`（`src/utils/highlight-dom.ts`）把划线文本包裹为 `<a class="zhizhi-mark" data-zhizhi-kind="note|branch" data-zhizhi-id="…">`（**渲染后 DOM 包裹**，不在 markdown 源中插入标签——当划线文本位于 `**加粗**` / `*斜体*` 等行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏成字面 `**`）。该工具拼接全部文本节点定位划线起止区间并跨节点切分合并，因此划线文本位于单个文本节点内、或跨加粗/斜体边界（如划选 `名字——**"富贵虾"**` 的视觉范围）时都能正确显示虚线。**表格划线场景**（划线文本为整张表格 Markdown 源码）用 `isTableHighlight` 判定后走 `wrapTableInDOM` 整表包裹虚线链接（见分叉点上下文高亮说明）。以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。执行时机：`onMounted` 兜底 + watch `[renderedContent, marks]`，`nextTick` 后调用，且每轮先 `unwrapHighlight` 旧标记保证幂等。
+- **划线标记**：先由 `marked` 渲染出完整 HTML，再用 `wrapHighlightInDOM`（`src/utils/highlight-dom.ts`）把划线文本包裹为 `<a class="zhizhi-mark" data-zhizhi-kind="note|branch" data-zhizhi-id="…">`（**渲染后 DOM 包裹**，不在 markdown 源中插入标签——当划线文本位于 `**加粗**` / `*斜体*` 等行内标记内部时，marked 无法让 delimiter 跨 HTML 标签配对，加粗等语法会被破坏成字面 `**`）。该工具拼接全部文本节点定位划线起止区间并跨节点切分合并，因此划线文本位于单个文本节点内、或跨加粗/斜体边界（如划选 `名字——**"富贵虾"**` 的视觉范围）时都能正确显示虚线。**重复文本精确定位**：同一划线文本在消息中多次出现（如「E = mc²」在正文与列表各一次）时，划线时计算其出现序号（`selectionOccurrence`，TreeWalker 文本模型），持久化到引用行 `划线「text」〔N〕` / 分支 frontmatter `fork_highlight_occ`，应用时 `wrapHighlightInDOM` 按 `occurrence` 定位到用户实际划的位置（否则高亮总会落在第一处）。**表格划线场景**（划线文本为整张表格 Markdown 源码）用 `isTableHighlight` 判定后走 `wrapTableInDOM` 整表包裹虚线链接（见分叉点上下文高亮说明）。以品牌色 + 虚线标识原会话中的划线位置。点击后 `preventDefault` 并 emit `navigate-link({kind, id})`（id 已 decodeURIComponent）。执行时机：`onMounted` 兜底 + watch `[renderedContent, marks]`，`nextTick` 后调用，且每轮先 `unwrapHighlight` 旧标记保证幂等。
 
 ### 3.3 `StreamText.vue` — 流式文本
 

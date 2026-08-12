@@ -192,6 +192,22 @@ describe('buildForkContextPreview', () => {
     expect(preview).not.toContain('<mark')
   })
 
+  it('同一划线文本出现多次时按 occurrence 定位到第 N 处（分叉上下文围绕实际划线位置）', () => {
+    const context: Message[] = [
+      { role: 'assistant', content: '爱因斯坦提出 **E = mc²**。后来又有 **E = mc² 的具体计算** 值得研究。' },
+    ]
+    // occurrence=2 → 高亮标记落在第二次出现的「E = mc² 的具体计算」处
+    const preview = buildForkContextPreview(context, 0, 'E = mc²', 2)
+    expect(preview).toContain('具体计算')
+    const secondMarkBefore = preview.slice(0, preview.indexOf('<mark'))
+    expect(secondMarkBefore).toContain('后来又有')
+    // occurrence=1 → 高亮标记落在第一次出现处
+    const firstPreview = buildForkContextPreview(context, 0, 'E = mc²', 1)
+    const firstMarkBefore = firstPreview.slice(0, firstPreview.indexOf('<mark'))
+    expect(firstMarkBefore).toContain('爱因斯坦提出')
+    expect(firstMarkBefore).not.toContain('后来又有')
+  })
+
   it('划线消息为第一条时无前一条前缀', () => {
     const preview = buildForkContextPreview(messages, 0)
     expect(preview).not.toContain('前一条')

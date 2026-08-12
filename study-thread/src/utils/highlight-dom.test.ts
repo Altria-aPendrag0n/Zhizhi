@@ -56,6 +56,26 @@ describe('wrapHighlightInDOM', () => {
     wrapHighlightInDOM(body, '划线词', 'mark', 'fork-highlight')
     expect(body.innerHTML).toBe(first)
   })
+
+  it('同一文本出现多次时按 occurrence 定位（第 2 处）', () => {
+    body = renderToBody('<p>E = mc² 第一次</p><p>E = mc² 第二次</p>')
+    // 默认第 1 处：包裹第一段
+    const first = wrapHighlightInDOM(body, 'E = mc²', 'mark', 'fork-highlight')
+    expect(first?.textContent).toBe('E = mc²')
+    expect(body.innerHTML.indexOf('fork-highlight')).toBeLessThan(body.innerHTML.indexOf('第一次'))
+
+    // 第 2 处：包裹第二段
+    const second = wrapHighlightInDOM(body, 'E = mc²', 'a', 'zhizhi-mark', 2)
+    expect(second?.textContent).toBe('E = mc²')
+    // 第二处位于「第二次」之前（其父节点是第二段）
+    const secondParent = second?.parentElement
+    expect(secondParent?.textContent).toBe('E = mc² 第二次')
+  })
+
+  it('occurrence 超出实际出现次数时返回 null', () => {
+    body = renderToBody('<p>只出现一次</p>')
+    expect(wrapHighlightInDOM(body, '只出现一次', 'mark', 'fork-highlight', 2)).toBeNull()
+  })
 })
 
 describe('isTableHighlight', () => {
