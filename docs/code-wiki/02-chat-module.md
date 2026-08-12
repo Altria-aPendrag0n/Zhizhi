@@ -29,7 +29,7 @@
 
 | 函数 | 说明 |
 |------|------|
-| `handleSend(content)` | 校验 API Key（无则跳 `/settings`）→ `retrieveKnowledgeContext` 检索知识库 → 组装 system prompt → `chatWithTools` 流式消费 6 类 chunk（`text/thinking/tool_call/tool_result/stop/error`），`AbortController` 支持停止 |
+| `handleSend(content)` | 校验 API Key（无则跳 `/settings`）→ 空白界面（`/chat` 无 thread）时自动创建新会话：以 `new_${Date.now()}` 占位 id 落盘，回答结束后 `router.replace` 把会话 id 写入 URL（侧边栏高亮、后续追问复用；用户中途切换会话则不跳转）→ `retrieveKnowledgeContext` 检索知识库 → 组装 system prompt → `chatWithTools` 流式消费 6 类 chunk（`text/thinking/tool_call/tool_result/stop/error`），`AbortController` 支持停止 |
 | `handleExtractNote(text, domMessageIndex)` | 调 `extractNote` skill 生成笔记草稿 → `noteStore.saveNote` 写入 vault → 记录 `NoteReference{path, title, messageIndex}` 并写回会话文件；`messageIndex` 优先用划线时 DOM 定位的索引 |
 | `handleAddToNote(text)` / `confirmAddToNote(target)` | 弹窗选笔记与标题位置，`insertHighlightAt(End)` 把划线原文插入指定小节末尾或文件末尾 |
 | `handleCreateBranch(text, domMessageIndex)` | 用 `resolveMessageIndex` 定位划线消息（DOM 索引优先、文本匹配兜底）→ `sessionStore.createBranchInVault` 创建分支（携带划线文本用于分叉点上下文）→ 跳转 `branch-chat` |
@@ -107,6 +107,7 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 逻辑要点：
 - 消息容器带 `data-message-index`；流式期间隐藏末尾空的 assistant 占位消息，由流式区域展示。
 - `handleMouseUp` 校验选区在 `[data-highlightable="true"]` 元素内才弹出 `HighlightMenu`；同时通过选区祖先的 `closest('[data-message-index]')` 读取消息索引随事件透传。
+- **普通文本可复制**：选区不在可划线区域（用户消息、AI 思考过程、流式文本等）时，只调用 `dismissHighlightMenu` 收起划线菜单、**不清除用户选区**（区别于 `closeHighlightMenu` 里的 `removeAllRanges`），保证用户消息与思考过程等文本拖选后可直接 Ctrl+C / 右键复制。
 - **表格摘录还原**：选区落在表格内时（`findSelectionTable` 依次查 commonAncestor/start/end 的 `closest('table')`），按 `isSelectionWithinSingleCell`（start/end/commonAncestor 是否在同一 td/th 内）区分两种摘录——**跨单元格/跨行**（划整张表格）时改用 `tableToMarkdown`（`src/utils/table-to-markdown.ts`）把整张表格 DOM 还原为带 `|` 分隔符与表头分隔行的 Markdown 表格（`window.getSelection().toString()` 只返回渲染后文本节点，会丢失表格结构标志）；**单个单元格内划线**（如只划「托卡马克」几个字）时用 `selection.toString()` 摘录文字本身，避免把表格格式误当成划线内容。单元格内字面 `|` 会转义为 `\|`，避免摘录源码把单元格拆成多列。
 - 按 `messageIndex` 过滤 noteRefs，渲染 `[[标题]]` 跳转按钮。
 - watch 消息长度/流式文本变化 → `nextTick` 自动滚动到底部。

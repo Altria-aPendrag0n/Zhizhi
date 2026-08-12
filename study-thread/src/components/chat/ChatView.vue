@@ -193,7 +193,9 @@ function handleMouseUp() {
     ? ancestor as Element
     : ancestor.parentElement)?.closest('[data-highlightable="true"]')
   if (!highlightableEl || !containerRef.value?.contains(highlightableEl)) {
-    closeHighlightMenu()
+    // 选区不在可划线区域（如用户消息、AI 思考过程等普通文本）：
+    // 仅收起划线菜单，保留用户选区，否则 removeAllRanges 会清掉选区导致无法复制文本
+    dismissHighlightMenu()
     return
   }
 
@@ -224,6 +226,14 @@ function closeHighlightMenu() {
   highlightMenu.messageIndex = null
   highlightMenu.occurrence = 1
   window.getSelection()?.removeAllRanges()
+}
+
+/** 仅收起划线菜单、清空菜单状态，但不清除用户选区（普通文本选中后仍可复制） */
+function dismissHighlightMenu() {
+  highlightMenu.visible = false
+  highlightMenu.text = ''
+  highlightMenu.messageIndex = null
+  highlightMenu.occurrence = 1
 }
 
 function handleExtractNote(text: string, messageIndex: number | null, occurrence = 1) {

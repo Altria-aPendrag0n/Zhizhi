@@ -12,6 +12,7 @@
           ref="fileInput"
           type="file"
           accept=".md,.pdf,.png"
+          multiple
           hidden
           @change="handleFileChange"
         />
@@ -72,7 +73,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [path: string]
-  upload: [file: File]
+  upload: [files: File[]]
   delete: [path: string]
 }>()
 
@@ -103,13 +104,13 @@ const filteredReferences = computed(() => {
 
 function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+  const files = input.files ? Array.from(input.files) : []
   try {
     input.value = ''
   } catch {
     // 某些环境对 file input 的 value 只读，忽略即可
   }
-  if (file) emit('upload', file)
+  if (files.length > 0) emit('upload', files)
 }
 
 function openContextMenu(event: MouseEvent, path: string) {

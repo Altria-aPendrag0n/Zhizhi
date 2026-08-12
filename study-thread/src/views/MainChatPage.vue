@@ -178,15 +178,14 @@ async function handleSend(content: string) {
     return
   }
 
+  // 空白界面直接提问：无激活会话（/chat 无 thread）时自动创建新会话。
+  // 先用 new_* 占位 id 落盘，回答完成后跳转路由把会话 id 写入 URL（侧边栏高亮、后续追问复用同一会话）
+  let threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
+  const isAutoNewThread = !threadId
+  if (isAutoNewThread) threadId = `new_${Date.now()}`
+
   // 用户消息携带时间戳：serializer 持久化为「## 用户 · <timestamp>」，供主界面按天统计问答
   messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
-
-  const threadId = typeof route.query.thread === 'string' ? route.query.thread : ''
-  if (!threadId) {
-    error.value = '未找到当前会话'
-    messages.value.pop()
-    return
-  }
 
   await saveCurrentSession(threadId)
 
@@ -294,6 +293,12 @@ async function handleSend(content: string) {
     }
   } finally {
     abortController = null
+  }
+
+  // 自动新建的会话：回答结束后跳转到该会话路由（会话 id 进入 URL，后续追问复用）；
+  // 若用户中途已切换到其他会话/页面，则不再强制跳转
+  if (isAutoNewThread && !route.query.thread) {
+    await router.replace({ path: '/chat', query: { thread: threadId } })
   }
 }
 

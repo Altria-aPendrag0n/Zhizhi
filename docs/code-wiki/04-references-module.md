@@ -79,8 +79,8 @@ interface Reference extends ReferenceMeta {
 
 ### 5.1 `ReferenceList.vue` — 列表容器
 
-- props：`references: ReferenceMeta[]`、`selectedPath?`；emits：`select(path)`、`upload(file)`、`delete(path)`。
-- 隐藏 file input（accept `.md,.pdf,.png`），`handleFileChange` 取第一个文件后**清空 input**（允许重复选同一文件）。
+- props：`references: ReferenceMeta[]`、`selectedPath?`；emits：`select(path)`、`upload(files: File[])`、`delete(path)`。
+- 隐藏 file input（accept `.md,.pdf,.png`，`multiple` 支持**一次多选**），`handleFileChange` 把全部选中文件组成数组 emit 后**清空 input**（允许重复选同一文件）。NotesPage 侧逐文件调用 `uploadReference` 落盘并汇总 toast 结果。
 - 搜索过滤（标题/描述/标签）+ updated 排序；右键删除菜单（Teleport，逻辑与 NoteList 相同）。
 
 ### 5.2 `ReferenceCard.vue` — 卡片

@@ -287,18 +287,21 @@ describe('NotesPage', () => {
     wrapper.unmount()
   })
 
-  it('参考资料上传事件调用 referenceStore.uploadReference', async () => {
+  it('参考资料上传事件调用 referenceStore.uploadReference（逐文件上传）', async () => {
     testGlobals().__notesPageRoute!.query = { tab: 'references' }
     testGlobals().__notesPageVaultPath!.value = '/vault'
     testGlobals().__notesPageVaultReady!.value = true
     const wrapper = createWrapper()
     await flushPromises()
 
-    const file = new File(['# 内容'], 'test.md', { type: 'text/markdown' })
-    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('upload', file)
+    const fileA = new File(['# A'], 'a.md', { type: 'text/markdown' })
+    const fileB = new File(['# B'], 'b.pdf', { type: 'application/pdf' })
+    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('upload', [fileA, fileB])
     await flushPromises()
 
-    expect(state.uploadReference).toHaveBeenCalledWith('/vault', file)
+    expect(state.uploadReference).toHaveBeenCalledTimes(2)
+    expect(state.uploadReference).toHaveBeenCalledWith('/vault', fileA)
+    expect(state.uploadReference).toHaveBeenCalledWith('/vault', fileB)
     wrapper.unmount()
   })
 

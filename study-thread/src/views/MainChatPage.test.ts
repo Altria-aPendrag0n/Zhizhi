@@ -2,16 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import MainChatPage from './MainChatPage.vue'
 
-const { route, saveCurrentSession, chat, retrieveKnowledgeContext } = vi.hoisted(() => ({
+const { route, saveCurrentSession, chat, retrieveKnowledgeContext, routerReplace } = vi.hoisted(() => ({
   route: { query: { thread: 'new_test' } },
   saveCurrentSession: vi.fn().mockResolvedValue('session-path'),
   chat: vi.fn(),
   retrieveKnowledgeContext: vi.fn(),
+  routerReplace: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('vue-router', () => ({
   useRoute: () => route,
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
 }))
 
 vi.mock('../stores/settings', () => ({
@@ -75,6 +76,7 @@ describe('MainChatPage', () => {
     retrieveKnowledgeContext.mockReset()
     retrieveKnowledgeContext.mockResolvedValue('')
     saveCurrentSession.mockClear()
+    routerReplace.mockClear()
   })
 
   it('重复 stop 不会用空 streamingText 覆盖已提交的 AI 回答', async () => {
@@ -144,5 +146,32 @@ describe('MainChatPage', () => {
     expect(systemPrompt).toContain('你是知枝，一位学习伴读助手')
     expect(systemPrompt).toContain('### [笔记] 测试笔记')
     expect(systemPrompt).toContain('测试片段内容')
+  })
+
+  it('空白界面发送自动创建新会话：落盘到 new_* 会话并在回答后跳转路由', async () => {
+    route.query.thread = ''
+    chat.mockReturnValue((async function* () {
+      yield { type: 'text' as const, content: '自动创建的会话回答' }
+      yield { type: 'stop' as const }
+    })())
+
+    const chatView = await sendMessage(createWrapper())
+
+    // 用户消息与回答都在当前页面完成流式渲染
+    expect(chatView.props('messages')).toEqual([
+      { role: 'user', content: '测试问题', timestamp: expect.any(String) },
+      { role: 'assistant', content: '自动创建的会话回答' },
+    ])
+    // 会话以 new_* 占位 id 落盘（vault store 的 saveCurrentSession 收到该 id 的 Session）
+    expect(saveCurrentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.stringMatching(/^new_\d+$/) }),
+      false,
+      expect.any(Array),
+    )
+    // 回答结束后跳转路由，把会话 id 写入 URL
+    expect(routerReplace).toHaveBeenCalledWith({
+      path: '/chat',
+      query: { thread: expect.stringMatching(/^new_\d+$/) },
+    })
   })
 })

@@ -54,7 +54,7 @@ describe('ReferenceList', () => {
     expect(wrapper.text()).toContain('认知科学导论')
   })
 
-  it('点击上传按钮触发隐藏文件输入并 emit upload(File)', async () => {
+  it('点击上传按钮触发隐藏文件输入并 emit upload(File[])', async () => {
     const wrapper = mount(ReferenceList, { props: { references: [reference] } })
     const input = wrapper.find('input[type="file"]')
     const clickSpy = vi.spyOn(input.element as HTMLInputElement, 'click').mockImplementation(() => {})
@@ -66,7 +66,20 @@ describe('ReferenceList', () => {
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
     expect(wrapper.emitted('upload')).toBeTruthy()
-    expect(wrapper.emitted('upload')![0][0]).toBe(file)
+    expect(wrapper.emitted('upload')![0][0]).toEqual([file])
+  })
+
+  it('多选上传：一次选中多个文件时逐一带上全部文件 emit upload(File[])', async () => {
+    const wrapper = mount(ReferenceList, { props: { references: [] } })
+    const input = wrapper.find('input[type="file"]')
+    // 文件输入支持多选
+    expect(input.attributes('multiple')).toBeDefined()
+
+    const fileA = new File(['# A'], 'a.md', { type: 'text/markdown' })
+    const fileB = new File(['# B'], 'b.pdf', { type: 'application/pdf' })
+    Object.defineProperty(input.element, 'files', { value: [fileA, fileB], configurable: true })
+    await input.trigger('change')
+    expect(wrapper.emitted('upload')![0][0]).toEqual([fileA, fileB])
   })
 
   it('无文件时不触发 upload 事件', async () => {

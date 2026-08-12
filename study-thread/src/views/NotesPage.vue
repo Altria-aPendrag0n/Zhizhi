@@ -231,14 +231,20 @@ function handleSelectReference(path: string) {
   editVisible.value = true
 }
 
-async function handleUploadReference(file: File) {
+async function handleUploadReference(files: File[]) {
   const vaultPath = vaultStore.vaultPath
   if (!vaultPath) return
-  const meta = await referenceStore.uploadReference(vaultPath, file)
-  if (meta) {
-    toast.success('已上传参考资料')
-  } else {
+  let uploaded = 0
+  for (const file of files) {
+    const meta = await referenceStore.uploadReference(vaultPath, file)
+    if (meta) uploaded++
+  }
+  if (uploaded === 0) {
     toast.error('上传参考资料失败')
+  } else if (uploaded === files.length) {
+    toast.success(`已上传 ${uploaded} 份参考资料`)
+  } else {
+    toast.success(`成功上传 ${uploaded}/${files.length} 份参考资料`)
   }
 }
 
