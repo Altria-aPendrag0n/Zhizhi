@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { wrapHighlightInDOM, unwrapHighlight } from './highlight-dom'
+import { wrapHighlightInDOM, unwrapHighlight, isTableHighlight, wrapTableInDOM } from './highlight-dom'
 
 function renderToBody(html: string): HTMLDivElement {
   const div = document.createElement('div')
@@ -55,5 +55,49 @@ describe('wrapHighlightInDOM', () => {
 
     wrapHighlightInDOM(body, '划线词', 'mark', 'fork-highlight')
     expect(body.innerHTML).toBe(first)
+  })
+})
+
+describe('isTableHighlight', () => {
+  it('多行且每行以 | 开头时判定为表格划线', () => {
+    expect(isTableHighlight('| 名称 | 说明 |\n| --- | --- |\n| 皮皮虾 | 口虾蛄 |')).toBe(true)
+  })
+
+  it('单行或普通文本不是表格划线', () => {
+    expect(isTableHighlight('| 名称 | 说明 |')).toBe(false)
+    expect(isTableHighlight('普通文本')).toBe(false)
+    expect(isTableHighlight('')).toBe(false)
+  })
+})
+
+describe('wrapTableInDOM', () => {
+  it('把渲染表格整体包裹为标记元素，不拆分内部节点', () => {
+    const body = renderToBody('<p>开头</p><table><tbody><tr><td>名称</td><td>说明</td></tr><tr><td>皮皮虾</td><td>口虾蛄</td></tr></tbody></table><p>结尾</p>')
+    const wrapper = wrapTableInDOM(body, 'mark', 'fork-highlight')
+    expect(wrapper).not.toBeNull()
+    expect(wrapper?.tagName).toBe('MARK')
+    expect(body.innerHTML).toContain('<mark class="fork-highlight"><table>')
+    // 表格结构未被拆分：wrapper 内仍是完整 <table>
+    expect(body.querySelector('mark.fork-highlight table')).not.toBeNull()
+    expect(body.querySelector('mark.fork-highlight table tbody')?.childElementCount).toBe(2)
+  })
+
+  it('无表格时返回 null', () => {
+    const body = renderToBody('<p>没有表格</p>')
+    expect(wrapTableInDOM(body, 'mark', 'fork-highlight')).toBeNull()
+  })
+
+  it('unwrap 后表格恢复原位，重复包裹幂等', () => {
+    const body = renderToBody('<table><tbody><tr><td>甲</td><td>乙</td></tr></tbody></table>')
+    wrapTableInDOM(body, 'mark', 'fork-highlight')
+    const wrapped = body.innerHTML
+    expect(wrapped).toContain('<mark class="fork-highlight">')
+
+    unwrapHighlight(body, 'mark', 'fork-highlight')
+    expect(body.innerHTML).not.toContain('fork-highlight')
+    expect(body.innerHTML).toContain('<table>')
+
+    wrapTableInDOM(body, 'mark', 'fork-highlight')
+    expect(body.innerHTML).toBe(wrapped)
   })
 })

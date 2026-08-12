@@ -39,7 +39,7 @@ import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
-import { wrapHighlightInDOM, unwrapHighlight } from '../../utils/highlight-dom'
+import { wrapHighlightInDOM, unwrapHighlight, isTableHighlight, wrapTableInDOM } from '../../utils/highlight-dom'
 import { preprocessMarkdownForRendering } from '../../utils/markdown-preprocess'
 import ThinkingBlock from './ThinkingBlock.vue'
 
@@ -85,7 +85,14 @@ function applyMarkLinks() {
     const highlight = mark.highlight.replace(/\s+/g, ' ')
     if (!highlight) continue
     const kind = mark.kind === 'branch' ? 'branch' : 'note'
-    const wrapper = wrapHighlightInDOM(body, highlight, 'a', 'zhizhi-mark')
+    let wrapper: HTMLElement | null
+    if (isTableHighlight(mark.highlight)) {
+      // 表格划线：划线文本为整张表格 Markdown 源码，渲染 DOM 文本无法定位，
+      // 整表包裹为可点击虚线链接（不拆分内部节点，避免破坏表格结构）
+      wrapper = wrapTableInDOM(body, 'a', 'zhizhi-mark')
+    } else {
+      wrapper = wrapHighlightInDOM(body, highlight, 'a', 'zhizhi-mark')
+    }
     if (!wrapper) continue
     wrapper.dataset.zhizhiKind = kind
     wrapper.dataset.zhizhiId = kind === 'branch' ? mark.path : encodeURIComponent(mark.path)

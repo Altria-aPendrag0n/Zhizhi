@@ -88,3 +88,39 @@ export function unwrapHighlight(body: Element, tagName: string, className: strin
     wrapper.remove()
   })
 }
+
+/**
+ * 判断划线文本是否为整张表格的 Markdown 源码。
+ *
+ * 选区落在表格内时（ChatView.findSelectionTable），划线文本取 `tableToMarkdown` 的
+ * 完整表格（`| 单元格 | 单元格 |` 多行）。这种文本无法在 markdown 源或渲染后 DOM 的
+ * 文本节点中定位（渲染表格无 `|` 分隔符），需走整表高亮。
+ */
+export function isTableHighlight(text: string): boolean {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+  if (lines.length < 2) return false
+  return lines.every((line) => line.startsWith('|'))
+}
+
+/**
+ * 把 body 内第一个 `<table>` 整体包裹为 `<tagName class="className">`。
+ *
+ * 表格划线场景专用：渲染后表格的单元格文本在 DOM 中连续拼接（`名称说明皮皮虾…`），
+ * 与划线文本（Markdown 表格源码，含 `|` 分隔符）无法文本匹配，且跨单元格切分文本
+ * 节点会破坏 `<table>` 结构。因此整体包裹 `<table>` 元素，不拆分内部节点。
+ *
+ * @returns 包裹元素；无表格返回 null
+ */
+export function wrapTableInDOM(
+  body: Element,
+  tagName: 'span' | 'mark' | 'a' = 'span',
+  className = '',
+): HTMLElement | null {
+  const table = body.querySelector('table')
+  if (!table || !table.parentNode) return null
+  const wrapper = document.createElement(tagName)
+  if (className) wrapper.className = className
+  table.parentNode.insertBefore(wrapper, table)
+  wrapper.appendChild(table)
+  return wrapper
+}

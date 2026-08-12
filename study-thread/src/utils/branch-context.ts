@@ -171,20 +171,10 @@ function normalizeForMatch(text: string): string {
     .trim()
 }
 
-/**
- * 定位包含划线文本的句子索引
- *
- * 划线文本来自 DOM（渲染后），可能跨 markdown 标记（如 **加粗**）导致源文本中
- * 找不到完整子串。先尝试原文匹配，失败后用移除标记后的宽松匹配兜底。
- */
-function findHighlightSentence(sentences: string[], highlightedText: string): number {
-  const normalized = normalizeForMatch(highlightedText)
-  for (let i = 0; i < sentences.length; i++) {
-    const sentence = sentences[i]
-    if (sentence.includes(highlightedText)) return i
-    if (normalized && normalizeForMatch(sentence).includes(normalized)) return i
-  }
-  return -1
+/** 定位到的句子块：start 为起始句索引，length 为行数（多行划线如整张表格 >1） */
+interface SentenceBlock {
+  start: number
+  length: number
 }
 
 /**
@@ -206,31 +196,73 @@ function wrapHighlight(source: string, highlightedText: string): string | null {
 }
 
 /**
- * 围绕划线文本展示其所在句子的上下各 count 句
+ * 定位包含划线文本的句子块。
+ *
+ * 划线文本来自 DOM（渲染后），可能跨 markdown 标记（如 **加粗**）导致源文本中
+ * 找不到完整子串。先尝试原文匹配，失败后用移除标记后的宽松匹配兜底。
+ * 多行划线（选区落在表格内时，划线文本为整张表格的 Markdown 源码）按行切分后
+ * 在句子列表中匹配连续行块。
+ */
+function findHighlightBlock(sentences: string[], highlightedText: string): SentenceBlock | null {
+  // 单行划线：在任意一句中匹配
+  if (!highlightedText.includes('\n')) {
+    const normalized = normalizeForMatch(highlightedText)
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i]
+      if (sentence.includes(highlightedText)) return { start: i, length: 1 }
+      if (normalized && normalizeForMatch(sentence).includes(normalized)) return { start: i, length: 1 }
+    }
+    return null
+  }
+  // 多行划线（整张表格等）：按行切分，在句子列表中找连续行块，每行原文或宽松匹配
+  const lines = highlightedText.split('\n').map((line) => line.trim()).filter(Boolean)
+  if (lines.length === 0) return null
+  const first = lines[0]
+  const firstNorm = normalizeForMatch(first)
+  for (let start = 0; start + lines.length <= sentences.length; start++) {
+    const sentence = sentences[start]
+    if (!sentence.includes(first) && !(firstNorm && normalizeForMatch(sentence).includes(firstNorm))) continue
+    let matched = true
+    for (let j = 1; j < lines.length; j++) {
+      const line = lines[j]
+      const norm = normalizeForMatch(line)
+      const target = sentences[start + j]
+      if (!target.includes(line) && !(norm && normalizeForMatch(target).includes(norm))) {
+        matched = false
+        break
+      }
+    }
+    if (matched) return { start, length: lines.length }
+  }
+  return null
+}
+
+/**
+ * 围绕划线文本展示其所在句子的上下各 count 句。
  *
  * 划线文本缺失或无法定位（渲染后文本与 markdown 源不一致）时，
  * 退化为展示消息开头的若干句子。
- * 用 `wrapHighlight` 把划线文本包裹为 `<mark class="fork-highlight">`（原文匹配，
- * 或划线文本被标记打断时的宽松匹配），前端以 markdown 渲染并高亮标明。
+ * 单行划线用 `wrapHighlight` 把划线文本包裹为 `<mark class="fork-highlight">`
+ * （原文匹配，或划线文本被标记打断时的宽松匹配），前端以 markdown 渲染并高亮标明；
+ * 多行划线（整张表格）在源文本行块内插入 `<mark>` 会破坏表格渲染（marked 无法识别
+ * `<mark>| 单元格 |` 行的表格语法），因此不注入标记，由前端在渲染后 DOM 上整表高亮。
  */
 function aroundHighlight(content: string, highlightedText: string | undefined, count = 3): string {
   const sentences = splitSentences(content)
   if (sentences.length === 0) return content
-  let targetIndex = -1
-  if (highlightedText) {
-    targetIndex = findHighlightSentence(sentences, highlightedText)
+  const block = highlightedText ? findHighlightBlock(sentences, highlightedText) : null
+  if (!block) {
+    // 划线文本缺失或无法定位：退化为展示消息开头的若干句子
+    const end = Math.min(sentences.length, count * 2 + 1)
+    return sentences.slice(0, end).join('\n')
   }
-  const start = targetIndex === -1 ? 0 : Math.max(0, targetIndex - count)
-  const end = targetIndex === -1
-    ? Math.min(sentences.length, count * 2 + 1)
-    : targetIndex + count + 1
+  const start = Math.max(0, block.start - count)
+  const end = Math.min(sentences.length, block.start + block.length + count)
   const picked = sentences.slice(start, end)
-  if (targetIndex !== -1 && targetIndex >= start && targetIndex < end) {
-    const withinIndex = targetIndex - start
+  if (block.length === 1) {
+    const withinIndex = block.start - start
     const wrapped = wrapHighlight(picked[withinIndex], highlightedText as string)
-    if (wrapped !== null) {
-      picked[withinIndex] = wrapped
-    }
+    if (wrapped !== null) picked[withinIndex] = wrapped
   }
   return picked.join('\n')
 }

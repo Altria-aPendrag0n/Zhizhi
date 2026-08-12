@@ -93,6 +93,7 @@ interface SessionTreeNode {
 |------|------|
 | `loadBranchContext(parentSessionFile, forkMessageIndex)` | 读父会话文件 → `parseFrontmatter` 取正文 → `parseMessages(body, forkIndex)` |
 | `parseMessages(body, upToIndex)` | 按 `## 用户/知枝/系统` 消息头切分，收集到 `upToIndex` 为止的历史消息；跳过正文内 `<!-- thinking -->` 思考区块（含结束标记行） |
+| `buildForkContextPreview(context, forkIndex, highlightedText?)` | 生成分叉点上下文：划线内容上下各三句 + 前一条消息最后三句；多行划线（整张表格 Markdown 源码）由 `findHighlightBlock` 按连续行块定位，上下文围绕表格且不在源文本注入 `<mark>`（避免破坏表格语法） |
 | `THINKING_START / THINKING_END` | 思考区块常量：`<!-- thinking -->` / `<!-- /thinking -->` |
 
 ## 6. 参考资料序列化（`utils/reference-serializer.ts`）

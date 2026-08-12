@@ -89,7 +89,7 @@ import { resolveMessageIndex } from '../utils/message-locator'
 import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
-import { wrapHighlightInDOM, unwrapHighlight } from '../utils/highlight-dom'
+import { wrapHighlightInDOM, unwrapHighlight, isTableHighlight, wrapTableInDOM } from '../utils/highlight-dom'
 import { preprocessMarkdownForRendering } from '../utils/markdown-preprocess'
 import { useToast } from '../composables/useToast'
 import { useLearnerUpdate } from '../composables/useLearnerUpdate'
@@ -143,6 +143,12 @@ watch(renderedForkContext, async () => {
   const body = forkContextRef.value
   if (!body || !forkHighlight.value) return
   unwrapHighlight(body, 'mark', 'fork-highlight')
+  if (isTableHighlight(forkHighlight.value)) {
+    // 表格划线：划线文本为整张表格的 Markdown 源码，渲染 DOM 文本无 `|` 分隔符，
+    // 无法定位；且跨单元格切分文本节点会破坏 `<table>` 结构，直接整表包裹高亮
+    wrapTableInDOM(body, 'mark', 'fork-highlight')
+    return
+  }
   wrapHighlightInDOM(body, forkHighlight.value, 'mark', 'fork-highlight')
 })
 

@@ -159,6 +159,39 @@ describe('buildForkContextPreview', () => {
     expect(preview).not.toContain('<mark')
   })
 
+  it('划线整张表格时按连续行块定位，上下文围绕表格且不注入破坏表格的 mark', () => {
+    const table = '| 名称 | 说明 |\n| --- | --- |\n| 皮皮虾 | 口虾蛄 |\n| 富贵虾 | 龙虾的俗称 |'
+    const longIntro = Array.from({ length: 10 }, (_, i) => `介绍段落第 ${i + 1} 句。`).join('\n')
+    const context: Message[] = [
+      { role: 'assistant', content: `${longIntro}\n${table}\n收尾总结。` },
+    ]
+    // 选区落在表格内时划线文本为整张表格 Markdown 源码（多行）
+    const preview = buildForkContextPreview(context, 0, table)
+    // 上下文围绕表格（而非退化为消息开头）：表格位于句子索引 10~13，
+    // 上下各 3 句 → 索引 7 起，表格前第 7 句（索引 6）不在范围内
+    expect(preview).toContain('皮皮虾')
+    expect(preview).toContain('富贵虾')
+    expect(preview).toContain('介绍段落第 8 句。')
+    expect(preview).not.toContain('介绍段落第 7 句。')
+    expect(preview).not.toContain('介绍段落第 1 句。')
+    // 多行划线不在源文本插 mark（marked 无法识别 <mark>| 行的表格语法，破坏渲染）；
+    // 高亮由前端渲染后 DOM 整表包裹完成（wrapTableInDOM）
+    expect(preview).not.toContain('<mark')
+  })
+
+  it('划线整张表格时前一条消息的最后三句仍保留', () => {
+    const table = '| 名称 | 说明 |\n| --- | --- |\n| 皮皮虾 | 口虾蛄 |'
+    const context: Message[] = [
+      { role: 'user', content: '甲。乙。丙。丁。戊。' },
+      { role: 'assistant', content: `先介绍虾类。\n${table}\n以上就是全部内容。` },
+    ]
+    const preview = buildForkContextPreview(context, 1, table)
+    expect(preview).toContain('（前一条 · 用户）')
+    expect(preview).toContain('丙。')
+    expect(preview).toContain('皮皮虾')
+    expect(preview).not.toContain('<mark')
+  })
+
   it('划线消息为第一条时无前一条前缀', () => {
     const preview = buildForkContextPreview(messages, 0)
     expect(preview).not.toContain('前一条')
