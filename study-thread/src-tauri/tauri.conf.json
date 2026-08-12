@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "知枝",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.study-thread.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,7 +31,7 @@
       "endpoints": [
         "https://github.com/Altria-aPendrag0n/Zhizhi/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY2OTMwQTY5ODhGN0EzNgpSV1EyZW8rWXBqQnBCZzRxbUVCZVFRTVN1YlRwQ2pDZUFzQ3locUhpQU9oRG54bHEwQSsvUVRqbQo="
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgyRDI3RjVBNjc3RjY3NzQKUldSMFozOW5Xbi9TZ2pQUEFzRk9LTjk0UkRhRW5DMjZJcnVodW5vZ0lwMUxTc0lleGJHdHZXbnAK"
     }
   },
   "bundle": {
