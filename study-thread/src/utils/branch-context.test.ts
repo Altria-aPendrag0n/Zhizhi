@@ -54,6 +54,23 @@ describe('parseMessages', () => {
       { role: 'assistant', content: '回答1' },
     ])
   })
+
+  it('消息内的 AI 思考过程区块被跳过，不混入消息正文', () => {
+    const body = `## 用户
+问题1
+
+## 知枝
+<!-- thinking -->
+思考步骤
+<!-- /thinking -->
+
+回答1`
+    const parsed = parseMessages(body, Number.MAX_SAFE_INTEGER)
+    expect(parsed).toEqual([
+      { role: 'user', content: '问题1' },
+      { role: 'assistant', content: '回答1' },
+    ])
+  })
 })
 
 describe('serializeForkContext / extractForkContext', () => {

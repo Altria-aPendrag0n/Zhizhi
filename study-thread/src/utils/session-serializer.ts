@@ -6,7 +6,7 @@
 import type { Session, Message } from '../types'
 import type { NoteReference } from './session-linker'
 import { writeFile, createDir } from './vault-fs'
-import { serializeForkContext, FORK_CONTEXT_START, FORK_CONTEXT_END } from './branch-context'
+import { serializeForkContext, FORK_CONTEXT_START, FORK_CONTEXT_END, THINKING_START, THINKING_END } from './branch-context'
 import { parseFrontmatter } from '../parser/frontmatter'
 
 /**
@@ -85,6 +85,11 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     const time = msg.timestamp ? ` · ${msg.timestamp}` : ''
     lines.push(`## ${role}${time}`)
     lines.push('')
+    // AI 思考过程以特殊标记区块持久化（与分叉上下文同风格），切换会话后仍可恢复
+    if (msg.role === 'assistant' && msg.thinking) {
+      lines.push(serializeThinkingBlock(msg.thinking))
+      lines.push('')
+    }
     lines.push(msg.content)
     for (const noteRef of noteRefs.filter((ref) => ref.messageIndex === messageIndex)) {
       const kindLabel = noteRef.kind === 'branch' ? '已生成分支' : '已生成笔记'
@@ -96,6 +101,16 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
   }
 
   return lines.join('\n')
+}
+
+/**
+ * 序列化 AI 思考过程为可写入消息正文的区块文本。
+ * 区块以 HTML 注释包裹，不参与 markdown 渲染；内容中的 `-->` 转义为 `--&gt;`，避免提前闭合标记。
+ */
+export function serializeThinkingBlock(text: string): string {
+  if (!text) return ''
+  const escaped = text.split('-->').join('--&gt;')
+  return `${THINKING_START}\n${escaped}\n${THINKING_END}`
 }
 
 /**
@@ -194,21 +209,27 @@ export function parseSessionMeta(content: string, filePath: string): SessionMeta
 }
 
 /**
- * 从会话正文解析消息列表（保留消息级时间戳）。
+ * 从会话正文解析消息列表（保留消息级时间戳与 AI 思考过程）。
  *
  * 消息头 `## 用户/知枝/系统` 带 ` · <ISO>` 时时间戳保留到 message.timestamp
  * （主界面按天统计问答依赖该字段）；存量文件无时间戳时为 undefined。
- * 分叉点上下文区块与 `> 已生成笔记/分支` 引用行是特殊标记，跳过不混入正文。
+ * 分叉点上下文区块、`<!-- thinking -->` 思考过程区块与 `> 已生成笔记/分支` 引用行
+ * 是特殊标记：thinking 提取为 message.thinking，其余跳过不混入正文。
  */
 export function parseSessionMessages(body: string): Message[] {
   const messages: Message[] = []
   const lines = removeForkContextBlock(body).split('\n')
-  let current: { role: Message['role']; timestamp?: string; content: string[] } | null = null
+  let current: { role: Message['role']; timestamp?: string; content: string[]; thinking?: string[] } | null = null
+  let inThinking = false
 
   const flush = () => {
     if (!current || current.content.length === 0) return
     const message: Message = { role: current.role, content: current.content.join('\n').trim() }
     if (current.timestamp) message.timestamp = current.timestamp
+    // 思考过程区块反序列化（`--&gt;` 还原为 `-->`）
+    if (current.thinking && current.thinking.length > 0) {
+      message.thinking = current.thinking.join('\n').trim().split('--&gt;').join('-->')
+    }
     messages.push(message)
   }
 
@@ -218,9 +239,23 @@ export function parseSessionMessages(body: string): Message[] {
       flush()
       const role = match[1] === '用户' ? 'user' : match[1] === '知枝' ? 'assistant' : 'system'
       current = { role, timestamp: match[2]?.trim() || undefined, content: [] }
+      inThinking = false
       continue
     }
     if (!current) continue
+    if (line.startsWith(THINKING_START)) {
+      inThinking = true
+      current.thinking = current.thinking ?? []
+      continue
+    }
+    if (inThinking) {
+      if (line.startsWith(THINKING_END)) {
+        inThinking = false
+      } else {
+        current.thinking!.push(line)
+      }
+      continue
+    }
     // 跳过划线引用标记行，避免混入消息正文
     if (REF_LINE_RE.test(line)) continue
     current.content.push(line)

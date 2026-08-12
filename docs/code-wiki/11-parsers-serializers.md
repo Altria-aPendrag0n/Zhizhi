@@ -52,11 +52,12 @@ parseHeadings(markdown): MarkdownHeading[]
 |------|------|
 | `generateSessionTitle(messages)` | 首条用户消息前 30 字（去换行）+ `...` |
 | `sanitizeFileName(name)` | 移除 `\ / : * ? " < > \|`，空值回退 `untitled` |
-| `serializeSession(session, noteRefs)` | 生成 Markdown：frontmatter（session_id/title/created/tags/parent_session/fork_point）+ 消息（`## 用户|知枝|系统 · 时间`）+ 笔记引用行（`> 已生成笔记: [[path|title]]`） |
+| `serializeSession(session, noteRefs)` | 生成 Markdown：frontmatter（session_id/title/created/tags/parent_session/fork_point）+ 消息（`## 用户|知枝|系统 · 时间`）+ AI 思考区块（`<!-- thinking -->`，assistant 消息正文前）+ 笔记引用行（`> 已生成笔记: [[path|title]]`） |
+| `serializeThinkingBlock(text)` | 序列化 AI 思考过程为 `<!-- thinking -->` 包裹的区块文本；内容中的 `-->` 转义为 `--&gt;` 避免提前闭合标记 |
 | `getSessionFilePath(vaultPath, sessionId, isBranch)` | `sessions/{id}.md` 或 `sessions/branch-{id}.md` |
 | `saveSessionToVault(vaultPath, session, isBranch, noteRefs)` | 建目录 + 写文件，返回文件路径 |
 | `parseSessionMeta(content, filePath)` | 轻量解析 frontmatter（id/title/created），侧边栏会话列表用；缺失时按文件名兜底 |
-| `parseSessionMessages(body)` | 解析正文消息（保留 `## 角色 · 时间戳` 的消息级时间戳；跳过 `<!-- fork-context -->` 区块与 `> 已生成笔记/分支` 引用标记行） |
+| `parseSessionMessages(body)` | 解析正文消息（保留 `## 角色 · 时间戳` 的消息级时间戳与 `message.thinking`；跳过 `<!-- fork-context -->`、`<!-- thinking -->` 区块与 `> 已生成笔记/分支` 引用标记行） |
 | `parseSessionFile(content, filePath?)` | 完整会话解析（frontmatter + 消息），读取侧唯一入口；复习会话建议走 `review-session.loadReviewSession`（含出题结果规范化） |
 
 ## 4. 分支树（`utils/session-tree.ts`）
@@ -91,7 +92,8 @@ interface SessionTreeNode {
 | 函数 | 说明 |
 |------|------|
 | `loadBranchContext(parentSessionFile, forkMessageIndex)` | 读父会话文件 → `parseFrontmatter` 取正文 → `parseMessages(body, forkIndex)` |
-| `parseMessages(body, upToIndex)` | 按 `## 用户/知枝/系统` 消息头切分，收集到 `upToIndex` 为止的历史消息 |
+| `parseMessages(body, upToIndex)` | 按 `## 用户/知枝/系统` 消息头切分，收集到 `upToIndex` 为止的历史消息；跳过正文内 `<!-- thinking -->` 思考区块（含结束标记行） |
+| `THINKING_START / THINKING_END` | 思考区块常量：`<!-- thinking -->` / `<!-- /thinking -->` |
 
 ## 6. 参考资料序列化（`utils/reference-serializer.ts`）
 
@@ -131,7 +133,10 @@ fork_point: null            # 分叉点消息索引（字符串）
 ...
 
 ## 知枝 · 12:01
-...
+<!-- thinking -->
+（AI 思考过程，HTML 注释包裹，不参与 markdown 渲染；`-->` 转义为 `--&gt;`）
+<!-- /thinking -->
+正式回答内容...
 
 > 已生成笔记: [[notes/xxx.md|标题]]    # noteRefs 注入行
 ```

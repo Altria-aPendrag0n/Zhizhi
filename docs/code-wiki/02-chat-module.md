@@ -129,6 +129,7 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 
 - props：`text`、`startExpanded?`（流式中默认展开、结束后默认折叠）。
 - 折叠式展示 AI 的 `thinking` 内容（Anthropic `thinking_delta` / OpenAI `reasoning_content`）。
+- **思考过程持久化**：`session-serializer` 将 `message.thinking` 以 `<!-- thinking -->` 区块写入会话 md（assistant 消息正文前，`-->` 转义为 `--&gt;`）；`parseSessionMessages` 解析时提取回 `message.thinking`。因此切换到其他会话再切回时，思考过程仍能还原展示，不丢失（详见 [11-parsers-serializers.md](./11-parsers-serializers.md)）。
 
 ### 3.5 `Composer.vue` — 底部输入框
 

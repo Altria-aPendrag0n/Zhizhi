@@ -182,6 +182,43 @@ describe('serializeSession', () => {
     expect(result).toContain('> 已生成笔记: [[notes/a.md|笔记A]] 划线「笔记划线」')
   })
 
+  it('序列化 AI 思考过程到消息正文的标记区块', () => {
+    const session: Session = {
+      id: 'sess-think',
+      title: '思考测试',
+      created: '2024-01-01',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [
+        { role: 'user', content: '问题' },
+        { role: 'assistant', content: '回答', thinking: '我先想想\n再回答' },
+      ],
+    }
+    const result = serializeSession(session)
+    expect(result).toContain('<!-- thinking -->')
+    expect(result).toContain('我先想想\n再回答')
+    expect(result).toContain('<!-- /thinking -->')
+    // thinking 区块位于消息正文（回答内容）之前
+    const thinkIndex = result.indexOf('<!-- thinking -->')
+    const contentIndex = result.indexOf('回答')
+    expect(thinkIndex).toBeGreaterThan(-1)
+    expect(thinkIndex).toBeLessThan(contentIndex)
+  })
+
+  it('无 thinking 的助手消息不写入标记区块', () => {
+    const session: Session = {
+      id: 'sess-no-think',
+      title: '无思考',
+      created: '2024-01-01',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [{ role: 'assistant', content: '直接回答' }],
+    }
+    expect(serializeSession(session)).not.toContain('<!-- thinking -->')
+  })
+
   it('旧引用（无划线文本）仍按笔记引用写入', () => {
     const session: Session = {
       id: 'sess-6',
@@ -282,6 +319,28 @@ describe('parseSessionMessages 消息解析', () => {
     expect(messages).toHaveLength(1)
     expect(messages[0].content).toBe('问题')
   })
+
+  it('解析 AI 思考过程区块并还原转义（不混入消息正文）', () => {
+    const body = [
+      '## 用户 · 2026-01-02T03:04:05.000Z',
+      '',
+      '问题',
+      '',
+      '## 知枝 · 2026-01-02T03:04:10.000Z',
+      '',
+      '<!-- thinking -->',
+      '思考步骤一',
+      '包含 --> 的转义内容',
+      '<!-- /thinking -->',
+      '',
+      '最终回答',
+    ].join('\n')
+
+    const messages = parseSessionMessages(body)
+    expect(messages).toHaveLength(2)
+    expect(messages[1].thinking).toBe('思考步骤一\n包含 --> 的转义内容')
+    expect(messages[1].content).toBe('最终回答')
+  })
 })
 
 describe('parseSessionFile 完整会话解析', () => {
@@ -339,7 +398,7 @@ describe('parseSessionFile 完整会话解析', () => {
     expect(session.messages).toHaveLength(1)
   })
 
-  it('序列化→解析往返保持消息内容一致', () => {
+  it('序列化→解析往返保持消息内容、时间戳与思考过程一致', () => {
     const session: Session = {
       id: 'sess-7',
       title: '往返测试',
@@ -349,7 +408,7 @@ describe('parseSessionFile 完整会话解析', () => {
       tags: [],
       messages: [
         { role: 'user', content: '你好', timestamp: '2024-01-01T00:00:00Z' },
-        { role: 'assistant', content: '你好！', timestamp: '2024-01-01T00:00:01Z' },
+        { role: 'assistant', content: '你好！', timestamp: '2024-01-01T00:00:01Z', thinking: '思考：--> 内容' },
       ],
     }
     const parsed = parseSessionFile(serializeSession(session))

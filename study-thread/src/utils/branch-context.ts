@@ -12,6 +12,10 @@ import type { Message } from '../types'
 export const FORK_CONTEXT_START = '<!-- fork-context -->'
 export const FORK_CONTEXT_END = '<!-- /fork-context -->'
 
+/** AI 思考过程区块标记（assistant 消息正文开头，session-serializer 持久化/解析） */
+export const THINKING_START = '<!-- thinking -->'
+export const THINKING_END = '<!-- /thinking -->'
+
 /**
  * 序列化分叉点上下文为可写入分支文件的区块文本
  *
@@ -110,6 +114,14 @@ export function parseMessages(body: string, upToIndex: number): Message[] {
       currentRole = userMatch ? 'user' : aiMatch ? 'assistant' : 'system'
       currentContent = []
     } else if (currentRole) {
+      // 跳过 AI 思考过程区块（thinking 以特殊标记持久化，不混入消息正文）
+      if (line.startsWith(THINKING_START)) {
+        i++
+        while (i < lines.length && !lines[i].startsWith(THINKING_END)) i++
+        // 跳过 THINKING_END 标记行本身，避免被当作消息正文
+        if (i < lines.length) i++
+        continue
+      }
       currentContent.push(line)
     }
 
