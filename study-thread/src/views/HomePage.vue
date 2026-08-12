@@ -144,8 +144,12 @@ onMounted(async () => {
   if (!vaultStore.vaultPath) return
   loading.value = true
   try {
-    // 复用笔记 store 的元数据（避免重复扫描 notes/ 目录）
-    if (noteStore.notes.length === 0) await noteStore.loadAllNotes(vaultStore.vaultPath)
+    // 复用笔记 store 的元数据（避免重复扫描 notes/ 目录）；
+    // 但若当前 vault 变更（如重新添加资料库）或笔记尚未加载，须以当前 vault 的笔记为准，
+    // 否则会误用上一个 vault 的本地缓存，导致笔记统计错位
+    if (noteStore.currentVaultPath !== vaultStore.vaultPath || noteStore.notes.length === 0) {
+      await noteStore.loadAllNotes(vaultStore.vaultPath)
+    }
     stats.value = await collectLearningStats(vaultStore.vaultPath, noteStore.notes)
   } catch (e) {
     console.warn('学习统计加载失败:', e)

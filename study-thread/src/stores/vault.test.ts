@@ -65,6 +65,27 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+describe('vault store openVault 路径校验', () => {
+  it('路径不存在/不可读时抛错，且不设置 vaultPath（避免幽灵 Vault 导致统计全 0）', async () => {
+    listDirMock.mockRejectedValue(new Error('读取目录失败: 目录不存在'))
+    const store = useVaultStore()
+
+    await expect(store.openVault('/nonexistent/vault')).rejects.toThrow('目录不存在或无法读取')
+    expect(store.vaultPath).toBeNull()
+    expect(store.isOpen).toBe(false)
+  })
+
+  it('有效目录正常打开', async () => {
+    listDirMock.mockResolvedValue([])
+    const store = useVaultStore()
+
+    await store.openVault('/valid/vault')
+
+    expect(store.vaultPath).toBe('/valid/vault')
+    expect(store.isOpen).toBe(true)
+  })
+})
+
 describe('vault store initIndex', () => {
   it('引擎未就绪时跳过索引构建（等待引擎就绪后由 App 重试）', async () => {
     isReadyMock.mockReturnValue(false)

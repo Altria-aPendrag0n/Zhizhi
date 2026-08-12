@@ -31,6 +31,15 @@ export const useVaultStore = defineStore('vault', () => {
   })
 
   async function openVault(path: string) {
+    // 校验路径有效性：不存在 / 非目录 / 不可读时立即失败并抛错，避免"幽灵 Vault"——
+    // 旧版会在路径失效（资料库被删除/移动/重命名）时静默"打开成功"，导致主界面统计、
+    // 笔记、复习等文件读取全部失败并显示为空，而侧边栏会话等本地缓存数据仍显示，造成
+    // "资料库有内容但统计为 0" 的假象。VaultSettings / restoreLastVault 已捕获该错误。
+    try {
+      await listDir(path)
+    } catch {
+      throw new Error(`目录不存在或无法读取：${path}`)
+    }
     vaultPath.value = path
     isOpen.value = true
     vaultReady.value = true

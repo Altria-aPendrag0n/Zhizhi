@@ -48,7 +48,8 @@
 用户点击知枝按钮 → ProjectRail emit brand → App.vue push('/home')
   → HomePage onMounted
       1. vaultPath 为空 → 空态引导（去设置打开 Vault）
-      2. noteStore.loadAllNotes（复用元数据，避免重复扫目录）
+      2. 笔记复用 noteStore 元数据：当前 vault 已变更（重新添加资料库）或未加载时
+         重新 loadAllNotes（避免误用上一个 vault 的本地缓存），否则直接复用
       3. collectLearningStats(vaultPath, noteMetas)
            ├─ collectSessionQaDates  → sessions/*.md（排除 review-*）逐条用户消息日期
            ├─ collectReviewDates     → review-state.json 评级 history
@@ -97,5 +98,8 @@
 
 - 统计为**每次进入主界面实时扫描**（会话/笔记文件规模通常小，单次聚合成本可接受），未建缓存；
   若未来 vault 规模增大可考虑 `.study-thread` 下缓存 + 变更事件失效。
+- **统计全为 0 时优先排查 vault 路径**：统计直接来自 vault 文件，若资料库被删除/移动/重命名后
+  `openVault` 静默"打开成功"，扫描全部失败返回空。vault 打开/恢复现已校验路径有效性
+  （见 [07-vault-module.md](./07-vault-module.md) 幽灵 Vault 防护），失效路径会回到"未打开 Vault"空态。
 - 复习会话文件（`review-*`）不计入问答，避免"复习中的回答"与"复习评级"重复计数。
 - 存量会话无消息级时间戳，按会话 `created` 近似归属，属已知口径妥协；新会话自动带时间戳后逐步精确。

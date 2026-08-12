@@ -288,6 +288,7 @@ export const useNoteStore = defineStore('notes', () => {
     notes,
     noteIndex,
     isLoading,
+    currentVaultPath,
     noteCount,
     notesByType,
     lastDeletedNotePath,

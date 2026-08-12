@@ -33,6 +33,8 @@ vi.mock('../stores/notes', () => {
   return {
     useNoteStore: () => ({
       get notes() { return notes.value },
+      // 未指定时视为笔记尚未按当前 vault 加载，主界面会触发 loadAllNotes
+      get currentVaultPath() { return null },
       loadAllNotes: vi.fn().mockResolvedValue(undefined),
     }),
   }

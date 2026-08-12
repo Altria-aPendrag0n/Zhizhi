@@ -43,13 +43,18 @@
 
 | 动作 | 说明 |
 |------|------|
-| `openVault(path)` | 设置路径 + `localStorage(study-thread-last-vault)` → `startWatching` → `listDir` 构建文件树 → 后台 `initIndex()` |
+| `openVault(path)` | **先校验路径有效性**（`listDir` 探测：不存在/非目录/不可读时抛错，不改变状态）→ 设置路径 + `localStorage(study-thread-last-vault)` → `startWatching` → `listDir` 构建文件树 → 后台 `initIndex()` |
 | `closeVault()` | 清空状态 + 移除 localStorage + `stopWatching` |
-| `restoreLastVault()` | 读取 `study-thread-last-vault` 恢复；失败则清除记录 |
+| `restoreLastVault()` | 读取 `study-thread-last-vault` 恢复；路径失效（目录被删除/移动/重命名）时抛错 → 清除过期记录并返回 `false`，界面回到"未打开 Vault"空态 |
 | `refreshFileTree()` | 重新 `listDir` |
 | `saveCurrentSession(session, isBranch, noteRefs)` | 委托 `saveSessionToVault` 写入 `sessions/*.md` 并刷新文件树 |
 | `deleteSession(sessionId, isBranch)` | 定位会话文件，存在则删除并刷新文件树 |
 | `initIndex()` | 见下 |
+
+> **幽灵 Vault 防护（P6 修复）**：`openVault` 曾不校验路径有效性，路径失效时静默"打开成功"，
+> 导致主界面统计、笔记、复习等文件读取全部失败显示为空，而侧边栏会话等本地缓存仍显示，
+> 造成"资料库有内容但统计为 0"的假象。现打开/恢复前先 `listDir` 探测目录，失败即抛错；
+> 调用方（`VaultSettings` 显示错误文案、`restoreLastVault` 清除过期记录）均已捕获。
 
 ### 3.3 `initIndex()` — 索引构建编排
 
