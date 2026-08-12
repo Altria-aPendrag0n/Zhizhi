@@ -36,6 +36,31 @@ function cellToMarkdown(cell: HTMLTableCellElement): string {
 }
 
 /**
+ * 从节点向上查找最近的单元格（td/th）；不在单元格内返回 null
+ */
+export function findContainingCell(node: Node): HTMLElement | null {
+  const el = node.nodeType === Node.ELEMENT_NODE
+    ? (node as Element)
+    : node.parentElement
+  return el?.closest('td, th') ?? null
+}
+
+/**
+ * 判断选区是否完全位于单个表格单元格内。
+ *
+ * 划线落在表格内时区分两种摘录：
+ * - 单个单元格内划线（如只划「托卡马克」几个字）→ 摘录选区文字本身，
+ *   否则会把表格格式（`|` 分隔符、表头分隔行）误当成划线内容；
+ * - 跨单元格/跨行（划整张表格）→ 整表还原为 Markdown 表格保留结构。
+ */
+export function isSelectionWithinSingleCell(range: Range): boolean {
+  const startCell = findContainingCell(range.startContainer)
+  const endCell = findContainingCell(range.endContainer)
+  const ancestorCell = findContainingCell(range.commonAncestorContainer)
+  return startCell !== null && startCell === endCell && startCell === ancestorCell
+}
+
+/**
  * 将渲染后的表格 DOM 转回 Markdown 表格
  *
  * @param table - 渲染后的 `<table>` 元素

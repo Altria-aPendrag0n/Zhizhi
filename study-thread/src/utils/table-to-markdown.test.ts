@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tableToMarkdown } from './table-to-markdown'
+import { tableToMarkdown, isSelectionWithinSingleCell } from './table-to-markdown'
 
 function renderTable(html: string): HTMLTableElement {
   const table = document.createElement('table')
@@ -43,5 +43,40 @@ describe('tableToMarkdown', () => {
   it('无任何行时返回空串', () => {
     const table = renderTable('')
     expect(tableToMarkdown(table)).toBe('')
+  })
+})
+
+describe('isSelectionWithinSingleCell', () => {
+  function rangeInCells(fromTd: number, fromOffset: number, toTd: number, toOffset: number): Range {
+    const table = renderTable('<tbody><tr><td>托卡马克</td><td>磁约束装置</td></tr><tr><td>仿星器</td><td>另一种装置</td></tr></tbody>')
+    const cells = Array.from(table.querySelectorAll('td'))
+    const fromNode = cells[fromTd].firstChild as Text
+    const toNode = cells[toTd].firstChild as Text
+    const range = document.createRange()
+    range.setStart(fromNode, fromOffset)
+    range.setEnd(toNode, toOffset)
+    return range
+  }
+
+  it('选区完全在单个单元格内（只划「托卡马克」）→ 摘录文字本身', () => {
+    expect(isSelectionWithinSingleCell(rangeInCells(0, 0, 0, 4))).toBe(true)
+  })
+
+  it('选区跨两个单元格 → 整表摘录', () => {
+    expect(isSelectionWithinSingleCell(rangeInCells(0, 0, 1, 5))).toBe(false)
+  })
+
+  it('选区跨两行 → 整表摘录', () => {
+    expect(isSelectionWithinSingleCell(rangeInCells(0, 0, 2, 3))).toBe(false)
+  })
+
+  it('选区在表格外（无单元格）→ 不走整表摘录', () => {
+    const p = document.createElement('p')
+    p.textContent = '普通文本'
+    const textNode = p.firstChild as Text
+    const range = document.createRange()
+    range.setStart(textNode, 0)
+    range.setEnd(textNode, 4)
+    expect(isSelectionWithinSingleCell(range)).toBe(false)
   })
 })

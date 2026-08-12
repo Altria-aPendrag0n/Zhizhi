@@ -107,7 +107,7 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 逻辑要点：
 - 消息容器带 `data-message-index`；流式期间隐藏末尾空的 assistant 占位消息，由流式区域展示。
 - `handleMouseUp` 校验选区在 `[data-highlightable="true"]` 元素内才弹出 `HighlightMenu`；同时通过选区祖先的 `closest('[data-message-index]')` 读取消息索引随事件透传。
-- **表格摘录还原**：选区落在表格内时（`findSelectionTable` 依次查 commonAncestor/start/end 的 `closest('table')`），划线文本改用 `tableToMarkdown`（`src/utils/table-to-markdown.ts`）把整张表格 DOM 还原为带 `|` 分隔符与表头分隔行的 Markdown 表格；否则 `window.getSelection().toString()` 只返回渲染后文本节点，会丢失表格结构标志。单元格内字面 `|` 会转义为 `\|`，避免摘录源码把单元格拆成多列。
+- **表格摘录还原**：选区落在表格内时（`findSelectionTable` 依次查 commonAncestor/start/end 的 `closest('table')`），按 `isSelectionWithinSingleCell`（start/end/commonAncestor 是否在同一 td/th 内）区分两种摘录——**跨单元格/跨行**（划整张表格）时改用 `tableToMarkdown`（`src/utils/table-to-markdown.ts`）把整张表格 DOM 还原为带 `|` 分隔符与表头分隔行的 Markdown 表格（`window.getSelection().toString()` 只返回渲染后文本节点，会丢失表格结构标志）；**单个单元格内划线**（如只划「托卡马克」几个字）时用 `selection.toString()` 摘录文字本身，避免把表格格式误当成划线内容。单元格内字面 `|` 会转义为 `\|`，避免摘录源码把单元格拆成多列。
 - 按 `messageIndex` 过滤 noteRefs，渲染 `[[标题]]` 跳转按钮。
 - watch 消息长度/流式文本变化 → `nextTick` 自动滚动到底部。
 

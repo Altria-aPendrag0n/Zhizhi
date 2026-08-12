@@ -78,7 +78,7 @@ import ChatMessage from './ChatMessage.vue'
 import StreamText from './StreamText.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import HighlightMenu from './HighlightMenu.vue'
-import { tableToMarkdown } from '../../utils/table-to-markdown'
+import { tableToMarkdown, isSelectionWithinSingleCell } from '../../utils/table-to-markdown'
 
 const props = defineProps<{
   messages: Message[]
@@ -165,10 +165,13 @@ function handleMouseUp() {
     return
   }
 
-  // 选区落在表格内时，把整张表格还原为带 | 分隔符的 Markdown 表格。
-  // selection.toString() 只返回渲染后文本节点，会丢失表格结构标志。
+  // 选区落在表格内时区分两种划线：
+  // - 跨单元格/跨行（划整张表格）→ 把整张表格还原为带 | 分隔符的 Markdown 表格，
+  //   selection.toString() 只返回渲染后文本节点，会丢失表格结构标志；
+  // - 单个单元格内划线（如只划「托卡马克」几个字）→ 用 selection.toString() 摘录
+  //   文字本身，避免把表格格式误当成划线内容（isSelectionWithinSingleCell）。
   const table = findSelectionTable(range, highlightableEl)
-  const text = table ? tableToMarkdown(table) : selection.toString().trim()
+  const text = (table && !isSelectionWithinSingleCell(range)) ? tableToMarkdown(table) : selection.toString().trim()
   if (!text) {
     closeHighlightMenu()
     return
