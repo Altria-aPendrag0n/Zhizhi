@@ -21,6 +21,7 @@ pub fn run() {
             commands::vault::stop_watch,
             commands::vault::read_file_bytes,
             commands::vault::write_file_bytes,
+            commands::pdf::extract_pdf_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

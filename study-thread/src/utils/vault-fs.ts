@@ -47,6 +47,21 @@ export async function readFileBytes(path: string): Promise<Uint8Array> {
   return new Uint8Array(bytes)
 }
 
+/** PDF 文本提取结果（对应 Rust 后端 extract_pdf_text 命令） */
+export interface ExtractPdfResult {
+  page_count: number
+  markdown: string
+  chars: number
+}
+
+/**
+ * 解析本地 PDF 为带页边界标记（`<!-- page: N -->`）的 Markdown。
+ * 扫描件（无文本层）会 reject 并返回明确错误信息。
+ */
+export async function extractPdfText(path: string): Promise<ExtractPdfResult> {
+  return invoke('extract_pdf_text', { path })
+}
+
 export interface FileChangeEvent {
   kind: string
   paths: string[]
