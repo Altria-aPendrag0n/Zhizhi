@@ -286,6 +286,42 @@ describe('knowledge-retrieval', () => {
     expect(result[0].snippet).toContain('参考资料标题')
   })
 
+  it('pdf 命中已解析时附带页数并注入提取产物预览', async () => {
+    indexer.getAllEntries.mockReturnValue([
+      { path: '/vault/references/ref-1.json', vector: [0.9, 0.1], indexedAt: 0 },
+    ])
+    readFile.mockImplementation(async (p: string) => {
+      if (p === '/vault/references/ref-1.json') {
+        return referenceMetaJson({
+          fileType: 'pdf',
+          fileName: 'ref.pdf',
+          filePath: '/vault/references/ref-1.pdf',
+          extractedPath: '/vault/references/ref-1.extracted.md',
+          parseStatus: 'parsed',
+          pageCount: 42,
+        })
+      }
+      if (p === '/vault/references/ref-1.extracted.md') return 'PDF 提取产物正文内容'
+      return ''
+    })
+
+    const result = await retrieveKnowledge('测试')
+
+    expect(result[0].pageCount).toBe(42)
+    expect(result[0].preview).toContain('PDF 提取产物正文内容')
+  })
+
+  it('buildKnowledgeContext pdf 命中带 pageCount 时提示按页读取', () => {
+    const hits = [
+      { kind: 'reference' as const, path: '/vault/references/ref-1.json', title: '参考B', snippet: '摘要', pageCount: 42 },
+    ]
+
+    const text = buildKnowledgeContext(hits)
+
+    expect(text).toContain('该 PDF 共 42 页')
+    expect(text).toContain('offset: 0, limit: 1')
+  })
+
   it('任一命中读取失败时跳过该命中', async () => {
     indexer.getAllEntries.mockReturnValue([
       { path: '/vault/notes/ok.md', vector: [0.9, 0.1], indexedAt: 0 },

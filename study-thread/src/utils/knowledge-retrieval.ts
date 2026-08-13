@@ -43,6 +43,8 @@ export interface KnowledgeHit {
   preview?: string // 正文开头预览（摘要模式注入，供 LLM 判断相关性并基于部分内容作答）
   fullText?: string // 命中资料的完整正文（includeFullText 模式），受单条上限与总预算限制
   truncated?: boolean // fullText 因长度限制被截断，注入时应提示信息不完整
+  /** pdf 参考资料的总页数（命中 pdf 时用于提示按页读取） */
+  pageCount?: number
 }
 
 /** 笔记标题回退：从路径中提取文件名 */
@@ -102,9 +104,14 @@ export async function retrieveKnowledge(
             .join('\n')
             .slice(0, 300)
           hit = { kind: 'reference', path, title: meta.title, snippet }
-          // md 类型：includeFullText 模式注入全文，否则注入正文开头预览
-          if (meta.fileType === 'md') {
-            const content = (await readFile(meta.filePath)).trim()
+          // pdf 命中时附带页数，供提示按页读取
+          if (meta.fileType === 'pdf' && meta.pageCount) {
+            hit.pageCount = meta.pageCount
+          }
+          // md 或已解析的 pdf：includeFullText 模式注入全文，否则注入正文开头预览
+          if (meta.fileType === 'md' || (meta.fileType === 'pdf' && meta.extractedPath)) {
+            const sourcePath = meta.fileType === 'md' ? meta.filePath : meta.extractedPath!
+            const content = (await readFile(sourcePath)).trim()
             if (includeFullText) {
               hit.fullText = content
             } else {
@@ -183,10 +190,13 @@ export function buildKnowledgeContext(hits: KnowledgeHit[]): string {
     }
     const truncatedNote =
       hit.truncated && hit.fullText ? '\n\n（注：该内容过长，已截断展示，可能存在信息缺失）' : ''
-    // 参考资料标注 reference_id：模型需要用完整内容时通过 read_reference 工具读取
+    // 参考资料标注 reference_id：模型需要用完整内容时通过 read_reference 工具读取；
+    // pdf 命中额外提示总页数，引导按页读取
     const toolHint =
       hit.kind === 'reference'
-        ? `\n> 完整全文可通过工具 read_reference 读取：read_reference({ reference_id: "${hit.path}" })`
+        ? hit.pageCount
+          ? `\n> 该 PDF 共 ${hit.pageCount} 页，完整内容可通过工具 read_reference 按页读取：read_reference({ reference_id: "${hit.path}", offset: 0, limit: 1 })`
+          : `\n> 完整全文可通过工具 read_reference 读取：read_reference({ reference_id: "${hit.path}" })`
         : ''
     return `### [${kindLabels[hit.kind]}] ${hit.title}\n${content}${truncatedNote}${toolHint}`
   })
