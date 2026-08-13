@@ -11,8 +11,16 @@ import { EmbeddingEngine, getEmbeddingEngine } from './engine'
 
 /** 索引条目 */
 export interface IndexEntry {
-  /** 笔记路径 */
+  /** 笔记路径（参考资料为 meta JSON 路径） */
   path: string
+  /** 分块序号；缺失表示单块（笔记 / md / 小 pdf） */
+  chunkIndex?: number
+  /** 章节标题（分块命中时展示，供模型定位） */
+  chunkTitle?: string
+  /** 块覆盖的起始页（pdf 分块；0 起） */
+  pageFrom?: number
+  /** 块覆盖的结束页（pdf 分块；0 起） */
+  pageTo?: number
   /** 向量数据 */
   vector: number[]
   /** 索引时间戳 */
@@ -32,6 +40,11 @@ const INDEX_VERSION = 1
 
 /** localStorage 键名 */
 const STORAGE_KEY = 'study-thread-note-index'
+
+/** 索引条目在 Map 中的键：单块为 path，分块为 `${path}#${chunkIndex}` */
+function entryKey(path: string, chunkIndex?: number): string {
+  return chunkIndex === undefined ? path : `${path}#${chunkIndex}`
+}
 
 /**
  * 笔记向量索引器
@@ -57,7 +70,7 @@ export class NoteIndexer {
 
       this.entries.clear()
       for (const entry of store.entries) {
-        this.entries.set(entry.path, entry)
+        this.entries.set(entryKey(entry.path, entry.chunkIndex), entry)
       }
       return true
     } catch {
@@ -130,7 +143,7 @@ export class NoteIndexer {
   }
 
   /**
-   * 增量更新单篇笔记索引
+   * 增量更新单篇笔记索引（单块）
    *
    * @param path - 笔记路径
    * @param content - 笔记内容
@@ -141,7 +154,8 @@ export class NoteIndexer {
     }
 
     const vector = await this.engine.embed(content)
-    this.entries.set(path, {
+    this.removeEntriesForPath(path)
+    this.entries.set(entryKey(path), {
       path,
       vector,
       indexedAt: Date.now(),
@@ -151,11 +165,66 @@ export class NoteIndexer {
   }
 
   /**
-   * 移除单篇笔记索引
+   * 增量更新一篇资料的分块索引（大 PDF 按章节分块后调用）。
+   * 先用新分块覆盖旧条目，避免索引失败时丢失旧索引。
+   *
+   * @param path - 资料 meta JSON 路径
+   * @param chunks - 分块列表（text 为待嵌入文本，其余为位置元数据）
+   */
+  async updateChunks(
+    path: string,
+    chunks: Array<{ text: string; chunkTitle?: string; pageFrom?: number; pageTo?: number }>,
+  ): Promise<void> {
+    if (!this.engine.isReady()) {
+      throw new Error('Embedding 引擎未就绪')
+    }
+    if (chunks.length === 0) {
+      this.removeEntriesForPath(path)
+      this.saveToStorage()
+      return
+    }
+
+    const indexedAt = Date.now()
+    const next: IndexEntry[] = []
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      next.push({
+        path,
+        chunkIndex: i,
+        chunkTitle: chunk.chunkTitle,
+        pageFrom: chunk.pageFrom,
+        pageTo: chunk.pageTo,
+        vector: await this.engine.embed(chunk.text),
+        indexedAt,
+      })
+    }
+
+    this.removeEntriesForPath(path)
+    for (const entry of next) {
+      this.entries.set(entryKey(path, entry.chunkIndex), entry)
+    }
+    this.saveToStorage()
+  }
+
+  /**
+   * 移除单篇笔记索引（含该路径下的所有分块）
    */
   removeNote(path: string): void {
-    this.entries.delete(path)
+    this.removeEntriesForPath(path)
     this.saveToStorage()
+  }
+
+  /**
+   * 移除某路径的所有索引条目（单块 + 分块）
+   */
+  private removeEntriesForPath(path: string): void {
+    this.entries.delete(path)
+    const prefix = `${path}#`
+    for (const key of Array.from(this.entries.keys())) {
+      if (key.startsWith(prefix)) {
+        this.entries.delete(key)
+      }
+    }
   }
 
   /**

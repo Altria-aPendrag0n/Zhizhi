@@ -16,6 +16,7 @@ import {
   sanitizeFileName,
 } from '../utils/reference-serializer'
 import { getNoteIndexer } from '../embedding/indexer'
+import { chunkPdfByChapters, PDF_CHUNK_MIN_CHARS } from '../utils/pdf-chunk'
 
 function sortReferences(references: ReferenceMeta[]): ReferenceMeta[] {
   return [...references].sort((a, b) => b.updated.localeCompare(a.updated))
@@ -120,7 +121,6 @@ export const useReferenceStore = defineStore('references', () => {
     const id = oldMeta.id
     if (!id) return null
 
-    const dir = getReferenceDir(vaultPath, id)
     const newFilePath = getReferenceFilePath(vaultPath, id, oldMeta.fileType)
 
     // 迁移原始文件（二进制读回，兼容 md/pdf/png）
@@ -158,6 +158,31 @@ export const useReferenceStore = defineStore('references', () => {
   /** 尽力而为地重建单篇参考资料的向量索引（失败不影响主流程） */
   async function refreshIndex(meta: ReferenceMeta): Promise<void> {
     try {
+      // 大 PDF 按章节分块多向量索引（无标题退化按页），小 pdf/md 单块索引
+      if (meta.fileType === 'pdf' && meta.extractedPath) {
+        let markdown = ''
+        try {
+          markdown = await readFile(meta.extractedPath)
+        } catch {
+          markdown = ''
+        }
+        const extractedChars = meta.extractedChars ?? markdown.length
+        if (markdown && extractedChars > PDF_CHUNK_MIN_CHARS) {
+          const chunks = chunkPdfByChapters(markdown)
+          if (chunks.length > 1) {
+            await getNoteIndexer().updateChunks(
+              meta.path,
+              chunks.map((chunk) => ({
+                text: chunk.text,
+                chunkTitle: chunk.title || meta.title,
+                pageFrom: chunk.pageFrom,
+                pageTo: chunk.pageTo,
+              })),
+            )
+            return
+          }
+        }
+      }
       const indexText = await buildIndexText(meta)
       await getNoteIndexer().updateNote(meta.path, indexText)
     } catch {

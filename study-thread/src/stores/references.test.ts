@@ -14,11 +14,12 @@ const vaultFs = vi.hoisted(() => ({
   extractPdfText: vi.fn(),
 }))
 const updateNote = vi.hoisted(() => vi.fn())
+const updateChunks = vi.hoisted(() => vi.fn())
 const removeNote = vi.hoisted(() => vi.fn())
 
 vi.mock('../utils/vault-fs', () => vaultFs)
 vi.mock('../embedding/indexer', () => ({
-  getNoteIndexer: () => ({ updateNote, removeNote }),
+  getNoteIndexer: () => ({ updateNote, updateChunks, removeNote }),
 }))
 
 /** 构造一个最小可用的伪 File 对象（不依赖浏览器 File 实现） */
@@ -325,5 +326,36 @@ describe('references store', () => {
     latest = store.references.find((r) => r.id === meta!.id)!
     expect(latest.parseStatus).toBe('parsed')
     expect(latest.pageCount).toBe(1)
+  })
+
+  it('大 pdf 解析后按章节分块建立多向量索引', async () => {
+    const store = useReferenceStore()
+    const markdown = [
+      '<!-- page: 1 -->',
+      '# 第一章',
+      '甲'.repeat(3000),
+      '<!-- page: 2 -->',
+      '## 第二章',
+      '乙'.repeat(3000),
+    ].join('\n')
+    vaultFs.extractPdfText.mockResolvedValue({ page_count: 2, markdown, chars: markdown.length })
+    vaultFs.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('.extracted.md')) return markdown
+      return ''
+    })
+
+    const meta = await store.uploadReference('/vault', createMockFile('大文档.pdf', '%PDF dummy'))
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(updateChunks).toHaveBeenCalledTimes(1)
+    const [metaPath, chunks] = updateChunks.mock.calls[0] as [string, Array<Record<string, unknown>>]
+    expect(metaPath).toBe(meta!.path)
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0].chunkTitle).toBe('第一章')
+    expect(chunks[0].pageFrom).toBe(0)
+    expect(chunks[0].pageTo).toBe(0)
+    expect(chunks[1].chunkTitle).toBe('第二章')
+    expect(chunks[1].pageFrom).toBe(1)
+    expect(chunks[1].pageTo).toBe(1)
   })
 })

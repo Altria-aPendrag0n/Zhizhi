@@ -322,6 +322,56 @@ describe('knowledge-retrieval', () => {
     expect(text).toContain('offset: 0, limit: 1')
   })
 
+  it('分块命中时回填章节标题与页码区间，预览为该块页区间正文', async () => {
+    indexer.getAllEntries.mockReturnValue([
+      { path: '/vault/references/ref-1.json', vector: [0.9, 0.1], indexedAt: 0, chunkIndex: 1, chunkTitle: '第二章', pageFrom: 2, pageTo: 3 },
+    ])
+    readFile.mockImplementation(async (p: string) => {
+      if (p === '/vault/references/ref-1.json') {
+        return referenceMetaJson({
+          fileType: 'pdf',
+          fileName: 'ref.pdf',
+          filePath: '/vault/references/ref-1.pdf',
+          extractedPath: '/vault/references/ref-1.extracted.md',
+          parseStatus: 'parsed',
+          pageCount: 5,
+        })
+      }
+      if (p === '/vault/references/ref-1.extracted.md') {
+        return [
+          '<!-- page: 1 -->', '第一页',
+          '<!-- page: 2 -->', '第二页',
+          '<!-- page: 3 -->', '第三页',
+          '<!-- page: 4 -->', '第四页',
+          '<!-- page: 5 -->', '第五页',
+        ].join('\n')
+      }
+      return ''
+    })
+
+    const result = await retrieveKnowledge('测试')
+
+    expect(result[0].sectionTitle).toBe('第二章')
+    expect(result[0].pageFrom).toBe(2)
+    expect(result[0].pageTo).toBe(3)
+    expect(result[0].pageCount).toBe(5)
+    // 预览只含物理第 3-4 页（pageFrom=2 起）
+    expect(result[0].preview).toContain('第三页')
+    expect(result[0].preview).toContain('第四页')
+    expect(result[0].preview).not.toContain('第一页')
+  })
+
+  it('buildKnowledgeContext 分块命中时提示章节与页码区间', () => {
+    const hits = [
+      { kind: 'reference' as const, path: '/vault/references/ref-1.json', title: '参考B', snippet: '摘要', pageCount: 5, sectionTitle: '第二章', pageFrom: 2, pageTo: 3 },
+    ]
+
+    const text = buildKnowledgeContext(hits)
+
+    expect(text).toContain('该内容来自「第二章」第 3-4 页')
+    expect(text).toContain('offset: 2, limit: 2')
+  })
+
   it('任一命中读取失败时跳过该命中', async () => {
     indexer.getAllEntries.mockReturnValue([
       { path: '/vault/notes/ok.md', vector: [0.9, 0.1], indexedAt: 0 },

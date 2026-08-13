@@ -94,7 +94,7 @@ describe('read_reference 工具', () => {
     expect(text).toBe('Showing lines 3-4 of 10 total lines (约 40 字).\n\n---\n\na\nb')
   })
 
-  it('splitPdfPages 按页边界标记切分并忽略空白页', () => {
+  it('splitPdfPages 按页边界标记切分，下标对应物理页码，空白页保留为空', () => {
     const markdown = [
       '<!-- page: 1 -->',
       '第一页内容',
@@ -110,7 +110,7 @@ describe('read_reference 工具', () => {
 
     const pages = splitPdfPages(markdown)
 
-    expect(pages).toEqual(['第一页内容', '第二页内容', '第四页内容'])
+    expect(pages).toEqual(['第一页内容', '第二页内容', '', '第四页内容'])
   })
 
   it('formatPageResult 输出 Showing pages 提示', () => {

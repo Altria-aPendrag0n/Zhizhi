@@ -131,7 +131,7 @@ d:\work\Zhizhi\
 | 原子笔记 | `<vault>/notes/*.md` | YAML frontmatter + Markdown 正文 |
 | 学习会话 / 分支 | `<vault>/sessions/*.md`、`branch-*.md` | Markdown 对话记录 |
 | 会话分支树 | `<vault>/.study-thread/session-tree.json` | 分支树结构 |
-| 参考资料 | `<vault>/references/{id}.json` + `{id}.{ext}` | 元数据与原始文件分离 |
+| 参考资料 | `<vault>/references/{id}/`（自包含文件夹：`{id}.json` + `{id}.{ext}` + `{id}.extracted.md`） | 元数据、原始文件与 pdf 提取产物同文件夹管理 |
 | 向量索引缓存 | `localStorage`（`study-thread-note-index`） | 索引持久化，避免重复嵌入 |
 | 应用设置 | `localStorage`（`study-thread-settings` 等） | API Key、模型、最近 vault |
 | 学习者画像 | 计划存于 `<vault>/.study-thread/learner.md` | V1 中画像 diff 由 update-learner skill 生成 |

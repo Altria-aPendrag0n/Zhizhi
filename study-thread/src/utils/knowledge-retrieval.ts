@@ -15,6 +15,7 @@ import { cosineSimilarity } from '../embedding/linker'
 import { readFile } from './vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import { parseReferenceMeta } from './reference-serializer'
+import { splitPdfPages } from '../api/tools/read-reference'
 
 /** 单条命中正文注入的最大字符数（防止上下文超限） */
 export const MAX_FULL_TEXT_LENGTH = 30000
@@ -45,6 +46,12 @@ export interface KnowledgeHit {
   truncated?: boolean // fullText 因长度限制被截断，注入时应提示信息不完整
   /** pdf 参考资料的总页数（命中 pdf 时用于提示按页读取） */
   pageCount?: number
+  /** 命中章节标题（大 pdf 分块命中时展示，供模型定位） */
+  sectionTitle?: string
+  /** 命中块覆盖的起始页（0 起；大 pdf 分块命中时） */
+  pageFrom?: number
+  /** 命中块覆盖的结束页（0 起；大 pdf 分块命中时） */
+  pageTo?: number
 }
 
 /** 笔记标题回退：从路径中提取文件名 */
@@ -80,10 +87,10 @@ export async function retrieveKnowledge(
 
     const queryVector = await engine.embed(query)
 
-    // 收集相似度并按降序取 topK
+    // 收集相似度并按降序取 topK（保留条目引用，供分块命中回填位置信息）
     const scored = entries
       .map((entry) => ({
-        path: entry.path,
+        entry,
         similarity: cosineSimilarity(queryVector, entry.vector),
       }))
       .sort((a, b) => b.similarity - a.similarity)
@@ -93,7 +100,8 @@ export async function retrieveKnowledge(
     // 总量预算：按相似度降序处理，高相关命中优先注入全文
     let remaining = MAX_TOTAL_TEXT_LENGTH
     let previewRemaining = MAX_TOTAL_PREVIEW_LENGTH
-    for (const { path } of scored) {
+    for (const { entry } of scored) {
+      const path = entry.path
       try {
         let hit: KnowledgeHit
         if (path.endsWith('.json')) {
@@ -108,14 +116,28 @@ export async function retrieveKnowledge(
           if (meta.fileType === 'pdf' && meta.pageCount) {
             hit.pageCount = meta.pageCount
           }
+          // 分块命中（大 pdf）：回填章节标题与页码区间，供模型定位到具体页
+          if (entry.chunkIndex !== undefined) {
+            hit.sectionTitle = entry.chunkTitle
+            hit.pageFrom = entry.pageFrom
+            hit.pageTo = entry.pageTo
+          }
           // md 或已解析的 pdf：includeFullText 模式注入全文，否则注入正文开头预览
           if (meta.fileType === 'md' || (meta.fileType === 'pdf' && meta.extractedPath)) {
             const sourcePath = meta.fileType === 'md' ? meta.filePath : meta.extractedPath!
             const content = (await readFile(sourcePath)).trim()
+            // 分块命中时注入该块覆盖页区间的正文（而非整篇），使预览与位置提示一致
+            const effective =
+              meta.fileType === 'pdf' && entry.chunkIndex !== undefined
+                ? splitPdfPages(content)
+                    .slice(entry.pageFrom ?? 0, (entry.pageTo ?? 0) + 1)
+                    .filter(Boolean)
+                    .join('\n\n')
+                : content
             if (includeFullText) {
-              hit.fullText = content
+              hit.fullText = effective
             } else {
-              hit.preview = content.slice(0, MAX_PREVIEW_LENGTH)
+              hit.preview = effective.slice(0, MAX_PREVIEW_LENGTH)
             }
           }
         } else {
@@ -172,6 +194,23 @@ export async function retrieveKnowledge(
 }
 
 /**
+ * 生成参考资料的 read_reference 工具指引。
+ * 分块命中时指向命中的章节与页码区间；普通命中指向全文按页读取。
+ */
+function referenceToolHint(hit: KnowledgeHit): string {
+  if (hit.pageFrom !== undefined && hit.pageTo !== undefined) {
+    const section = hit.sectionTitle ? `「${hit.sectionTitle}」` : ''
+    const pageLabel = `第 ${hit.pageFrom + 1}-${hit.pageTo + 1} 页`
+    const limit = hit.pageTo - hit.pageFrom + 1
+    return `\n> 该内容来自${section}${pageLabel}，完整 PDF 共 ${hit.pageCount ?? '?'} 页。可用工具 read_reference 读取对应内容：read_reference({ reference_id: "${hit.path}", offset: ${hit.pageFrom}, limit: ${limit} })`
+  }
+  if (hit.pageCount) {
+    return `\n> 该 PDF 共 ${hit.pageCount} 页，完整内容可通过工具 read_reference 按页读取：read_reference({ reference_id: "${hit.path}", offset: 0, limit: 1 })`
+  }
+  return `\n> 完整全文可通过工具 read_reference 读取：read_reference({ reference_id: "${hit.path}" })`
+}
+
+/**
  * 将知识检索命中项格式化为 markdown 片段
  */
 export function buildKnowledgeContext(hits: KnowledgeHit[]): string {
@@ -191,13 +230,8 @@ export function buildKnowledgeContext(hits: KnowledgeHit[]): string {
     const truncatedNote =
       hit.truncated && hit.fullText ? '\n\n（注：该内容过长，已截断展示，可能存在信息缺失）' : ''
     // 参考资料标注 reference_id：模型需要用完整内容时通过 read_reference 工具读取；
-    // pdf 命中额外提示总页数，引导按页读取
-    const toolHint =
-      hit.kind === 'reference'
-        ? hit.pageCount
-          ? `\n> 该 PDF 共 ${hit.pageCount} 页，完整内容可通过工具 read_reference 按页读取：read_reference({ reference_id: "${hit.path}", offset: 0, limit: 1 })`
-          : `\n> 完整全文可通过工具 read_reference 读取：read_reference({ reference_id: "${hit.path}" })`
-        : ''
+    // 分块命中额外提示章节与页码区间，引导精读对应页
+    const toolHint = hit.kind === 'reference' ? referenceToolHint(hit) : ''
     return `### [${kindLabels[hit.kind]}] ${hit.title}\n${content}${truncatedNote}${toolHint}`
   })
 

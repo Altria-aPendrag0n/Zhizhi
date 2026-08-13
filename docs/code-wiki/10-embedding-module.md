@@ -56,21 +56,32 @@ env.backends.onnx.wasm.wasmPaths = '/models/ort/'
 ### 3.1 数据结构
 
 ```ts
-interface IndexEntry { path: string; vector: number[]; indexedAt: number }
+interface IndexEntry {
+  path: string        // 笔记路径 / 参考资料 meta JSON 路径
+  chunkIndex?: number // 分块序号；缺失表示单块（笔记 / md / 小 pdf）
+  chunkTitle?: string // 章节标题（分块命中时展示，供模型定位）
+  pageFrom?: number   // 块覆盖起始页（pdf 分块；0 起）
+  pageTo?: number     // 块覆盖结束页（pdf 分块；0 起）
+  vector: number[]
+  indexedAt: number
+}
 interface IndexStore { version: number; entries: IndexEntry[] }
 const INDEX_VERSION = 1
 const STORAGE_KEY = 'study-thread-note-index'   // localStorage
 ```
 
+Map 键规则：单块为 `path`，分块为 `${path}#${chunkIndex}`（`entryKey(path, chunkIndex)`）。
+
 ### 3.2 类 `NoteIndexer`
 
 | 方法 | 说明 |
 |------|------|
-| `loadFromStorage()` | 读取 localStorage，版本不符返回 false |
+| `loadFromStorage()` | 读取 localStorage，版本不符返回 false；按 `entryKey` 重建分块键 |
 | `saveToStorage()` | 写回 localStorage |
 | `buildIndex(notes, getNoteContent, onProgress?)` | 全量构建：**已索引且 `updated <= indexedAt` 跳过**（无效日期按 +∞ 保守重索引）；索引文本 = `title + proposition + content.slice(0,500)` |
-| `updateNote(path, content)` | 单篇增量更新 |
-| `removeNote(path)` | 删除条目 |
+| `updateNote(path, content)` | 单篇增量更新（单块）；先清除该路径下所有旧分块再写入 |
+| `updateChunks(path, chunks)` | 大 pdf 分块索引：逐块嵌入，写入 `chunkIndex/chunkTitle/pageFrom/pageTo`；先嵌入全部再覆盖旧条目（避免中途失败丢旧索引） |
+| `removeNote(path)` | 删除该路径的所有条目（单块 + 分块） |
 | `getVector(path)` / `getAllEntries()` / `size` / `clear()` | 查询与维护 |
 
 ### 3.3 单例
@@ -113,10 +124,14 @@ interface KnowledgeHit {
   kind: 'note' | 'reference'
   path: string
   title: string
-  snippet: string    // ≤300 字简短摘要
-  preview?: string   // 正文开头预览（默认模式注入）
-  fullText?: string  // includeFullText 模式的完整正文
+  snippet: string      // ≤300 字简短摘要
+  preview?: string     // 正文开头预览（默认模式注入）
+  fullText?: string    // includeFullText 模式的完整正文
   truncated?: boolean
+  pageCount?: number   // pdf 总页数（命中 pdf 时）
+  sectionTitle?: string // 命中章节标题（大 pdf 分块命中）
+  pageFrom?: number    // 命中块覆盖起始页（0 起；大 pdf 分块命中）
+  pageTo?: number      // 命中块覆盖结束页（0 起；大 pdf 分块命中）
 }
 
 retrieveKnowledge(query, topK = 4, options?: { includeFullText? }): Promise<KnowledgeHit[]>
@@ -127,12 +142,13 @@ retrieveKnowledgeContext(query, topK = 4): Promise<string>  // 一步到位，�
 ### 5.3 流程
 
 1. 引擎就绪 + 索引非空守卫；查询向量化。
-2. 全部条目算余弦相似度 → 降序取 Top-K。
+2. 全部条目算余弦相似度 → 降序取 Top-K（**保留 IndexEntry 引用**，供分块命中回填位置）。
 3. 逐条组装 hit：
-   - 参考资料（`.json` 路径）：`parseReferenceMeta` → 摘要；md 类型额外注入正文预览或全文。
+   - 参考资料（`.json` 路径）：`parseReferenceMeta` → 摘要；md 类型额外注入正文预览或全文；pdf 命中附带 `pageCount`。
+   - **分块命中**（`entry.chunkIndex !== undefined`）：回填 `sectionTitle/pageFrom/pageTo`，且预览/全文改为该块覆盖页区间的正文（`splitPdfPages` 按物理页切分后切片）。
    - 笔记：`parseFrontmatter` → 标题 + 正文预览。
 4. 全文/预览按相似度优先级消耗预算，超限截断并标记 `truncated`。
-5. `buildKnowledgeContext` 生成注入片段：每条标注 `[笔记]` / `[参考资料]` 前缀；参考资料附提示——"完整全文可通过工具 `read_reference` 读取：`read_reference({ reference_id: "..." })`"。
+5. `buildKnowledgeContext` 生成注入片段：每条标注 `[笔记]` / `[参考资料]` 前缀；参考资料附 `read_reference` 提示——普通命中提示按页读取全文，分块命中提示「该内容来自「章节」第 X-Y 页」并给出对应 `offset/limit`。
 
 ### 5.4 设计要点
 
@@ -149,7 +165,7 @@ MarkdownEditor ──► NoteLinker.suggestLinks ──► LinkHint 浮层
 
 ## 7. 相关测试
 
-- `src/embedding/engine.test.ts`、`model-assets.test.ts`（资源完整性校验）
+- `src/embedding/engine.test.ts`、`model-assets.test.ts`（资源完整性校验）、`indexer.test.ts`（分块索引）
 - `src/utils/knowledge-retrieval.test.ts`
 
 ---

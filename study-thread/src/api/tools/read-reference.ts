@@ -92,25 +92,28 @@ export function formatPageResult(
 
 /**
  * 按 `<!-- page: N -->` 页边界标记切分提取产物为页数组。
- * 标记之间（或标记到文件末尾）的文本为对应页内容；忽略空白页。
+ * 返回的数组下标即物理页码（0 起），空白页保留为空字符串，
+ * 保证 read_reference 的 offset/limit 与 meta.pageCount、页标记一致。
  */
 export function splitPdfPages(markdown: string): string[] {
   const pages: string[] = []
   let current: string[] = []
+  let seenMarker = false
   for (const line of markdown.split('\n')) {
     if (/^<!-- page: \d+ -->\s*$/.test(line)) {
-      if (current.length > 0) {
+      if (seenMarker) {
         pages.push(current.join('\n').trim())
         current = []
       }
+      seenMarker = true
       continue
     }
-    current.push(line)
+    if (seenMarker) current.push(line)
   }
-  if (current.length > 0) {
+  if (seenMarker) {
     pages.push(current.join('\n').trim())
   }
-  return pages.filter((page) => page.length > 0)
+  return pages
 }
 
 /** pdf 单次读取的默认页数（单页内容已足够模型判断，避免一次性塞入过多文本） */
