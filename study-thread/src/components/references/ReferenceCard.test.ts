@@ -58,4 +58,34 @@ describe('ReferenceCard', () => {
     })
     expect(wrapper.find('.ref-desc').exists()).toBe(false)
   })
+
+  it('pdf 解析中显示「解析中…」徽标', () => {
+    const wrapper = mount(ReferenceCard, {
+      props: { reference: { ...reference, parseStatus: 'parsing' } },
+    })
+    expect(wrapper.find('.ref-parse.parse-parsing').text()).toBe('解析中…')
+  })
+
+  it('pdf 已解析显示页数徽标', () => {
+    const wrapper = mount(ReferenceCard, {
+      props: { reference: { ...reference, parseStatus: 'parsed', pageCount: 12 } },
+    })
+    expect(wrapper.find('.ref-parse.parse-parsed').text()).toBe('12 页')
+  })
+
+  it('pdf 解析失败显示错误与重试按钮，点击触发 retry-parse', async () => {
+    const wrapper = mount(ReferenceCard, {
+      props: { reference: { ...reference, parseStatus: 'failed', parseError: '扫描件不支持' } },
+    })
+    expect(wrapper.find('.ref-parse-error__text').text()).toContain('扫描件不支持')
+    await wrapper.find('.ref-parse-retry').trigger('click')
+    expect(wrapper.emitted('retry-parse')![0]).toEqual([reference.path])
+  })
+
+  it('md 参考资料不显示解析状态徽标', () => {
+    const wrapper = mount(ReferenceCard, {
+      props: { reference: { ...reference, fileType: 'md' } },
+    })
+    expect(wrapper.find('.ref-parse').exists()).toBe(false)
+  })
 })

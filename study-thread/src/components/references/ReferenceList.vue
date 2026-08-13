@@ -36,6 +36,7 @@
         :is-selected="selectedPath === reference.path"
         @select="$emit('select', $event)"
         @contextmenu="openContextMenu($event, reference.path)"
+        @retry-parse="$emit('retry-parse', $event)"
       />
     </div>
 
@@ -75,6 +76,7 @@ const emit = defineEmits<{
   select: [path: string]
   upload: [files: File[]]
   delete: [path: string]
+  'retry-parse': [path: string]
 }>()
 
 const sortBy = ref<'updated' | 'title'>('updated')

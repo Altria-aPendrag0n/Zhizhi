@@ -11,6 +11,7 @@ const vaultFs = vi.hoisted(() => ({
   readFile: vi.fn(),
   writeFileBytes: vi.fn().mockResolvedValue(undefined),
   readFileBytes: vi.fn(),
+  extractPdfText: vi.fn(),
 }))
 const updateNote = vi.hoisted(() => vi.fn())
 const removeNote = vi.hoisted(() => vi.fn())
@@ -268,5 +269,61 @@ describe('references store', () => {
     expect(preview).toBe('')
     expect(vaultFs.readFile).not.toHaveBeenCalled()
     expect(vaultFs.readFileBytes).not.toHaveBeenCalled()
+  })
+
+  it('上传 pdf 后台解析为 parsed，写入提取产物与页数/字符数', async () => {
+    const store = useReferenceStore()
+    vaultFs.extractPdfText.mockResolvedValue({
+      page_count: 3,
+      markdown: '<!-- page: 1 -->\n正文一\n\n<!-- page: 2 -->\n正文二',
+      chars: 18,
+    })
+
+    const meta = await store.uploadReference('/vault', createMockFile('文档.pdf', '%PDF-1.4 dummy'))
+    expect(meta).not.toBeNull()
+    // 等待后台解析完成
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(vaultFs.extractPdfText).toHaveBeenCalled()
+    const latest = store.references.find((r) => r.id === meta!.id)!
+    expect(latest.parseStatus).toBe('parsed')
+    expect(latest.pageCount).toBe(3)
+    expect(latest.extractedChars).toBe(18)
+    expect(latest.extractedPath).toBe(`/vault/references/${meta!.id}/${meta!.id}.extracted.md`)
+    // 提取产物已写入，含页边界标记
+    expect(vaultFs.writeFile).toHaveBeenCalledWith(
+      `/vault/references/${meta!.id}/${meta!.id}.extracted.md`,
+      expect.stringContaining('<!-- page: 1 -->'),
+    )
+  })
+
+  it('pdf 解析失败时置为 failed 并记录 parseError', async () => {
+    const store = useReferenceStore()
+    vaultFs.extractPdfText.mockRejectedValue(new Error('该 PDF 无可提取的文本内容（可能是扫描件，暂不支持 OCR）'))
+
+    const meta = await store.uploadReference('/vault', createMockFile('扫描件.pdf', '%PDF dummy'))
+    await new Promise((r) => setTimeout(r, 0))
+
+    const latest = store.references.find((r) => r.id === meta!.id)!
+    expect(latest.parseStatus).toBe('failed')
+    expect(latest.parseError).toContain('扫描件')
+  })
+
+  it('retryParseReference 重新解析失败的 pdf 为 parsed', async () => {
+    const store = useReferenceStore()
+    vaultFs.extractPdfText.mockRejectedValueOnce(new Error('第一次失败'))
+
+    const meta = await store.uploadReference('/vault', createMockFile('文档.pdf', '%PDF dummy'))
+    await new Promise((r) => setTimeout(r, 0))
+    let latest = store.references.find((r) => r.id === meta!.id)!
+    expect(latest.parseStatus).toBe('failed')
+
+    vaultFs.extractPdfText.mockResolvedValueOnce({ page_count: 1, markdown: '<!-- page: 1 -->\n正文', chars: 4 })
+    await store.retryParseReference(latest.path)
+    await new Promise((r) => setTimeout(r, 0))
+
+    latest = store.references.find((r) => r.id === meta!.id)!
+    expect(latest.parseStatus).toBe('parsed')
+    expect(latest.pageCount).toBe(1)
   })
 })

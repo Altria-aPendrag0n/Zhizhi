@@ -80,6 +80,7 @@
               @select="handleSelectReference"
               @upload="handleUploadReference"
               @delete="handleDeleteReference"
+              @retry-parse="handleRetryParse"
             />
 
             <ReferenceEditDialog
@@ -246,6 +247,10 @@ async function handleUploadReference(files: File[]) {
   } else {
     toast.success(`成功上传 ${uploaded}/${files.length} 份参考资料`)
   }
+}
+
+async function handleRetryParse(path: string) {
+  await referenceStore.retryParseReference(path)
 }
 
 async function handleDeleteReference(path: string) {

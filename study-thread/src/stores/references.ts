@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ReferenceMeta } from '../types'
-import { createDir, listDir, readFile, writeFile, deleteFile, writeFileBytes, readFileBytes } from '../utils/vault-fs'
+import { createDir, listDir, readFile, writeFile, deleteFile, writeFileBytes, readFileBytes, extractPdfText } from '../utils/vault-fs'
 import type { DirEntry } from '../utils/vault-fs'
 import {
   generateReferenceId,
@@ -31,10 +31,20 @@ function toReferenceTitle(fileName: string): string {
 }
 
 /**
- * 构建用于向量索引的文本：标题、描述、标签、md 正文
+ * 构建用于向量索引的文本：标题、描述、标签、正文（md 读原文件，已解析的 pdf 读提取产物）
  */
 async function buildIndexText(meta: ReferenceMeta): Promise<string> {
-  const content = meta.fileType === 'md' ? await readFile(meta.filePath) : ''
+  let content = ''
+  if (meta.fileType === 'md') {
+    content = await readFile(meta.filePath)
+  } else if (meta.fileType === 'pdf' && meta.extractedPath) {
+    try {
+      content = await readFile(meta.extractedPath)
+    } catch {
+      // 提取产物尚未生成或读取失败：仅索引元数据
+      content = ''
+    }
+  }
   return [meta.title, meta.description, meta.tags.join(' '), content].filter(Boolean).join('\n')
 }
 
@@ -139,9 +149,74 @@ export const useReferenceStore = defineStore('references', () => {
     }
   }
 
+  /** 写元数据文件并按 path 更新内存列表（保持 updated 降序） */
+  async function persistMeta(meta: ReferenceMeta): Promise<void> {
+    await writeFile(meta.path, serializeReferenceMeta(meta))
+    references.value = sortReferences(references.value.map((item) => (item.path === meta.path ? meta : item)))
+  }
+
+  /** 尽力而为地重建单篇参考资料的向量索引（失败不影响主流程） */
+  async function refreshIndex(meta: ReferenceMeta): Promise<void> {
+    try {
+      const indexText = await buildIndexText(meta)
+      await getNoteIndexer().updateNote(meta.path, indexText)
+    } catch {
+      // 索引失败静默处理
+    }
+  }
+
+  /**
+   * 解析一个 pdf 参考资料：pending → parsing → parsed / failed。
+   * 成功后写 {id}.extracted.md 并回填页数/字符数/产物路径；失败写 parseError。
+   * 解析不阻塞调用方（uploadReference 后台触发）。
+   */
+  async function parseReference(meta: ReferenceMeta, vaultPath: string): Promise<void> {
+    if (meta.fileType !== 'pdf') return
+
+    // 进入 parsing 状态（清除旧错误），立即回写供 UI 展示
+    const parsing: ReferenceMeta = { ...meta, parseStatus: 'parsing', parseError: undefined }
+    await persistMeta(parsing)
+
+    try {
+      const result = await extractPdfText(meta.filePath)
+      const extractedPath = getReferenceExtractedPath(vaultPath, meta.id)
+      await writeFile(extractedPath, result.markdown)
+
+      const parsed: ReferenceMeta = {
+        ...parsing,
+        parseStatus: 'parsed',
+        pageCount: result.page_count,
+        extractedChars: result.chars,
+        extractedPath,
+        extractedAt: new Date().toISOString(),
+      }
+      await persistMeta(parsed)
+      // 解析成功后用提取正文重建索引，使 pdf 内容可被知识检索命中
+      await refreshIndex(parsed)
+    } catch (e) {
+      const failed: ReferenceMeta = {
+        ...parsing,
+        parseStatus: 'failed',
+        parseError: e instanceof Error ? e.message : String(e),
+      }
+      await persistMeta(failed)
+    }
+  }
+
+  /** 重新解析一个解析失败的 pdf（供 UI「重试」按钮） */
+  async function retryParseReference(metaPath: string): Promise<void> {
+    const meta = references.value.find((item) => item.path === metaPath)
+    if (!meta || meta.fileType !== 'pdf') return
+    const vaultPath = currentVaultPath.value
+    if (!vaultPath) return
+    await parseReference(meta, vaultPath)
+  }
+
   async function uploadReference(vaultPath: string, file: File): Promise<ReferenceMeta | null> {
     const type = detectReferenceType(file.name)
     if (!type) return null
+
+    currentVaultPath.value = vaultPath
 
     const id = generateReferenceId()
     try {
@@ -162,18 +237,21 @@ export const useReferenceStore = defineStore('references', () => {
         filePath,
         created: now,
         updated: now,
+        // pdf 初始为待解析，md/png 不设置解析状态
+        parseStatus: type === 'pdf' ? 'pending' : undefined,
       }
       await writeFile(meta.path, serializeReferenceMeta(meta))
 
       references.value = sortReferences([...references.value, meta])
 
-      // 尽力而为地同步向量索引，失败不影响上传结果
-      try {
-        const indexText = await buildIndexText(meta)
-        await getNoteIndexer().updateNote(meta.path, indexText)
-      } catch {
-        // 索引失败静默处理
+      // md 立即用正文索引；pdf 先用元数据索引（解析完成后用提取正文重建）
+      await refreshIndex(meta)
+
+      // pdf 上传后立即后台解析（不阻塞上传返回）
+      if (type === 'pdf') {
+        void parseReference(meta, vaultPath)
       }
+
       return meta
     } catch (error) {
       console.error('上传参考资料失败:', error)
@@ -189,12 +267,7 @@ export const useReferenceStore = defineStore('references', () => {
       references.value = sortReferences([...references.value.filter((item) => item.path !== next.path), next])
 
       // 尽力而为地重算索引
-      try {
-        const indexText = await buildIndexText(next)
-        await getNoteIndexer().updateNote(next.path, indexText)
-      } catch {
-        // 索引失败静默处理
-      }
+      await refreshIndex(next)
       return next
     } catch (error) {
       console.error('更新参考资料失败:', error)
@@ -256,5 +329,6 @@ export const useReferenceStore = defineStore('references', () => {
     updateReference,
     deleteReference,
     loadReferencePreview,
+    retryParseReference,
   }
 })

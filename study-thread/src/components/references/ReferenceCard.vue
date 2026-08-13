@@ -6,11 +6,18 @@
     @contextmenu.prevent="$emit('contextmenu', $event)"
   >
     <div class="ref-top">
-      <span class="ref-type" :class="`type-${reference.fileType}`">{{ typeLabel }}</span>
+      <div class="ref-badges">
+        <span class="ref-type" :class="`type-${reference.fileType}`">{{ typeLabel }}</span>
+        <span v-if="parseBadge" class="ref-parse" :class="`parse-${reference.parseStatus}`">{{ parseBadge }}</span>
+      </div>
       <span v-if="formattedDate" class="ref-updated">{{ formattedDate }}</span>
     </div>
     <h3>{{ reference.title }}</h3>
     <p v-if="reference.description" class="ref-desc">{{ reference.description }}</p>
+    <div v-if="reference.parseStatus === 'failed'" class="ref-parse-error">
+      <span class="ref-parse-error__text">{{ reference.parseError || '解析失败' }}</span>
+      <button class="ref-parse-retry" type="button" @click.stop="$emit('retry-parse', reference.path)">重试</button>
+    </div>
     <div v-if="reference.tags.length" class="tags">
       <span v-for="tag in reference.tags" :key="tag" class="tag">{{ tag }}</span>
     </div>
@@ -30,6 +37,7 @@ const props = defineProps<{
 defineEmits<{
   select: [path: string]
   contextmenu: [event: MouseEvent]
+  'retry-parse': [path: string]
 }>()
 
 const typeLabels: Record<string, string> = {
@@ -39,6 +47,23 @@ const typeLabels: Record<string, string> = {
 }
 
 const typeLabel = computed(() => typeLabels[props.reference.fileType] || props.reference.fileType.toUpperCase())
+
+/** 解析状态徽标文本（仅 pdf 显示） */
+const parseBadge = computed(() => {
+  if (props.reference.fileType !== 'pdf') return ''
+  switch (props.reference.parseStatus) {
+    case 'pending':
+      return '待解析'
+    case 'parsing':
+      return '解析中…'
+    case 'failed':
+      return '解析失败'
+    case 'parsed':
+      return props.reference.pageCount ? `${props.reference.pageCount} 页` : '已解析'
+    default:
+      return ''
+  }
+})
 
 const formattedDate = computed(() => formatNoteShortDate(props.reference.updated))
 </script>
@@ -85,12 +110,91 @@ const formattedDate = computed(() => formatNoteShortDate(props.reference.updated
   margin-bottom: 10px;
 }
 
+.ref-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .ref-type {
   padding: 3px 8px;
   border-radius: 6px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
+}
+
+/* PDF 解析状态徽标 */
+.ref-parse {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.ref-parse.parse-pending {
+  background: #efede7;
+  color: var(--ink-3, #87928d);
+}
+
+.ref-parse.parse-parsing {
+  background: #e3eef9;
+  color: #33566e;
+  animation: parse-pulse 1.2s ease-in-out infinite;
+}
+
+.ref-parse.parse-failed {
+  background: #f8e3e0;
+  color: #c2413b;
+}
+
+.ref-parse.parse-parsed {
+  background: var(--brand-soft, #dce9e1);
+  color: var(--brand-strong, #174438);
+}
+
+@keyframes parse-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.ref-parse-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--state-error, #c2413b) 8%, transparent);
+}
+
+.ref-parse-error__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--state-error, #c2413b);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-parse-retry {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--state-error, #c2413b);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--state-error, #c2413b);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ref-parse-retry:hover {
+  background: var(--state-error, #c2413b);
+  color: #fff;
 }
 
 .type-md {
