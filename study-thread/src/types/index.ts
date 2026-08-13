@@ -190,17 +190,32 @@ export interface ExtractedNote {
 // 参考资料相关类型
 export type ReferenceType = 'md' | 'pdf' | 'png'
 
+/** PDF 解析状态：pending=待解析 / parsing=解析中 / parsed=已解析 / failed=解析失败 */
+export type ReferenceParseStatus = 'pending' | 'parsing' | 'parsed' | 'failed'
+
 export interface ReferenceMeta {
   id: string            // 唯一 id（uuid），用于文件命名
-  path: string          // 元数据 JSON 文件路径，形如 {vault}/references/{id}.json
+  path: string          // 元数据 JSON 文件路径，形如 {vault}/references/{id}/{id}.json
   title: string
   description?: string
   tags: string[]
   fileType: ReferenceType
   fileName: string      // 原始上传文件名
-  filePath: string      // 实际文件路径，形如 {vault}/references/{id}.{ext}
+  filePath: string      // 实际文件路径，形如 {vault}/references/{id}/{id}.{ext}
   created: string       // ISO 时间
   updated: string       // ISO 时间
+  /** PDF 解析状态（仅 pdf 使用；md/png 不设置） */
+  parseStatus?: ReferenceParseStatus
+  /** 解析失败原因（扫描件无文本层 / 加密 / 损坏等） */
+  parseError?: string
+  /** PDF 页数（parsed 后写入） */
+  pageCount?: number
+  /** 提取产物字符数（用于小/大 PDF 判定与上下文预算） */
+  extractedChars?: number
+  /** 提取产物路径：{vault}/references/{id}/{id}.extracted.md */
+  extractedPath?: string
+  /** 提取时间 */
+  extractedAt?: string
 }
 
 export interface Reference extends ReferenceMeta {

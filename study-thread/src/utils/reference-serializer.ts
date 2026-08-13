@@ -3,7 +3,7 @@
  * 负责参考资料元数据的序列化/反序列化、id 生成与路径拼接
  */
 
-import type { ReferenceMeta, ReferenceType } from '../types'
+import type { ReferenceMeta, ReferenceType, ReferenceParseStatus } from '../types'
 
 /**
  * 生成参考资料唯一 id
@@ -21,24 +21,38 @@ export function generateReferenceId(): string {
 }
 
 /**
- * 获取参考资料目录路径
+ * 获取参考资料目录路径（每资料一个自包含文件夹）
  */
 export function getReferencesDir(vaultPath: string): string {
   return `${vaultPath}/references`
 }
 
 /**
+ * 获取单个参考资料的自包含文件夹路径
+ */
+export function getReferenceDir(vaultPath: string, id: string): string {
+  return `${vaultPath}/references/${id}`
+}
+
+/**
  * 获取参考资料元数据 JSON 文件路径
  */
 export function getReferenceMetaPath(vaultPath: string, id: string): string {
-  return `${vaultPath}/references/${id}.json`
+  return `${vaultPath}/references/${id}/${id}.json`
 }
 
 /**
  * 获取参考资料实际文件路径
  */
 export function getReferenceFilePath(vaultPath: string, id: string, fileType: ReferenceType): string {
-  return `${vaultPath}/references/${id}.${fileType}`
+  return `${vaultPath}/references/${id}/${id}.${fileType}`
+}
+
+/**
+ * 获取 PDF 提取产物（markdown）文件路径
+ */
+export function getReferenceExtractedPath(vaultPath: string, id: string): string {
+  return `${vaultPath}/references/${id}/${id}.extracted.md`
 }
 
 /**
@@ -75,6 +89,10 @@ function isReferenceType(value: unknown): value is ReferenceType {
   return value === 'md' || value === 'pdf' || value === 'png'
 }
 
+function isParseStatus(value: unknown): value is ReferenceParseStatus {
+  return value === 'pending' || value === 'parsing' || value === 'parsed' || value === 'failed'
+}
+
 /**
  * 解析元数据 JSON 字符串并做字段校验与兜底
  * - title 默认 '未命名参考资料'
@@ -99,5 +117,11 @@ export function parseReferenceMeta(json: string): ReferenceMeta {
     filePath: typeof raw.filePath === 'string' ? raw.filePath : '',
     created: typeof raw.created === 'string' ? raw.created : '',
     updated: typeof raw.updated === 'string' ? raw.updated : '',
+    parseStatus: isParseStatus(raw.parseStatus) ? raw.parseStatus : undefined,
+    parseError: typeof raw.parseError === 'string' ? raw.parseError : undefined,
+    pageCount: typeof raw.pageCount === 'number' && raw.pageCount >= 0 ? raw.pageCount : undefined,
+    extractedChars: typeof raw.extractedChars === 'number' && raw.extractedChars >= 0 ? raw.extractedChars : undefined,
+    extractedPath: typeof raw.extractedPath === 'string' ? raw.extractedPath : undefined,
+    extractedAt: typeof raw.extractedAt === 'string' ? raw.extractedAt : undefined,
   }
 }

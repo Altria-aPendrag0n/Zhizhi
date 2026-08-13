@@ -2,11 +2,14 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ReferenceMeta } from '../types'
 import { createDir, listDir, readFile, writeFile, deleteFile, writeFileBytes, readFileBytes } from '../utils/vault-fs'
+import type { DirEntry } from '../utils/vault-fs'
 import {
   generateReferenceId,
   getReferencesDir,
+  getReferenceDir,
   getReferenceMetaPath,
   getReferenceFilePath,
+  getReferenceExtractedPath,
   detectReferenceType,
   serializeReferenceMeta,
   parseReferenceMeta,
@@ -61,11 +64,31 @@ export const useReferenceStore = defineStore('references', () => {
       const entries = await listDir(getReferencesDir(vaultPath))
       const metas: ReferenceMeta[] = []
       for (const entry of entries) {
-        if (entry.is_dir || !entry.name.toLowerCase().endsWith('.json')) continue
-        try {
-          metas.push(parseReferenceMeta(await readFile(entry.path)))
-        } catch {
-          // 跳过损坏或无法解析的元数据文件
+        // 新格式：每个参考资料一个自包含文件夹，元数据位于 {dir}/{name}.json
+        if (entry.is_dir) {
+          try {
+            metas.push(parseReferenceMeta(await readFile(getReferenceMetaPath(vaultPath, entry.name))))
+          } catch {
+            // 跳过损坏或无法解析的元数据文件
+          }
+          continue
+        }
+        // 旧扁平格式：根目录 {id}.json，做懒迁移后读取
+        if (entry.name.toLowerCase().endsWith('.json')) {
+          try {
+            const migrated = await migrateLegacyReference(vaultPath, entry)
+            if (migrated) {
+              metas.push(migrated)
+              continue
+            }
+          } catch {
+            // 迁移失败，回退为直接读取（兼容只读/失败场景）
+          }
+          try {
+            metas.push(parseReferenceMeta(await readFile(entry.path)))
+          } catch {
+            // 跳过损坏或无法解析的元数据文件
+          }
         }
       }
       references.value = sortReferences(metas)
@@ -77,13 +100,52 @@ export const useReferenceStore = defineStore('references', () => {
     }
   }
 
+  /**
+   * 懒迁移旧扁平格式参考资料到自包含文件夹：
+   * 读取根目录 {id}.json 与 {id}.{ext}，复制到 {id}/ 下并删除旧文件。
+   * 任一步失败返回 null（旧文件保留，下次扫描重试，幂等）。
+   */
+  async function migrateLegacyReference(vaultPath: string, entry: DirEntry): Promise<ReferenceMeta | null> {
+    const oldMeta = parseReferenceMeta(await readFile(entry.path))
+    const id = oldMeta.id
+    if (!id) return null
+
+    const dir = getReferenceDir(vaultPath, id)
+    const newFilePath = getReferenceFilePath(vaultPath, id, oldMeta.fileType)
+
+    // 迁移原始文件（二进制读回，兼容 md/pdf/png）
+    if (oldMeta.filePath && oldMeta.filePath !== newFilePath) {
+      try {
+        const bytes = await readFileBytes(oldMeta.filePath)
+        await writeFileBytes(newFilePath, bytes)
+        await deleteFile(oldMeta.filePath)
+      } catch {
+        return null
+      }
+    }
+
+    // 写新元数据并删除旧元数据
+    try {
+      const migrated: ReferenceMeta = {
+        ...oldMeta,
+        path: getReferenceMetaPath(vaultPath, id),
+        filePath: newFilePath,
+      }
+      await writeFile(migrated.path, serializeReferenceMeta(migrated))
+      await deleteFile(entry.path)
+      return migrated
+    } catch {
+      return null
+    }
+  }
+
   async function uploadReference(vaultPath: string, file: File): Promise<ReferenceMeta | null> {
     const type = detectReferenceType(file.name)
     if (!type) return null
 
     const id = generateReferenceId()
     try {
-      await createDir(getReferencesDir(vaultPath))
+      await createDir(getReferenceDir(vaultPath, id))
       const filePath = getReferenceFilePath(vaultPath, id, type)
       const bytes = new Uint8Array(await file.arrayBuffer())
       await writeFileBytes(filePath, bytes)
@@ -145,15 +207,27 @@ export const useReferenceStore = defineStore('references', () => {
     if (!meta) return false
 
     let success = true
-    try {
-      await deleteFile(meta.path)
-    } catch {
-      success = false
-    }
-    try {
-      await deleteFile(meta.filePath)
-    } catch {
-      success = false
+    // 新文件夹结构：递归删除整个自包含文件夹（含元数据/原始文件/提取产物）；
+    // 旧扁平结构（兼容）：删除元数据 JSON 与原始文件两个文件
+    const isDirLayout = meta.path.endsWith(`/${meta.id}/${meta.id}.json`)
+    if (isDirLayout) {
+      const dir = meta.path.slice(0, meta.path.lastIndexOf('/'))
+      try {
+        await deleteFile(dir)
+      } catch {
+        success = false
+      }
+    } else {
+      try {
+        await deleteFile(meta.path)
+      } catch {
+        success = false
+      }
+      try {
+        await deleteFile(meta.filePath)
+      } catch {
+        success = false
+      }
     }
 
     references.value = references.value.filter((item) => item.path !== metaPath)

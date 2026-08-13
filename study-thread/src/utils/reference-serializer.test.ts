@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   generateReferenceId,
   getReferencesDir,
+  getReferenceDir,
   getReferenceMetaPath,
   getReferenceFilePath,
+  getReferenceExtractedPath,
   detectReferenceType,
   sanitizeFileName,
   serializeReferenceMeta,
@@ -136,11 +138,19 @@ describe('路径拼接', () => {
     expect(getReferencesDir(vaultPath)).toBe('/data/vault/references')
   })
 
+  it('getReferenceDir 正确拼接', () => {
+    expect(getReferenceDir(vaultPath, 'ref-abc')).toBe('/data/vault/references/ref-abc')
+  })
+
   it('getReferenceMetaPath 正确拼接', () => {
-    expect(getReferenceMetaPath(vaultPath, 'ref-abc')).toBe('/data/vault/references/ref-abc.json')
+    expect(getReferenceMetaPath(vaultPath, 'ref-abc')).toBe('/data/vault/references/ref-abc/ref-abc.json')
   })
 
   it('getReferenceFilePath 正确拼接', () => {
-    expect(getReferenceFilePath(vaultPath, 'ref-abc', 'pdf')).toBe('/data/vault/references/ref-abc.pdf')
+    expect(getReferenceFilePath(vaultPath, 'ref-abc', 'pdf')).toBe('/data/vault/references/ref-abc/ref-abc.pdf')
+  })
+
+  it('getReferenceExtractedPath 正确拼接', () => {
+    expect(getReferenceExtractedPath(vaultPath, 'ref-abc')).toBe('/data/vault/references/ref-abc/ref-abc.extracted.md')
   })
 })

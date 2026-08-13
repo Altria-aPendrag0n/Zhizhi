@@ -32,13 +32,13 @@ function createMockFile(name: string, content: string): File {
 function makeMeta(overrides: Partial<ReferenceMeta> = {}): ReferenceMeta {
   return {
     id: 'meta-1',
-    path: '/vault/references/meta-1.json',
+    path: '/vault/references/meta-1/meta-1.json',
     title: '测试参考资料',
     description: '',
     tags: [],
     fileType: 'md',
     fileName: '测试参考资料.md',
-    filePath: '/vault/references/meta-1.md',
+    filePath: '/vault/references/meta-1/meta-1.md',
     created: '2026-01-01T00:00:00.000Z',
     updated: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -59,19 +59,17 @@ describe('references store', () => {
     expect(store.currentVaultPath).toBeNull()
   })
 
-  it('loadAllReferences 解析目录中的 json 并按 updated 降序排序', async () => {
+  it('loadAllReferences 解析目录中的文件夹并按 updated 降序排序', async () => {
     const store = useReferenceStore()
     vaultFs.listDir.mockResolvedValue([
-      { name: 'a.json', path: '/vault/references/a.json', is_dir: false },
-      { name: 'b.json', path: '/vault/references/b.json', is_dir: false },
-      { name: '图片.png', path: '/vault/references/图片.png', is_dir: false },
-      { name: '子目录', path: '/vault/references/子目录', is_dir: true },
+      { name: 'a', path: '/vault/references/a', is_dir: true },
+      { name: 'b', path: '/vault/references/b', is_dir: true },
     ])
     vaultFs.readFile.mockImplementation(async (path: string) => {
-      if (path === '/vault/references/a.json') {
-        return JSON.stringify({ ...makeMeta(), id: 'a', path, title: '笔记A', filePath: '/vault/references/a.md', updated: '2026-01-01T00:00:00.000Z', created: '2026-01-01T00:00:00.000Z' })
+      if (path === '/vault/references/a/a.json') {
+        return JSON.stringify({ ...makeMeta(), id: 'a', path, title: '笔记A', filePath: '/vault/references/a/a.md', updated: '2026-01-01T00:00:00.000Z', created: '2026-01-01T00:00:00.000Z' })
       }
-      return JSON.stringify({ ...makeMeta(), id: 'b', path, title: '笔记B', filePath: '/vault/references/b.md', updated: '2026-01-02T00:00:00.000Z', created: '2026-01-02T00:00:00.000Z' })
+      return JSON.stringify({ ...makeMeta(), id: 'b', path, title: '笔记B', filePath: '/vault/references/b/b.md', updated: '2026-01-02T00:00:00.000Z', created: '2026-01-02T00:00:00.000Z' })
     })
 
     await store.loadAllReferences('/vault')
@@ -81,21 +79,44 @@ describe('references store', () => {
     expect(store.references.map((r) => r.title)).toEqual(['笔记B', '笔记A'])
   })
 
-  it('loadAllReferences 跳过损坏的 json 文件', async () => {
+  it('loadAllReferences 跳过损坏的文件夹内 json 文件', async () => {
     const store = useReferenceStore()
     vaultFs.listDir.mockResolvedValue([
-      { name: 'ok.json', path: '/vault/references/ok.json', is_dir: false },
-      { name: 'broken.json', path: '/vault/references/broken.json', is_dir: false },
+      { name: 'ok', path: '/vault/references/ok', is_dir: true },
+      { name: 'broken', path: '/vault/references/broken', is_dir: true },
     ])
     vaultFs.readFile.mockImplementation(async (path: string) => {
-      if (path === '/vault/references/broken.json') return 'not-valid-json'
-      return JSON.stringify(makeMeta({ id: 'ok', path, filePath: '/vault/references/ok.md' }))
+      if (path === '/vault/references/broken/broken.json') return 'not-valid-json'
+      return JSON.stringify(makeMeta({ id: 'ok', path, filePath: '/vault/references/ok/ok.md' }))
     })
 
     await store.loadAllReferences('/vault')
 
     expect(store.references).toHaveLength(1)
     expect(store.references[0].id).toBe('ok')
+  })
+
+  it('loadAllReferences 兼容旧扁平格式并懒迁移到文件夹', async () => {
+    const store = useReferenceStore()
+    const legacyMeta = makeMeta({ id: 'legacy', path: '/vault/references/legacy.json', filePath: '/vault/references/legacy.pdf', fileType: 'pdf', fileName: 'legacy.pdf' })
+    vaultFs.listDir.mockResolvedValue([
+      { name: 'legacy.json', path: '/vault/references/legacy.json', is_dir: false },
+    ])
+    vaultFs.readFile.mockImplementation(async (path: string) => {
+      if (path === '/vault/references/legacy.json') return JSON.stringify(legacyMeta)
+      return ''
+    })
+    vaultFs.readFileBytes.mockResolvedValue(new Uint8Array([1, 2, 3]))
+
+    await store.loadAllReferences('/vault')
+
+    // 迁移：写新元数据到文件夹 + 删除旧元数据 + 移动原始文件
+    expect(vaultFs.writeFileBytes).toHaveBeenCalledWith('/vault/references/legacy/legacy.pdf', expect.any(Uint8Array))
+    expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/references/legacy.pdf')
+    expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/references/legacy.json')
+    expect(store.references).toHaveLength(1)
+    expect(store.references[0].path).toBe('/vault/references/legacy/legacy.json')
+    expect(store.references[0].filePath).toBe('/vault/references/legacy/legacy.pdf')
   })
 
   it('loadAllReferences 目录不存在时列表为空且不抛错', async () => {
@@ -115,16 +136,16 @@ describe('references store', () => {
     const meta = await store.uploadReference('/vault', createMockFile('费曼学习法.md', '# 正文内容'))
 
     expect(meta).not.toBeNull()
-    expect(vaultFs.createDir).toHaveBeenCalledWith('/vault/references')
+    expect(vaultFs.createDir).toHaveBeenCalledWith(expect.stringMatching(/^\/vault\/references\/.+$/))
 
     const filePath = vaultFs.writeFileBytes.mock.calls[0][0]
     const bytes = vaultFs.writeFileBytes.mock.calls[0][1]
-    expect(filePath).toMatch(/^\/vault\/references\/.+\.md$/)
+    expect(filePath).toMatch(/^\/vault\/references\/.+\/.+\.md$/)
     expect(bytes).toBeInstanceOf(Uint8Array)
 
     const metaPath = vaultFs.writeFile.mock.calls[0][0]
     const json = vaultFs.writeFile.mock.calls[0][1]
-    expect(metaPath).toMatch(/^\/vault\/references\/.+\.json$/)
+    expect(metaPath).toMatch(/^\/vault\/references\/.+\/.+\.json$/)
     expect(JSON.parse(json)).toMatchObject({
       id: meta!.id,
       title: '费曼学习法',
@@ -185,7 +206,7 @@ describe('references store', () => {
     expect(updateNote).toHaveBeenLastCalledWith(uploaded!.path, expect.stringContaining('标签A'))
   })
 
-  it('deleteReference 删除元数据与文件、从列表移除并移除索引', async () => {
+  it('deleteReference 递归删除整个自包含文件夹、从列表移除并移除索引', async () => {
     const store = useReferenceStore()
     vaultFs.readFile.mockResolvedValue('# 正文内容')
     const uploaded = await store.uploadReference('/vault', createMockFile('待删除.md', '# 正文内容'))
@@ -194,8 +215,8 @@ describe('references store', () => {
     const ok = await store.deleteReference(uploaded!.path)
 
     expect(ok).toBe(true)
-    expect(vaultFs.deleteFile).toHaveBeenCalledWith(uploaded!.path)
-    expect(vaultFs.deleteFile).toHaveBeenCalledWith(uploaded!.filePath)
+    // 删除的是整个文件夹（含元数据/原始文件/提取产物）
+    expect(vaultFs.deleteFile).toHaveBeenCalledWith(expect.stringMatching(/^\/vault\/references\/[^/]+$/))
     expect(store.references).toHaveLength(0)
     expect(removeNote).toHaveBeenCalledWith(uploaded!.path)
   })
@@ -226,23 +247,23 @@ describe('references store', () => {
     const preview = await store.loadReferencePreview(makeMeta())
 
     expect(preview).toBe('# 标题\n正文内容')
-    expect(vaultFs.readFile).toHaveBeenCalledWith('/vault/references/meta-1.md')
+    expect(vaultFs.readFile).toHaveBeenCalledWith('/vault/references/meta-1/meta-1.md')
   })
 
   it('loadReferencePreview 对 png 返回 base64 data URL', async () => {
     const store = useReferenceStore()
     vaultFs.readFileBytes.mockResolvedValue(new Uint8Array([80, 78, 71, 65]))
 
-    const preview = await store.loadReferencePreview(makeMeta({ fileType: 'png', filePath: '/vault/references/meta-1.png' }))
+    const preview = await store.loadReferencePreview(makeMeta({ fileType: 'png', filePath: '/vault/references/meta-1/meta-1.png' }))
 
     expect(preview).toBe(`data:image/png;base64,${btoa('PNGA')}`)
-    expect(vaultFs.readFileBytes).toHaveBeenCalledWith('/vault/references/meta-1.png')
+    expect(vaultFs.readFileBytes).toHaveBeenCalledWith('/vault/references/meta-1/meta-1.png')
   })
 
   it('loadReferencePreview 对 pdf 返回空字符串', async () => {
     const store = useReferenceStore()
 
-    const preview = await store.loadReferencePreview(makeMeta({ fileType: 'pdf', filePath: '/vault/references/meta-1.pdf' }))
+    const preview = await store.loadReferencePreview(makeMeta({ fileType: 'pdf', filePath: '/vault/references/meta-1/meta-1.pdf' }))
 
     expect(preview).toBe('')
     expect(vaultFs.readFile).not.toHaveBeenCalled()

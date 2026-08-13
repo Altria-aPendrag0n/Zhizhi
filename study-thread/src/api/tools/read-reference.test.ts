@@ -10,13 +10,13 @@ const VAULT = '/vault'
 function metaJson(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     id: 'ref-1',
-    path: '/vault/references/ref-1.json',
+    path: '/vault/references/ref-1/ref-1.json',
     title: '参考资料标题',
     description: '参考资料描述',
     tags: ['标签甲'],
     fileType: 'md',
     fileName: 'ref.md',
-    filePath: '/vault/references/ref-1.md',
+    filePath: '/vault/references/ref-1/ref-1.md',
     created: '',
     updated: '',
     ...overrides,
@@ -31,8 +31,8 @@ describe('read_reference 工具', () => {
   it('按 reference_id 解析路径并分页读取，返回带边界提示的内容', async () => {
     const lines = Array.from({ length: 30 }, (_, i) => `第 ${i + 1} 行内容`)
     readFile.mockImplementation(async (p: string) => {
-      if (p === '/vault/references/ref-1.json') return metaJson()
-      if (p === '/vault/references/ref-1.md') return lines.join('\n')
+      if (p === '/vault/references/ref-1/ref-1.json') return metaJson()
+      if (p === '/vault/references/ref-1/ref-1.md') return lines.join('\n')
       return ''
     })
 
@@ -46,8 +46,8 @@ describe('read_reference 工具', () => {
 
   it('默认 limit 为 READ_REFERENCE_DEFAULT_LIMIT，不带 offset 从第 1 行开始', async () => {
     readFile.mockImplementation(async (p: string) => {
-      if (p === '/vault/references/ref-1.json') return metaJson()
-      if (p === '/vault/references/ref-1.md') return Array.from({ length: 2000 }, () => '行').join('\n')
+      if (p === '/vault/references/ref-1/ref-1.json') return metaJson()
+      if (p === '/vault/references/ref-1/ref-1.md') return Array.from({ length: 2000 }, () => '行').join('\n')
       return ''
     })
 
@@ -58,9 +58,9 @@ describe('read_reference 工具', () => {
 
   it('单页超过字符上限时截断并提示可继续读取', async () => {
     readFile.mockImplementation(async (p: string) => {
-      if (p === '/vault/references/ref-1.json') return metaJson()
+      if (p === '/vault/references/ref-1/ref-1.json') return metaJson()
       // 每行超长，第一行就超过字符上限
-      if (p === '/vault/references/ref-1.md') return `长${'字'.repeat(READ_REFERENCE_MAX_CHARS + 100)}`
+      if (p === '/vault/references/ref-1/ref-1.md') return `长${'字'.repeat(READ_REFERENCE_MAX_CHARS + 100)}`
       return ''
     })
 
@@ -72,8 +72,8 @@ describe('read_reference 工具', () => {
 
   it('pdf/png 参考资料返回无法读取文本的说明', async () => {
     readFile.mockImplementation(async (p: string) => {
-      if (p === '/vault/references/ref-1.json') {
-        return metaJson({ fileType: 'png', fileName: 'ref.png', filePath: '/vault/references/ref-1.png' })
+      if (p === '/vault/references/ref-1/ref-1.json') {
+        return metaJson({ fileType: 'png', fileName: 'ref.png', filePath: '/vault/references/ref-1/ref-1.png' })
       }
       return ''
     })

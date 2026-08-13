@@ -82,12 +82,15 @@ export interface ReferenceMeta {
 
 > md/png 不写这些字段；解析失败时保留原始文件，用户可重新上传或删除。
 
-### 4.2 索引分块（IndexEntry 扩展）
+### 4.2 索引分块（IndexEntry 扩展，按章节划分）
 
 ```ts
 export interface IndexEntry {
   path: string          // 参考资料 meta 路径 / 笔记路径（不变）
   chunkIndex?: number   // 新增：分块序号；缺失或 0 = 单块（md/小 pdf/笔记）
+  chunkTitle?: string   // 新增：章节标题（分块命中时展示，供模型定位）
+  pageFrom?: number     // 新增：块覆盖的起始页（pdf 分块；0 起）
+  pageTo?: number       // 新增：块覆盖的结束页
   vector: number[]
   indexedAt: number
 }
@@ -95,7 +98,9 @@ export interface IndexEntry {
 ```
 
 - 判定小/大 PDF：`extractedChars ÷ 4 ≈ tokens`，超出上下文预算（预留 prompt+回答+10-15% 余量）即分块；
-- 分块策略：按页分块，每块约 800-1500 tokens（对齐 NVIDIA/社区结论：按页分块准确率最高且稳定），块与块之间记录页码区间；
+- **分块策略 = 按章节**：用 `parseHeadings`（`src/utils/markdown-headings.ts`，已跳过围栏代码块）检测 H1/H2 标题，每个标题小节（标题 + 至下一同级/更高级标题前的内容）为一个 chunk；**无标题的 PDF 退化为按页分块**；
+- 章节内保留 `<!-- page: N -->` 页标记，据此记录块覆盖的 `pageFrom/pageTo` 区间，检索命中可回落到具体页；
+- 单块超 token 预算（约 800-1500 tokens）时再细分，并带父章节标题；
 - `buildIndexText`：单块用整块文本；md 超长同样受益。
 
 ## 5. 解析链路（Rust 后端）
@@ -121,14 +126,15 @@ pub struct ExtractPdfResult {
 
 ### 6.1 检索（knowledge-retrieval）
 
-- 命中 pdf 块时，`KnowledgeHit` 增加页信息：`pageFrom/pageTo`（chunk 对应页区间）；
-- `buildKnowledgeContext` 对 pdf 命中追加「该内容位于第 X-Y 页，可用 read_reference 读取对应页」。
+- 命中 pdf 块时，`KnowledgeHit` 增加位置信息：`sectionTitle`（章节标题）+ `pageFrom/pageTo`（块覆盖页区间）；
+- `buildKnowledgeContext` 对 pdf 命中追加「该内容来自「章节标题」/ 第 X-Y 页，可用 read_reference 读取对应内容」。
 
 ### 6.2 读取（read_reference 扩展）
 
-- 参数语义：pdf 时 `offset/limit` = **起始页（0 起始）/ 页数**（页是模型可预测的自然单位，行号不可预测）；
+- 参数语义：pdf 时 `offset/limit` = **起始页（0 起始）/ 页数**（页是物理稳定、模型可预测的自然单位）；
 - 实现：从 `{id}.extracted.md` 按 `<!-- page: N -->` 切分，读取指定页区间文本；
 - 返回格式对齐现有：`Showing pages X-Y of N total pages.` + 截断提示；
+- 章节用于**索引分块与检索粒度**，读取定位统一用页（两者不冲突：块记录页码区间，命中后按页精读）；
 - 非 pdf 保持现有行分页语义，互不干扰。
 
 ## 7. 兼容与迁移
