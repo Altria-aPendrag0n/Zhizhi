@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_MAX_ROUNDS,
   dedupeQuestions,
+  formatQuestionForDisplay,
   normalizeQuizQuestion,
   questionSimilarity,
   serializeAnswer,
@@ -38,6 +39,21 @@ describe('normalizeQuizQuestion', () => {
   it('answer 为空串或纯空白时忽略', () => {
     const q = normalizeQuizQuestion({ level: 'recognize', type: 'choice', question: '费曼学习法的核心是什么？', options: ['A', 'B'], answer: '  ' })
     expect(q?.answer).toBeUndefined()
+  })
+
+  it('scenario 透传并去除首尾空白（情景题，题型仍为六类之一）', () => {
+    const q = normalizeQuizQuestion({
+      level: 'apply',
+      type: 'short_answer',
+      question: '你该如何优化点单流程？',
+      scenario: '  你是一家咖啡店店长，需要优化点单流程  ',
+    })
+    expect(q?.scenario).toBe('你是一家咖啡店店长，需要优化点单流程')
+  })
+
+  it('scenario 为空串或纯空白时忽略', () => {
+    const q = normalizeQuizQuestion({ level: 'apply', type: 'short_answer', question: '你该如何优化点单流程？', scenario: '   ' })
+    expect(q?.scenario).toBeUndefined()
   })
 
   it('非辩论题题干去除空白后过短（粗制滥造）时丢弃', () => {
@@ -134,6 +150,24 @@ describe('normalizeQuizQuestion', () => {
   it('非对象输入返回 null', () => {
     expect(normalizeQuizQuestion(null)).toBeNull()
     expect(normalizeQuizQuestion('str')).toBeNull()
+  })
+})
+
+describe('formatQuestionForDisplay', () => {
+  it('普通题不携带情景标签', () => {
+    const text = formatQuestionForDisplay({ level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' })
+    expect(text).toBe('[简答题] 什么是费曼学习法？')
+  })
+
+  it('情景题以「情景·题型」标签并追加情景行', () => {
+    const text = formatQuestionForDisplay({
+      level: 'apply',
+      type: 'short_answer',
+      question: '你该如何优化点单流程？',
+      scenario: '你是一家咖啡店店长，需要优化点单流程',
+    })
+    expect(text).toContain('[情景·简答题]')
+    expect(text).toContain('\n情景：你是一家咖啡店店长，需要优化点单流程')
   })
 })
 

@@ -387,6 +387,25 @@ describe('reviewFollowupStream', () => {
     ])
   })
 
+  it('情景题：用户消息先给情境再给问题，反馈 prompt 用「情景·题型」标签', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反馈' }])
+    const scenarioQ: ReviewQuestion = {
+      level: 'apply',
+      type: 'short_answer',
+      question: '你该如何优化点单流程？',
+      scenario: '你是一家咖啡店店长，需要优化点单流程',
+    }
+    for await (const _ of reviewFollowupStream(scenarioQ, '回答B', note, provider)) {
+      // 消费迭代器
+    }
+
+    const messages = provider.chat.mock.calls[provider.chat.mock.calls.length - 1][0] as { content: string }[]
+    expect(messages[0].content).toBe('复习问题：情景：你是一家咖啡店店长，需要优化点单流程\n问题：你该如何优化点单流程？')
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('[情景·简答题]')
+    expect(systemPrompt).toContain('情景：你是一家咖啡店店长，需要优化点单流程')
+  })
+
   it('选择题题型标签与选项注入反馈 prompt（P5-3）', async () => {
     const provider = mockProvider([{ type: 'text', content: '反馈' }])
     const choiceQ: ReviewQuestion = {
@@ -524,6 +543,30 @@ describe('reviewDebateStream', () => {
     expect(systemPrompt).toContain('辩题A')
     expect(systemPrompt).toContain('1 / 2')
     expect(systemPrompt).toContain('暂无历史发言，本轮为开场')
+  })
+
+  it('非情景题：注入「（本题无情景）」占位', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反驳' }])
+    for await (const _ of reviewDebateStream(debateQ, turns, note, provider, undefined, 1)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('（本题无情景）')
+  })
+
+  it('情景题：注入题目情景供辩论围绕情境展开', async () => {
+    const provider = mockProvider([{ type: 'text', content: '反驳' }])
+    const scenarioDebate: ReviewQuestion = {
+      ...debateQ,
+      scenario: '你正在为团队在 A/B 方案间做选择',
+    }
+    for await (const _ of reviewDebateStream(scenarioDebate, turns, note, provider, undefined, 1)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain('你正在为团队在 A/B 方案间做选择')
   })
 
   it('流式透传辩论回复', async () => {

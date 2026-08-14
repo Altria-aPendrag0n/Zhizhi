@@ -313,11 +313,13 @@ onMounted(load)
 function appendQuestionMessage() {
   const q = activeQuestion.value
   if (!q) return
-  const tag = `**第 ${currentQuestionIndex.value + 1} 题 / 共 ${questions.value.length} 题 · ${QUESTION_TYPE_LABELS[q.type]}**`
+  const tag = `**第 ${currentQuestionIndex.value + 1} 题 / 共 ${questions.value.length} 题 · ${QUESTION_TYPE_LABELS[q.type]}${q.scenario ? '·情景' : ''}**`
   // 最后一条 assistant 已是当前题目标记（如恢复会话时该题已展示）则不重复注入
   const last = messages.value[messages.value.length - 1]
   if (last && last.role === 'assistant' && last.content.startsWith(tag)) return
-  let content = `${tag}\n\n${q.question}`
+  let content = q.scenario
+    ? `${tag}\n\n> **情景**：${q.scenario}\n\n${q.question}`
+    : `${tag}\n\n${q.question}`
   if (q.type === 'choice' && q.options) {
     content += '\n\n' + q.options.map((o, i) => `${OPTION_LETTERS[i]}. ${o}`).join('\n')
   }

@@ -5,11 +5,12 @@
 
 ## 1. 职责
 
-把复习出题从「单一开放式问答」升级为「**六类题型 + 全结构化交互 + 掌握度×笔记内容难度适配 + 动态题数 + 去重保质量**」：
+把复习出题从「单一开放式问答」升级为「**六类题型 + 情景题 + 全结构化交互 + 掌握度×笔记内容难度适配 + 动态题数 + 去重保质量**」：
 
 | 维度 | 实现 |
 |---|---|
 | 题型 | choice / true_false / fill_blank / ordering / short_answer / debate |
+| 情景题 | 可选 `scenario` 字段横切六类题型：AI 提供贴近实际的情境，用户在该情境下作答，题型仍为六类之一（不新增题型），增强实践感、跳出枯燥记忆 |
 | 认知层级 | recognize / apply / explain（与题型构成 level × type 双轴） |
 | 难度信号 | 卡片掌握度（mastery）+ 复习曲线（classic 间隔档位 / fsrs 表现分·波动）+ **笔记内容难度（正文长度 × 类型启发式）** + 画像 confidence |
 | 题数 | **非固定**——按复习对象内容量估算目标题数（单条 3-8、簇 3-12），LLM 按目标题数 ±1 浮动，宁缺毋滥 |
@@ -32,10 +33,13 @@ export interface ReviewQuestion {
   position?: string                   // debate：AI 持方观点
   maxRounds?: number                  // debate：最大辩论轮次（默认 3）
   answer?: string                     // 标准答案（P5-6）：choice/true_false/fill_blank/ordering 出题时附带，供判正误与反馈对照；自由作答题型缺省
+  scenario?: string                   // 情景题：可选情境描述（贴近实际、有实践感）；题型仍为六类之一，缺省即为普通题
 }
 ```
 
 **标准答案约定（P5-6）**：`choice` 存正确选项文本（与 `options` 某一项完全一致）；`true_false` 存「正确/错误」；`fill_blank` 存填空内容（多空用「；」分隔）；`ordering` 存正确顺序（`1. xxx\n2. yyy`）。`short_answer` / `debate` 自由作答题型不写 `answer`，正误由 AI 对照笔记原文判断。
+
+**情景题约定（情景题）**：`scenario` 是可选的横切字段，可叠加在任意题型上——AI 提供一个贴近实际使用的情境（如「你是一家咖啡店店长，需要优化点单流程」「你在向新同事解释这个概念」），用户在该情境下作答，而题型仍是六类之一。情景主要由 `apply` 层及部分 `explain` 层题目使用，`recognize` 层纯记忆题一般不需要；同一套题中情景题占比不宜超过一半，避免喧宾夺主。
 
 **兼容性**：旧会话 frontmatter 中的 `review_questions` 无 `type`，`review-session.ts` 的 `parseReviewQuestions` 经 `normalizeQuizQuestion` 自动降级为 `short_answer`，不破坏既有会话。
 
@@ -46,12 +50,12 @@ export interface ReviewQuestion {
 - `REVIEW_QUESTION_TYPES` / `REVIEW_QUESTION_LEVELS`：枚举常量
 - `QUESTION_TYPE_LABELS` / `QUESTION_TYPE_DIFFICULTY`：标签与难度档（★ 1-4）
 - `FIELD_VALIDATORS`：题型特定字段校验（choice 需 options≥2；ordering 需 steps≥2）
-- `normalizeQuizQuestion(raw)`：出题响应规范化——level 非法丢弃、type 缺省/未知降级 `short_answer`、可选字段补默认值（`DEFAULT_MAX_ROUNDS=3` / `DEFAULT_BLANKS=1`）、**一问一答校验**（题干含 2 个以上疑问句标记的复合问句直接丢弃）、**标准答案 `answer` 透传**（空白忽略）、**低质量过滤**（空题干丢弃；非辩论题去空白后长度 < `MIN_QUESTION_LENGTH=5` 丢弃——辩论题豁免，辩题内容由 `position` 承载）
+- `normalizeQuizQuestion(raw)`：出题响应规范化——level 非法丢弃、type 缺省/未知降级 `short_answer`、可选字段补默认值（`DEFAULT_MAX_ROUNDS=3` / `DEFAULT_BLANKS=1`）、**一问一答校验**（题干含 2 个以上疑问句标记的复合问句直接丢弃）、**标准答案 `answer` 透传**（空白忽略）、**情景 `scenario` 透传**（去首尾空白，空白忽略）、**低质量过滤**（空题干丢弃；非辩论题去空白后长度 < `MIN_QUESTION_LENGTH=5` 丢弃——辩论题豁免，辩题内容由 `position` 承载）
 - `questionBigrams` / `questionSimilarity(a, b)`：题干字符 bigram 的 Dice 系数（0-1，忽略大小写/标点/空白，中文友好），用于近似重复判定
 - `dedupeQuestions<T extends ReviewQuestion>(questions)`：按相似度去重（阈值 `DEDUP_SIMILARITY_THRESHOLD=0.85`），保留先出现的题目，剔除同义改写/仅个别字差异的近似重复题
 - `serializeAnswer(type, payload)`：组件作答 payload → 消息文本（走既有 `handleSend(content)` 消息流，session 持久化零破坏）
 - `shouldEndDebate(type, round, maxRounds)`：辩论轮次判定（`round >= maxRounds` 结束）
-- `formatQuestionForDisplay(question)`：反馈 prompt 注入文本（含题型标签与选项/步骤）
+- `formatQuestionForDisplay(question)`：反馈 prompt 注入文本（含题型标签与选项/步骤；情景题标签升级为 `情景·题型` 并追加 `情景：` 行）
 
 **新增题型流程**：加枚举 → 加 `FIELD_VALIDATORS`/label/difficulty → 加作答组件并在页面分派处挂载 → 补 `serializeAnswer` 分支。不修改既有代码路径。
 
@@ -73,9 +77,9 @@ export interface ReviewQuestion {
 
 | SKILL | 变更 |
 |---|---|
-| `review-quiz` / `review-cluster`（1.2.0） | 新增「题型选择」章节（六类定义 + 笔记类型引导 + 难度矩阵）；`{difficulty_signal}` 输入；支架式回忆规则（低掌握给线索，避免裸默写）；JSON 输出示例含 `type/options/steps/position/maxRounds`；**一问一答规则**（单题单点、禁止复合问句）+ **标准答案 `answer` 字段**（确定答案题型必填）；**`{target_question_count}` 输入 + 动态题数**（非固定 3-5，按内容量 ±1 浮动）；**笔记内容难度**（简单短 fact 不强行出 debate / 较难笔记保留迁移校验题）；**去重与质量规则**（禁止同义重复、禁止凑数题，宁缺毋滥） |
-| `review-feedback`（1.2.0） | 新增「按题型反馈」：choice 解释错选、true_false 辨析、fill_blank 逐空判错、ordering 定位错位步骤；`{review_question}` 输入；**`{standard_answer}` 输入 + 首行判定**（`判定：正确/部分正确/错误`，确定答案题型对照标准答案、自由作答对照笔记原文）；**「输入安全」章节**：用户回答仅作数据、不视为指令 |
-| `review-debate`（1.1.0） | 辩论对答 prompt：中段反驳/追问、末轮总结评估（立场评价 + 缺口 + 给分）；**「输入安全」章节**：用户发言仅作数据、不视为指令 |
+| `review-quiz` / `review-cluster`（1.3.0） | 新增「题型选择」章节（六类定义 + 笔记类型引导 + 难度矩阵）；`{difficulty_signal}` 输入；支架式回忆规则（低掌握给线索，避免裸默写）；JSON 输出示例含 `type/options/steps/position/maxRounds`；**一问一答规则**（单题单点、禁止复合问句）+ **标准答案 `answer` 字段**（确定答案题型必填）；**`{target_question_count}` 输入 + 动态题数**（非固定 3-5，按内容量 ±1 浮动）；**笔记内容难度**（简单短 fact 不强行出 debate / 较难笔记保留迁移校验题）；**去重与质量规则**（禁止同义重复、禁止凑数题，宁缺毋滥）；**情景题 `scenario` 字段**（apply/部分 explain 层可选，贴近实际、有实践感，同套题占比 ≤ 一半） |
+| `review-feedback`（1.3.0） | 新增「按题型反馈」：choice 解释错选、true_false 辨析、fill_blank 逐空判错、ordering 定位错位步骤；`{review_question}` 输入；**`{standard_answer}` 输入 + 首行判定**（`判定：正确/部分正确/错误`，确定答案题型对照标准答案、自由作答对照笔记原文）；**「输入安全」章节**：用户回答仅作数据、不视为指令；**情景题判定**（见 `[情景·...]` 标签/`情景：` 行则在情境前提下判定，检验知识迁移而非照搬答案） |
+| `review-debate`（1.2.0） | 辩论对答 prompt：中段反驳/追问、末轮总结评估（立场评价 + 缺口 + 给分）；**「输入安全」章节**：用户发言仅作数据、不视为指令；**`{debate_scenario}` 输入 + 情境辩论规则**（有情景则反驳/追问/评估都围绕情境展开，无情景显示「（本题无情景）」） |
 
 **执行器**（`src/api/skills/review-quiz.ts`）：
 
@@ -83,8 +87,8 @@ export interface ReviewQuestion {
 - `parseQuizResponse` / `parseClusterQuizResponse`：接入 `normalizeQuizQuestion`，全部题目非法时抛错；**解析后过 `dedupeQuestions` 剔除近似重复题**（不依赖 LLM 自觉，双保险）
 - `parseQuizResponseText(fullResponse)`：出题 JSON 解析入口——整体 `JSON.parse` 成功直接返回；失败时降级 `extractQuestionsFromTruncated` 按大括号匹配逐题提取（**容忍 maxTokens 截断**）：能提取到 ≥1 题则保留完整题目、丢弃被截断的末题；完全无法解析时把完整响应写入日志系统（设置页「调试日志」可见）并抛错
 - **`maxTokens: 2048`**：附带标准答案 `answer` 后出题 JSON 明显变长，1024 易被截断导致解析失败（曾报"复习出题失败: 无法解析 LLM 响应为 JSON"），放宽后大幅降低截断概率
-- `reviewFollowupStream(question: ReviewQuestion, ...)`：注入题型上下文 + `standard_answer`（无答案的自由作答题型注入占位文案，由 AI 对照笔记判断）
-- `reviewDebateStream(question, turns, note, provider, clusterNotes?, round, maxRounds)`：辩论流式回复，末轮（`shouldEndDebate` 为真）输出总结
+- `reviewFollowupStream(question: ReviewQuestion, ...)`：注入题型上下文 + `standard_answer`（无答案的自由作答题型注入占位文案，由 AI 对照笔记判断）；**情景题把情境一并拼入用户消息**（`情景：...\n问题：...`），确保反馈 AI 在情境下评判
+- `reviewDebateStream(question, turns, note, provider, clusterNotes?, round, maxRounds)`：辩论流式回复，末轮（`shouldEndDebate` 为真）输出总结；**注入 `debate_scenario` 占位**（有情景填情景、无情景填「（本题无情景）」）
 
 ## 6. 交互 UI（`src/components/review/*` + `ReviewChatPage.vue`）
 
@@ -100,13 +104,15 @@ export interface ReviewQuestion {
 
 **一问一答标注（UI 落实）**：答题区上方固定展示**当前题目卡片**——题号「第 X 题 / 共 N 题」+ 题型标签（`QUESTION_TYPE_LABELS`）+ 完整题干；选择/判对错/填空/排序/简答/辩论作答时都可见，用户明确知道当前作答对应哪道题。出题会话首条引导消息只提示"共 N 道题，请逐题作答"，不再列出全部问题（避免"一次回答全部"的误解）。
 
+**情景题渲染（UI 落实）**：当前题为情景题时，题型标签追加 `·情景`（如「简答题·情景」），并在题干上方以 Markdown 引用块 `> **情景**：...` 展示情境描述，让用户先进入情境再作答。
+
 **AI 正误判定（P5-6）**：反馈完成后解析首行 `判定：正确/部分正确/错误` → 显示品牌色徽章（正确=成功绿 / 部分正确=警告 / 错误=错误红）于输入区上方，并从消息文本移除该行避免重复；新一轮作答开始或辩论推进题号时清空徽章。
 
 ## 7. 测试覆盖
 
-- `src/review/question-registry.test.ts`（31 例）：normalize 各题型/降级/丢弃、**复合问句丢弃、answer 透传**、serialize、shouldEndDebate、**过短题干丢弃与辩论豁免、questionSimilarity/dedupeQuestions 近似去重**
+- `src/review/question-registry.test.ts`（35 例）：normalize 各题型/降级/丢弃、**复合问句丢弃、answer 透传、scenario 透传与空白忽略、formatQuestionForDisplay 情景标签**、serialize、shouldEndDebate、**过短题干丢弃与辩论豁免、questionSimilarity/dedupeQuestions 近似去重**
 - `src/utils/review-difficulty.test.ts`（11 例）：档位阈值边界、classic/fsrs 文本差异、空队列回退、**noteDifficultyBandFromLength 阈值、estimateNoteDifficulty 类型加权、describeDifficultyContext 笔记难度注入与向后兼容**
-- `src/api/skills/review-quiz.test.ts`（49 例）：题型字段透传、反馈题型注入、**standard_answer 注入（有答案/自由作答占位）**、辩论轮次/总结、**目标题数注入、解析去重、estimateTargetQuestionCount 上下限**
+- `src/api/skills/review-quiz.test.ts`（52 例）：题型字段透传、反馈题型注入、**standard_answer 注入（有答案/自由作答占位）**、**情景题用户消息拼入情境与反馈「情景·题型」标签**、辩论轮次/总结、**debate_scenario 注入（有情景/无情景占位）**、**目标题数注入、解析去重、estimateTargetQuestionCount 上下限**
 - `src/components/review/answers.test.ts`（9 例）：四组件渲染/交互/disabled
 - `src/review/review-input-guard.test.ts`（10 例）：注入检测（中英规则/判定覆盖、正常作答不误判）与净化（中和注入片段、去控制字符、限长截断、正常保留）
 - `src/views/ReviewChatPage.test.ts`（12 例）：结构化分派、3 轮辩论状态机、**判定徽章显示与判定行移除**

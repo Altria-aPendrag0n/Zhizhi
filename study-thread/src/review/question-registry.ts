@@ -141,6 +141,8 @@ export function normalizeQuizQuestion(raw: unknown): ReviewQuestion | null {
   }
   // 标准答案透传（确定答案题型由出题时附带；自由作答题型缺省）
   if (typeof q.answer === 'string' && q.answer.trim()) base.answer = q.answer.trim()
+  // 情景透传（情景题：AI 提供情境、用户在该情境下作答，题型仍为六类之一）
+  if (typeof q.scenario === 'string' && q.scenario.trim()) base.scenario = q.scenario.trim()
   return base
 }
 
@@ -181,8 +183,13 @@ export function serializeAnswer(type: ReviewQuestionType, payload: unknown): str
  * 供 review-feedback 按题型分派反馈策略。
  */
 export function formatQuestionForDisplay(question: ReviewQuestion): string {
-  const label = QUESTION_TYPE_LABELS[question.type]
+  const label = question.scenario
+    ? `情景·${QUESTION_TYPE_LABELS[question.type]}`
+    : QUESTION_TYPE_LABELS[question.type]
   let text = `[${label}] ${question.question}`
+  if (question.scenario) {
+    text += `\n情景：${question.scenario}`
+  }
   if (question.type === 'choice' && question.options) {
     text += `\n选项：${question.options.map((o, i) => `${OPTION_LETTERS[i]}. ${o}`).join('　')}`
   }
