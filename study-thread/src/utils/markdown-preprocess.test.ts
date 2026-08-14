@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { marked } from 'marked'
-import { preprocessMarkdownForRendering } from './markdown-preprocess'
+import { preprocessMarkdownForRendering, wrapDiagramBlocks } from './markdown-preprocess'
 
 /** 以与 ChatMessage 相同的方式渲染（breaks + gfm） */
 function render(md: string): string {
@@ -49,5 +49,42 @@ describe('preprocessMarkdownForRendering', () => {
   it('多个加粗含引号片段全部处理', () => {
     expect(preprocessMarkdownForRendering('**"甲"**与**"乙"**相邻'))
       .toBe('"**甲**"与"**乙**"相邻')
+  })
+})
+
+describe('wrapDiagramBlocks（框线字符画流程图）', () => {
+  it('把框线流程图段落包裹为 text 代码块', () => {
+    const md = '开始\n  │\n  ▼\n┌──────┐\n│ 是否 │\n└──────┘'
+    expect(wrapDiagramBlocks(md)).toBe('```text\n' + md + '\n```')
+  })
+
+  it('只有单个箭头的普通句子不被包裹', () => {
+    expect(wrapDiagramBlocks('用 → 表示映射关系')).toBe('用 → 表示映射关系')
+  })
+
+  it('两个相邻段落只有流程图段落被包裹，普通段落保留', () => {
+    const md = '以下是一个流程：\n\n开始\n  │\n  ▼\n结束\n\n这样走。'
+    expect(wrapDiagramBlocks(md))
+      .toBe('以下是一个流程：\n\n```text\n开始\n  │\n  ▼\n结束\n```\n\n这样走。')
+  })
+
+  it('渲染后框线字符保留且进入等宽代码块', () => {
+    const html = render('开始\n  │\n  ▼\n┌──────┐\n│ 是否 │\n└──────┘')
+    expect(html).toContain('<pre><code class="language-text">')
+    expect(html).toContain('┌')
+    expect(html).toContain('│ 是否 │')
+  })
+
+  it('已有围栏代码块中的框线字符不被二次包裹', () => {
+    const md = '```text\n┌──┐\n│a│\n└──┘\n```'
+    const html = render(md)
+    expect((html.match(/<pre>/g) || []).length).toBe(1)
+    expect(html).toContain('┌')
+  })
+
+  it('Markdown 表格不被误判为流程图', () => {
+    const html = render('| 列1 | 列2 |\n|---|---|\n| a | b |')
+    expect(html).toContain('<table>')
+    expect(html).not.toContain('<pre>')
   })
 })
