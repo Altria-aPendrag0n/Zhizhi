@@ -41,6 +41,7 @@ import type { Message } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
 import { wrapHighlightInDOM, unwrapHighlight, isTableHighlight, wrapTableInDOM } from '../../utils/highlight-dom'
 import { preprocessMarkdownForRendering } from '../../utils/markdown-preprocess'
+import { renderMermaidBlocks } from '../../utils/mermaid-render'
 import ThinkingBlock from './ThinkingBlock.vue'
 
 const props = defineProps<{
@@ -100,11 +101,18 @@ function applyMarkLinks() {
   }
 }
 
-// v-html 更新后（nextTick）在 DOM 上应用划线标记。
+// v-html 更新后（nextTick）先渲染 mermaid 代码块，再在 DOM 上应用划线标记。
 // onMounted 兜底保证首次挂载后一定执行（此时 bodyRef 与 v-html 内容均已就绪）；
 // watch 处理内容或划线引用后续变化。applyMarkLinks 内部对 bodyRef 空值做了守卫，幂等。
+async function applyPostRenderEffects() {
+  const body = bodyRef.value
+  if (!body) return
+  await renderMermaidBlocks(body)
+  applyMarkLinks()
+}
+
 function scheduleApplyMarkLinks() {
-  nextTick().then(applyMarkLinks)
+  nextTick().then(applyPostRenderEffects)
 }
 
 onMounted(scheduleApplyMarkLinks)
@@ -391,6 +399,23 @@ function handleBodyClick(event: MouseEvent) {
 .chat-message__body :deep(pre code) {
   background: transparent;
   padding: 0;
+}
+
+/* mermaid 渲染后的 SVG 容器：白底独立卡片，超宽时横向滚动 */
+.chat-message__body :deep(.zhizhi-mermaid) {
+  margin: 18px 0;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+}
+
+.chat-message__body :deep(.zhizhi-mermaid svg) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
 .chat-message__source {

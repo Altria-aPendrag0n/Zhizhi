@@ -1,8 +1,16 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import mermaid from 'mermaid'
 import ChatMessage from './ChatMessage.vue'
 import type { Message } from '../../types'
+
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(),
+  },
+}))
 
 describe('ChatMessage', () => {
   it('渲染用户消息', () => {
@@ -58,6 +66,16 @@ describe('ChatMessage', () => {
     const wrapper = mount(ChatMessage, { props: { message } })
     expect(wrapper.html()).toContain('language-js')
     expect(wrapper.html()).toContain('console.log')
+  })
+
+  it('渲染 mermaid 代码块为 SVG 流程图', async () => {
+    vi.mocked(mermaid.render).mockResolvedValue({ svg: '<svg class="mermaid-svg"></svg>', diagramType: 'flowchart' })
+    const message: Message = { role: 'assistant', content: '```mermaid\ngraph TD\nA-->B\n```' }
+    const wrapper = mount(ChatMessage, { props: { message } })
+    await flushPromises()
+    expect(wrapper.find('.zhizhi-mermaid').exists()).toBe(true)
+    expect(wrapper.find('.zhizhi-mermaid svg').exists()).toBe(true)
+    expect(wrapper.find('pre code.language-mermaid').exists()).toBe(false)
   })
 
   it('用户消息显示头像', () => {
