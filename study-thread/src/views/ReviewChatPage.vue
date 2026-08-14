@@ -224,6 +224,7 @@ import { useToast } from '../composables/useToast'
 import { createProvider } from '../api/provider-factory'
 import { reviewFollowupStream, reviewDebateStream } from '../api/skills/review-quiz'
 import { DEFAULT_MAX_ROUNDS, OPTION_LETTERS, QUESTION_TYPE_LABELS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
+import { detectPromptInjection } from '../review/review-input-guard'
 import { extractNote } from '../api/skills/extract-note'
 import { loadReviewSession, getReviewSessionFilePath } from '../utils/review-session'
 import { parseMentionedNotes } from '../utils/review-gap'
@@ -389,6 +390,10 @@ async function persist(): Promise<string | null> {
 }
 
 async function handleSend(content: string) {
+  if (detectPromptInjection(content)) {
+    toast.error('检测到疑似提示词注入，已拦截')
+    return
+  }
   if (!session.value || !note.value) return
   const config = settingsStore.getProviderConfig()
   if (!config.apiKey) {
