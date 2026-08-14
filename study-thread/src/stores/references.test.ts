@@ -358,4 +358,26 @@ describe('references store', () => {
     expect(chunks[1].pageFrom).toBe(1)
     expect(chunks[1].pageTo).toBe(1)
   })
+
+  it('超大 md 上传后按章节分块建立多向量索引', async () => {
+    const store = useReferenceStore()
+    const markdown = ['# 第一章', '甲'.repeat(3000), '# 第二章', '乙'.repeat(3000)].join('\n')
+    vaultFs.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith('.md')) return markdown
+      return ''
+    })
+
+    const meta = await store.uploadReference('/vault', createMockFile('大文档.md', markdown))
+
+    expect(updateChunks).toHaveBeenCalledTimes(1)
+    const [metaPath, chunks] = updateChunks.mock.calls[0] as [string, Array<Record<string, unknown>>]
+    expect(metaPath).toBe(meta!.path)
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0].chunkTitle).toBe('第一章')
+    expect(chunks[0].pageFrom).toBeUndefined()
+    expect(chunks[0].pageTo).toBeUndefined()
+    expect(chunks[1].chunkTitle).toBe('第二章')
+    expect(chunks[1].pageFrom).toBeUndefined()
+    expect(chunks[1].pageTo).toBeUndefined()
+  })
 })

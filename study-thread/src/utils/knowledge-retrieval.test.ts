@@ -372,6 +372,41 @@ describe('knowledge-retrieval', () => {
     expect(text).toContain('offset: 2, limit: 2')
   })
 
+  it('md 分块命中时回填章节标题并注入对应块正文', async () => {
+    indexer.getAllEntries.mockReturnValue([
+      { path: '/vault/references/ref-1.json', vector: [0.9, 0.1], indexedAt: 0, chunkIndex: 1, chunkTitle: '第二章' },
+    ])
+    readFile.mockImplementation(async (p: string) => {
+      if (p === '/vault/references/ref-1.json') {
+        return referenceMetaJson({ id: 'ref-1', title: '参考一', fileType: 'md', filePath: '/vault/references/ref-1.md' })
+      }
+      if (p === '/vault/references/ref-1.md') {
+        return ['# 第一章', '第一章内容', '# 第二章', '第二章内容'].join('\n')
+      }
+      return ''
+    })
+
+    const result = await retrieveKnowledge('测试')
+
+    expect(result[0].sectionTitle).toBe('第二章')
+    expect(result[0].pageFrom).toBeUndefined()
+    expect(result[0].pageTo).toBeUndefined()
+    expect(result[0].preview).toContain('第二章内容')
+    expect(result[0].preview).not.toContain('第一章内容')
+  })
+
+  it('buildKnowledgeContext md 分块命中时提示章节（无页码）', () => {
+    const hits = [
+      { kind: 'reference' as const, path: '/vault/references/ref-1.json', title: '参考B', snippet: '摘要', sectionTitle: '第二章' },
+    ]
+
+    const text = buildKnowledgeContext(hits)
+
+    expect(text).toContain('该内容来自章节「第二章」')
+    expect(text).toContain('read_reference({ reference_id: "/vault/references/ref-1.json" })')
+    expect(text).not.toContain('offset')
+  })
+
   it('任一命中读取失败时跳过该命中', async () => {
     indexer.getAllEntries.mockReturnValue([
       { path: '/vault/notes/ok.md', vector: [0.9, 0.1], indexedAt: 0 },

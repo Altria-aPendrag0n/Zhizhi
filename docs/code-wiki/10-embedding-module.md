@@ -58,7 +58,7 @@ env.backends.onnx.wasm.wasmPaths = '/models/ort/'
 ```ts
 interface IndexEntry {
   path: string        // 笔记路径 / 参考资料 meta JSON 路径
-  chunkIndex?: number // 分块序号；缺失表示单块（笔记 / md / 小 pdf）
+  chunkIndex?: number // 分块序号；缺失表示单块（笔记 / 小 md / 小 pdf）
   chunkTitle?: string // 章节标题（分块命中时展示，供模型定位）
   pageFrom?: number   // 块覆盖起始页（pdf 分块；0 起）
   pageTo?: number     // 块覆盖结束页（pdf 分块；0 起）
@@ -80,7 +80,7 @@ Map 键规则：单块为 `path`，分块为 `${path}#${chunkIndex}`（`entryKey
 | `saveToStorage()` | 写回 localStorage |
 | `buildIndex(notes, getNoteContent, onProgress?)` | 全量构建：**已索引且 `updated <= indexedAt` 跳过**（无效日期按 +∞ 保守重索引）；索引文本 = `title + proposition + content.slice(0,500)` |
 | `updateNote(path, content)` | 单篇增量更新（单块）；先清除该路径下所有旧分块再写入 |
-| `updateChunks(path, chunks)` | 大 pdf 分块索引：逐块嵌入，写入 `chunkIndex/chunkTitle/pageFrom/pageTo`；先嵌入全部再覆盖旧条目（避免中途失败丢旧索引） |
+| `updateChunks(path, chunks)` | 大 pdf / 超大 md 分块索引：逐块嵌入，写入 `chunkIndex/chunkTitle/pageFrom/pageTo`（md 无页字段）；先嵌入全部再覆盖旧条目（避免中途失败丢旧索引） |
 | `removeNote(path)` | 删除该路径的所有条目（单块 + 分块） |
 | `getVector(path)` / `getAllEntries()` / `size` / `clear()` | 查询与维护 |
 
@@ -129,9 +129,9 @@ interface KnowledgeHit {
   fullText?: string    // includeFullText 模式的完整正文
   truncated?: boolean
   pageCount?: number   // pdf 总页数（命中 pdf 时）
-  sectionTitle?: string // 命中章节标题（大 pdf 分块命中）
-  pageFrom?: number    // 命中块覆盖起始页（0 起；大 pdf 分块命中）
-  pageTo?: number      // 命中块覆盖结束页（0 起；大 pdf 分块命中）
+  sectionTitle?: string // 命中章节标题（分块命中）
+  pageFrom?: number    // 命中块覆盖起始页（0 起；pdf 分块命中）
+  pageTo?: number      // 命中块覆盖结束页（0 起；pdf 分块命中）
 }
 
 retrieveKnowledge(query, topK = 4, options?: { includeFullText? }): Promise<KnowledgeHit[]>
@@ -145,10 +145,10 @@ retrieveKnowledgeContext(query, topK = 4): Promise<string>  // 一步到位，�
 2. 全部条目算余弦相似度 → 降序取 Top-K（**保留 IndexEntry 引用**，供分块命中回填位置）。
 3. 逐条组装 hit：
    - 参考资料（`.json` 路径）：`parseReferenceMeta` → 摘要；md 类型额外注入正文预览或全文；pdf 命中附带 `pageCount`。
-   - **分块命中**（`entry.chunkIndex !== undefined`）：回填 `sectionTitle/pageFrom/pageTo`，且预览/全文改为该块覆盖页区间的正文（`splitPdfPages` 按物理页切分后切片）。
+   - **分块命中**（`entry.chunkIndex !== undefined`）：回填 `sectionTitle/pageFrom/pageTo`，且预览/全文改为该块的正文——pdf 按页区间切片（`splitPdfPages` 按物理页切分），md 按 `chunkIndex` 重跑 `chunkMdByChapters` 取对应章节块。
    - 笔记：`parseFrontmatter` → 标题 + 正文预览。
 4. 全文/预览按相似度优先级消耗预算，超限截断并标记 `truncated`。
-5. `buildKnowledgeContext` 生成注入片段：每条标注 `[笔记]` / `[参考资料]` 前缀；参考资料附 `read_reference` 提示——普通命中提示按页读取全文，分块命中提示「该内容来自「章节」第 X-Y 页」并给出对应 `offset/limit`。
+5. `buildKnowledgeContext` 生成注入片段：每条标注 `[笔记]` / `[参考资料]` 前缀；参考资料附 `read_reference` 提示——普通命中提示按页读取全文；pdf 分块命中提示「该内容来自「章节」第 X-Y 页」并给出对应 `offset/limit`；md 分块命中提示「该内容来自章节「标题」」并引导读取全文。
 
 ### 5.4 设计要点
 

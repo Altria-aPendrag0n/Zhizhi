@@ -16,6 +16,7 @@ import { readFile } from './vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import { parseReferenceMeta } from './reference-serializer'
 import { splitPdfPages } from '../api/tools/read-reference'
+import { chunkMdByChapters } from './md-chunk'
 
 /** 单条命中正文注入的最大字符数（防止上下文超限） */
 export const MAX_FULL_TEXT_LENGTH = 30000
@@ -126,14 +127,17 @@ export async function retrieveKnowledge(
           if (meta.fileType === 'md' || (meta.fileType === 'pdf' && meta.extractedPath)) {
             const sourcePath = meta.fileType === 'md' ? meta.filePath : meta.extractedPath!
             const content = (await readFile(sourcePath)).trim()
-            // 分块命中时注入该块覆盖页区间的正文（而非整篇），使预览与位置提示一致
+            // 分块命中时注入该块的正文（而非整篇），使预览与位置提示一致：
+            // pdf 按页区间切片，md 按 chunkIndex 重跑章节切分取对应块
             const effective =
               meta.fileType === 'pdf' && entry.chunkIndex !== undefined
                 ? splitPdfPages(content)
                     .slice(entry.pageFrom ?? 0, (entry.pageTo ?? 0) + 1)
                     .filter(Boolean)
                     .join('\n\n')
-                : content
+                : meta.fileType === 'md' && entry.chunkIndex !== undefined
+                  ? chunkMdByChapters(content)[entry.chunkIndex]?.text ?? content
+                  : content
             if (includeFullText) {
               hit.fullText = effective
             } else {
@@ -203,6 +207,9 @@ function referenceToolHint(hit: KnowledgeHit): string {
     const pageLabel = `第 ${hit.pageFrom + 1}-${hit.pageTo + 1} 页`
     const limit = hit.pageTo - hit.pageFrom + 1
     return `\n> 该内容来自${section}${pageLabel}，完整 PDF 共 ${hit.pageCount ?? '?'} 页。可用工具 read_reference 读取对应内容：read_reference({ reference_id: "${hit.path}", offset: ${hit.pageFrom}, limit: ${limit} })`
+  }
+  if (hit.sectionTitle) {
+    return `\n> 该内容来自章节「${hit.sectionTitle}」，完整全文可通过工具 read_reference 读取：read_reference({ reference_id: "${hit.path}" })`
   }
   if (hit.pageCount) {
     return `\n> 该 PDF 共 ${hit.pageCount} 页，完整内容可通过工具 read_reference 按页读取：read_reference({ reference_id: "${hit.path}", offset: 0, limit: 1 })`

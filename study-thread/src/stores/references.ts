@@ -17,6 +17,7 @@ import {
 } from '../utils/reference-serializer'
 import { getNoteIndexer } from '../embedding/indexer'
 import { chunkPdfByChapters, PDF_CHUNK_MIN_CHARS } from '../utils/pdf-chunk'
+import { chunkMdByChapters, MD_CHUNK_MIN_CHARS } from '../utils/md-chunk'
 
 function sortReferences(references: ReferenceMeta[]): ReferenceMeta[] {
   return [...references].sort((a, b) => b.updated.localeCompare(a.updated))
@@ -177,6 +178,27 @@ export const useReferenceStore = defineStore('references', () => {
                 chunkTitle: chunk.title || meta.title,
                 pageFrom: chunk.pageFrom,
                 pageTo: chunk.pageTo,
+              })),
+            )
+            return
+          }
+        }
+      } else if (meta.fileType === 'md') {
+        // 超大 md 按章节分块多向量索引（无标题按预算切分），小 md 单块索引
+        let markdown = ''
+        try {
+          markdown = await readFile(meta.filePath)
+        } catch {
+          markdown = ''
+        }
+        if (markdown.length > MD_CHUNK_MIN_CHARS) {
+          const chunks = chunkMdByChapters(markdown)
+          if (chunks.length > 1) {
+            await getNoteIndexer().updateChunks(
+              meta.path,
+              chunks.map((chunk) => ({
+                text: chunk.text,
+                chunkTitle: chunk.title || meta.title,
               })),
             )
             return

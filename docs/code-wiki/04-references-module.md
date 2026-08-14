@@ -8,8 +8,8 @@
 ## 1. 模块职责
 
 - 管理 `<vault>/references/` 目录下的参考资料，每个参考资料一个**自包含文件夹**（原始文件 + 元数据 JSON + pdf 提取产物）。
-- 支持三种类型：`md`（可全文检索/工具读取）、`pdf`（上传后后台解析为 Markdown，可检索/按页读取/按章节分块索引）、`png`（图片预览）。
-- 上传/编辑/解析后**尽力而为地同步向量索引**（md 全文嵌入，小 pdf 用提取正文单块嵌入，大 pdf 按章节分块多向量），供 RAG 检索与 `read_reference` 工具使用（见 [08]/[10] 模块）。
+- 支持三种类型：`md`（可全文检索/工具读取，超大 md 按章节分块检索）、`pdf`（上传后后台解析为 Markdown，可检索/按页读取/按章节分块索引）、`png`（图片预览）。
+- 上传/编辑/解析后**尽力而为地同步向量索引**（小 md/小 pdf 全文单块嵌入，超大 md 与大 pdf 按章节分块多向量），供 RAG 检索与 `read_reference` 工具使用（见 [08]/[10] 模块）。
 
 ## 2. 数据模型（`src/types/index.ts`）
 
@@ -85,7 +85,7 @@ interface Reference extends ReferenceMeta {
 辅助函数：
 - `toReferenceTitle(fileName)`：去掉扩展名的清理文件名作为标题。
 - `buildIndexText(meta)`：`title + description + tags + md 正文`（或小 pdf 的提取正文）。
-- `refreshIndex(meta)`：小 pdf/md 单块 `updateNote`；**大 pdf（`extractedChars > PDF_CHUNK_MIN_CHARS`）按章节 `chunkPdfByChapters` 分块后 `updateChunks` 多向量索引**（无标题退化按页）。
+- `refreshIndex(meta)`：小 pdf/md 单块 `updateNote`；**大 pdf（`extractedChars > PDF_CHUNK_MIN_CHARS`）按章节 `chunkPdfByChapters` 分块后 `updateChunks` 多向量索引**（无标题退化按页）；**超大 md（字符数 > `MD_CHUNK_MIN_CHARS`）按 H1/H2 章节 `chunkMdByChapters` 分块后 `updateChunks` 多向量索引**（无标题按预算逐行切分）。
 - `bytesToBase64(bytes)`：分块（0x8000）拼接避免大数组栈溢出。
 
 > 注意：上传/编辑/解析后的索引同步是**尽力而为**（try/catch 静默），失败不影响文件操作本身。
@@ -131,6 +131,7 @@ LLM 侧：knowledge-retrieval 检索命中（pdf 块带章节/页码）→ read_
 - `src/stores/references.test.ts`
 - `src/utils/reference-serializer.test.ts`
 - `src/utils/pdf-chunk.test.ts`
+- `src/utils/md-chunk.test.ts`
 - `src/components/references/ReferenceCard.test.ts`、`ReferenceEditDialog.test.ts`、`ReferenceList.test.ts`
 - `src/api/tools/read-reference.test.ts`（跨模块工具测试）
 
