@@ -43,7 +43,7 @@ interface Note {
   - **进入资料库的跳转路径**：点击 rail「资料库」（`App.vue handleProjectSelect('2')`）只会 `push({ path: '/notes' })` 一次，源码路由表无任何旧资料库路由。若运行的是**过期构建产物**（`dist/` 未重新 build，例如 `tauri build`/`npm run preview` 跑的是旧 `dist`），打包的是旧版 NotesPage，会在未打开 vault 时显示"请先打开 Vault"死胡同页——这是构建产物不同步导致的，源码改动后需重新 `npm run build`（`tauri build` 的 `beforeBuildCommand` 会自动执行）。
   - 删除笔记/参考资料均先 `window.confirm` 再调 store。
   - 参考资料上传走隐藏 file input → `referenceStore.uploadReference`。
-  - **复习会话 tab**：`ReviewSessionList` 展示 `listReviewSessions` 返回的复习会话列表（标题/被复习笔记/题目数/完成状态/时间，按创建倒序），点击条目跳转 `/review/:id` 回看错题与反馈（完成复习后会话保留，见 [14-review-module.md](./14-review-module.md)）。
+  - **复习会话 tab**：`ReviewSessionList` 展示 `listReviewSessions` 返回的复习会话列表（标题/被复习笔记/题目数/完成状态/时间，按创建倒序），点击条目跳转 `/review/:id` 回看错题与反馈（完成复习后会话保留，见 [14-review-module.md](./14-review-module.md)）。列表顶部提供**关键词搜索**（匹配标题与被复习笔记路径，忽略大小写）与**按指定日期筛选**（`type="date"` 输入框，仅显示该本地日期创建的会话），二者可叠加；有筛选条件时显示「清除」按钮，无匹配时展示"没有匹配的复习会话"空态。
 
 ### 3.2 `NoteDetailPage.vue`（路由 `/notes/:id`）— 笔记详情
 
