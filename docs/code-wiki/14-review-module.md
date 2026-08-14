@@ -176,6 +176,8 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 
 - `generateReviewQuestions`：基于笔记 + 关联笔记 + 画像生成递进问题（recognize/apply/explain），**题数非固定——按笔记内容量估算目标题数（3-8）并注入 prompt**，题型选择兼顾卡片掌握度与笔记内容难度，解析后按题干相似度去重并过滤低质量题（详见 [15 复习出题形式](./15-review-question-types.md)）。
 - `reviewFollowupStream`：对作答做费曼式反馈（对照笔记原文指出缺口）。
+- `reviewDebateStream`：辩论题型多轮往复流式执行器（见 [15 复习出题形式](./15-review-question-types.md)）。
+- `reviewFreeformStream`：**继续提问（自由追问）**——所有复习题答完后用户围绕笔记继续追问的流式执行器；注入当前笔记（或簇内笔记）作为作答依据，不推进题号、不做正误判定，仅生成贴合笔记的延伸回答（`src/api/skills/review-quiz.ts`）。
 
 ### 9.2 复习会话模型与上下文装载（`src/utils/review-session.ts`）
 
@@ -190,7 +192,7 @@ noteStore.loadNote ──► 合并 Note.review 镜像
   - `findIncompleteReviewSession(vaultPath, notePath)`：遍历 `sessions/` 下 `review-*.md`，按 `reviewed_note` 规范化路径（分隔符归一 + 小写）匹配，**跳过 `review_completed: true` 的会话**，返回**最新创建**的未完成会话 id；文件损坏/目录缺失静默跳过。
   - `listReviewSessions(vaultPath)`：列出全部复习会话元信息（id/标题/创建时间/被复习笔记/是否完成/题目数，按创建时间倒序），供资源库「复习会话」分类展示。
   - `listOngoingReviewNotePaths(vaultPath)`：收集所有存在**未完成**复习会话的笔记规范化路径（跳过 `review_completed: true`），供学习地图判断到期卡片显示「开始复习」还是「继续复习」。
-- **临时会话复用与完成标记（P6）**：复习会话是**按笔记临时生成**的——学习地图「开始复习」前先 `findIncompleteReviewSession`，命中则直接跳转已有会话（**不重复调用 LLM 出题**，出题结果已随会话文件持久化，节省 token）；重新打开时按已作答 user 消息数恢复答题进度。完成复习后（单条模式评级完成 / 簇模式点「完成复习」）将 `review_completed: true` 写回 frontmatter 并持久化——**不再删除会话文件**，保留在资源库「复习会话」分类供回看错题；已完成会话不会被「开始复习」复用，下次到期重新出题。
+- **临时会话复用与完成标记（P6）**：复习会话是**按笔记临时生成**的——学习地图「开始复习」前先 `findIncompleteReviewSession`，命中则直接跳转已有会话（**不重复调用 LLM 出题**，出题结果已随会话文件持久化，节省 token）；重新打开时按已作答 user 消息数恢复答题进度。完成复习后（单条模式评级完成 / 簇模式点「完成复习」）将 `review_completed: true` 写回 frontmatter 并持久化——**不再删除会话文件**，保留在资源库「复习会话」分类供回看错题；已完成会话不会被「开始复习」复用，下次到期重新出题。此外，**所有复习题答完后退出页面也会自动写入 `review_completed: true`**（见 §9.4）。
 - **协作链路**：`LearningHub 开始复习 → findIncompleteReviewSession（未完成则复用，完成则跳过）→ generateReviewQuestions → createReviewSession → saveSessionToVault(isReview) → 复习会话页 → 逐题 reviewFollowupStream → 完成评级/结束 → 标记 review_completed 持久化（保留）`
 
 ### 9.3 复习会话交互 UI（`src/views/ReviewChatPage.vue`）
@@ -203,6 +205,19 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 - **划线双路径**：复用划线菜单——「生成笔记」→ `extract-note` skill → 新笔记自动入队；「加入笔记」→ `AddToNoteDialog` 插回原笔记。
 - **自评闭环**：「结束复习」→ 四档自评面板 → `reviewStore.applyReview` → Toast 提示 → 返回学习地图。
 - **无 API Key 兜底**：出题为空时 `createReviewSession` 首条消息展示笔记原文，页面显示"原文复习模式"提示并仅提供自评。
+
+### 9.4 完成态与归档（P7，`src/views/ReviewChatPage.vue` + `src/api/skills/review-quiz.ts`）
+
+所有复习题答完后，复习页的输入区进入**完成态**，不再继续出题，改为让用户选择收尾方式：
+
+- **完成判定**：`allQuestionsDone` computed——`hasQuestions && currentQuestionIndex >= questions.length`；为真且非自由追问模式时，输入框（Composer）被替换为完成态面板（`.review-chat-page__done`），内含两个按钮：
+  - **「结束复习」**：调用 `handleEndReview` 打开四档自评面板（沿用原自评闭环）。
+  - **「继续提问」**：置 `freeformMode = true`，**恢复输入框**（placeholder 变为「继续提问…」），用户可围绕笔记继续追问。
+- **继续提问（自由追问）**：`handleFreeformSend` 复用会话上下文与当前笔记/簇笔记，调用 `reviewFreeformStream` 流式生成回答；**不推进题号、不解析正误判定**，仅作为延伸答疑。历史消息在传入执行器前经 `map((m) => ({ role: m.role, content: m.content }))` 转换为 LLM provider 层的 `Message` 结构（应用层 `Message` 含 `thinking`/`timestamp` 等扩展字段，与 provider 层不同）。
+- **退出自动归档**：`onUnmounted` 中，若 `allQuestionsDone` 为真且尚未 `review_completed`，则写入 `session.review_completed = true` 并 `persist()`——**用户直接退出也自动归档到资料库「已复习会话」**（不再仅依赖手动「结束复习」）。
+- **重开已归档会话保留输入框**：`load()` 装载会话后按 `loaded.review_completed === true` 初始化 `freeformMode = true`，因此从资料库点击「已复习会话」重新进入时，页面直接处于自由追问模式，输入框保留可继续提问。
+- **归档信号**：沿用既有 `review_completed: true` 字段作为「已复习会话」的归档依据，`listReviewSessions` / `listOngoingReviewNotePaths` 据此区分「已复习」与「进行中」，无需新增持久化结构。
+- **测试**：`ReviewChatPage.test.ts` 新增「题目答完后输入框替换为两按钮」「继续提问恢复输入框并调用 reviewFreeformStream」「重开已归档会话保留输入框」「退出页面自动归档」等用例。
 
 ## 10. 后续扩展（本阶段不含）
 

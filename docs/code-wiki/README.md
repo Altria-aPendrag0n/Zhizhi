@@ -157,7 +157,7 @@ d:\work\Zhizhi\
 | 11 | 解析器与序列化工具 | [11-parsers-serializers.md](./11-parsers-serializers.md) | `src/parser/`、`src/utils/`（序列化/树/日期等） | frontmatter/wikilink 解析、会话与笔记序列化、分支树 |
 | 12 | Pinia 状态管理 | [12-stores.md](./12-stores.md) | `src/stores/` | 6 个 store（含复习队列）的状态、动作与持久化契约 |
 | 13 | Rust 后端 | [13-rust-backend.md](./13-rust-backend.md) | `src-tauri/` | Tauri 装配、10 个文件系统命令、文件监听 |
-| 14 | 间隔复习模块 | [14-review-module.md](./14-review-module.md) | `src/utils/review-scheduler.ts`、`src/stores/review.ts`、`src/components/review/` | SRS 间隔复习调度、`review-state.json` 队列、到期清单 UI |
+| 14 | 间隔复习模块 | [14-review-module.md](./14-review-module.md) | `src/utils/review-scheduler.ts`、`src/stores/review.ts`、`src/components/review/`、`src/views/ReviewChatPage.vue`、`src/api/skills/review-quiz.ts` | SRS 间隔复习调度、`review-state.json` 队列、到期清单 UI、AI 复习会话（出题/反馈/完成态与归档） |
 | 15 | 复习出题形式模块 | [15-review-question-types.md](./15-review-question-types.md) | `src/review/question-registry.ts`、`src/review/review-input-guard.ts`、`src/utils/review-difficulty.ts`、`src/components/review/*`、`src/skills/review-{quiz,cluster,feedback,debate}/` | 六类题型模型与注册表、掌握度×复习曲线难度信号、情景题、按题型反馈与辩论多轮、作答输入防注入 |
 | 16 | 主界面与学习统计模块 | [16-learning-stats-home.md](./16-learning-stats-home.md) | `src/utils/learning-stats.ts`、`src/components/stats/ContributionGraph.vue`、`src/views/HomePage.vue` | 知枝按钮直达 `/home` 数据总览、问答/复习/笔记按天聚合、GitHub 风格学习频率格子图 |
 | 17 | 全局 AI 忙碌遮罩 | [17-busy-overlay.md](./17-busy-overlay.md) | `src/stores/busy.ts`、`src/components/common/AiBusyOverlay.vue` | 非流式 AI 等待期间的全屏遮罩与全局快捷键禁用，避免反复创建或提交 |

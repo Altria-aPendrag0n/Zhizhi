@@ -18,11 +18,11 @@
         {{ currentQuestionIndex }} / {{ questions.length }}
       </div>
       <button
-        v-if="!showRating && !rated"
+        v-if="!showRating && !rated && (!allQuestionsDone || freeformMode)"
         class="review-chat-page__end"
         type="button"
         :disabled="isStreaming"
-        @click="showRating = true"
+        @click="handleEndReview"
       >
         结束复习
       </button>
@@ -190,11 +190,32 @@
         <span class="review-chat-page__waiting-spinner" aria-hidden="true" />
         <span class="review-chat-page__waiting-text">AI 正在思考…请稍候，不要重复提交</span>
       </div>
+      <!-- 所有复习题答完后的完成态：结束复习 / 继续提问 -->
+      <div v-if="allQuestionsDone && !freeformMode" class="review-chat-page__done">
+        <p class="review-chat-page__done-text">所有复习题已完成</p>
+        <div class="review-chat-page__done-actions">
+          <button
+            class="review-chat-page__done-end"
+            type="button"
+            :disabled="isStreaming"
+            @click="handleEndReview"
+          >
+            结束复习
+          </button>
+          <button
+            class="review-chat-page__done-continue"
+            type="button"
+            @click="freeformMode = true"
+          >
+            继续提问
+          </button>
+        </div>
+      </div>
       <Composer
-        v-if="!isStructuredAnswer"
+        v-else-if="!isStructuredAnswer"
         :is-streaming="isStreaming"
-        :disabled="isStreaming || !hasQuestions || showRating || rated"
-        :placeholder="composerPlaceholder"
+        :disabled="isStreaming || rated || (!freeformMode && !hasQuestions)"
+        :placeholder="freeformMode ? '继续提问…' : composerPlaceholder"
         @send="handleSend"
         @stop="handleStop"
       />
@@ -213,7 +234,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Message, Note, ReviewQuestion, ReviewQuestionType, ReviewRating, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
@@ -222,7 +243,7 @@ import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
 import { useToast } from '../composables/useToast'
 import { createProvider } from '../api/provider-factory'
-import { reviewFollowupStream, reviewDebateStream } from '../api/skills/review-quiz'
+import { reviewFollowupStream, reviewDebateStream, reviewFreeformStream } from '../api/skills/review-quiz'
 import { DEFAULT_MAX_ROUNDS, OPTION_LETTERS, QUESTION_TYPE_LABELS, serializeAnswer, shouldEndDebate } from '../review/question-registry'
 import { detectPromptInjection } from '../review/review-input-guard'
 import { extractNote } from '../api/skills/extract-note'
@@ -267,6 +288,8 @@ const error = ref<string | null>(null)
 const currentQuestionIndex = ref(0)
 const showRating = ref(false)
 const rated = ref(false)
+/** 继续提问模式：题目答完后用户选择「继续提问」，或重新打开已归档会话时直接进入 */
+const freeformMode = ref(false)
 const extractedNotes = ref<NoteReference[]>([])
 /** 辩论状态（P5-5）：round 为用户第几次发言（1 起）；turns 为同题历史论点（含 AI 开场/反驳） */
 const debateRound = ref(1)
@@ -282,6 +305,8 @@ let abortController: AbortController | null = null
 const sessionId = computed(() => String(route.params.sessionId || ''))
 const questions = computed<ReviewQuestion[]>(() => session.value?.review_questions ?? [])
 const hasQuestions = computed(() => questions.value.length > 0)
+/** 所有复习题是否已作答完毕（自由追问/归档切换依据） */
+const allQuestionsDone = computed(() => hasQuestions.value && currentQuestionIndex.value >= questions.value.length)
 /** 当前待作答问题（P5-4） */
 const activeQuestion = computed<ReviewQuestion | undefined>(() => questions.value[currentQuestionIndex.value])
 /** 结构化题型（渲染专属组件替代文本输入框；辩论/简答走 Composer） */
@@ -305,6 +330,14 @@ const RATINGS: { value: ReviewRating; label: string; hint: string }[] = [
 ]
 
 onMounted(load)
+
+// 退出页面时，若所有复习题已作答完毕且尚未归档，自动归档到资料库的「已复习会话」。
+onUnmounted(() => {
+  if (!session.value || session.value.review_completed) return
+  if (!allQuestionsDone.value) return
+  session.value.review_completed = true
+  void persist()
+})
 
 /**
  * 把当前题目作为 assistant 消息注入会话流（每题注入一次，避免重复）。
@@ -350,6 +383,8 @@ async function load() {
   // 上限为题目数，答完末题后停在"已无更多问题"；辩论多轮不推进题号，恢复为近似值）
   const answeredCount = messages.value.filter((m) => m.role === 'user').length
   currentQuestionIndex.value = Math.min(answeredCount, questions.value.length)
+  // 已归档（review_completed）的会话重新打开时直接进入继续提问，输入框保留
+  freeformMode.value = loaded.review_completed === true
   if (loaded.reviewed_note) {
     note.value = await noteStore.loadNote(loaded.reviewed_note)
   }
@@ -405,6 +440,10 @@ async function handleSend(content: string) {
   }
   const question = questions.value[currentQuestionIndex.value]
   if (!question) {
+    if (freeformMode.value) {
+      await handleFreeformSend(content)
+      return
+    }
     toast.info('已无更多问题，点击「结束复习」自评')
     return
   }
@@ -518,6 +557,73 @@ async function handleSend(content: string) {
 function handleStop() {
   abortController?.abort()
   abortController = null
+}
+
+/**
+ * 继续提问（自由追问）：所有复习题答完后，用户围绕笔记继续追问。
+ * 复用复习会话上下文，但不推进题号，也不解析正误判定。
+ */
+async function handleFreeformSend(content: string) {
+  if (!session.value || !note.value) return
+  const config = settingsStore.getProviderConfig()
+  if (!config.apiKey) {
+    toast.error('请先在设置页面配置 API Key')
+    router.push('/settings')
+    return
+  }
+
+  messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
+  const aiMessage: Message = { role: 'assistant', content: '' }
+  messages.value.push(aiMessage)
+  isStreaming.value = true
+  streamingText.value = ''
+  streamingThinking.value = ''
+  error.value = null
+
+  const controller = new AbortController()
+  abortController = controller
+  try {
+    const provider = createProvider(config)
+    const clusterCtx = hasCluster.value ? clusterNotes.value : undefined
+    const history = messages.value
+      .filter((m) => m !== aiMessage)
+      .map((m) => ({ role: m.role, content: m.content }))
+    for await (const chunk of reviewFreeformStream(content, history, note.value, provider, clusterCtx)) {
+      if (chunk.type === 'text') {
+        streamingText.value += chunk.content
+      } else if (chunk.type === 'thinking') {
+        streamingThinking.value += chunk.content
+      } else if (chunk.type === 'error') {
+        error.value = chunk.content
+        messages.value.pop()
+        isStreaming.value = false
+        streamingText.value = ''
+        streamingThinking.value = ''
+        return
+      }
+    }
+    aiMessage.content = streamingText.value
+    aiMessage.thinking = streamingThinking.value || undefined
+    await persist()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('abort') || msg.includes('AbortError')) {
+      aiMessage.content = streamingText.value
+      aiMessage.thinking = streamingThinking.value || undefined
+    } else {
+      error.value = `请求失败: ${msg}`
+      messages.value.pop()
+    }
+  } finally {
+    isStreaming.value = false
+    streamingText.value = ''
+    streamingThinking.value = ''
+    abortController = null
+  }
+}
+
+function handleEndReview() {
+  showRating.value = true
 }
 
 function handleRetry() {
@@ -1178,5 +1284,61 @@ function handleNavigateNote(path: string) {
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.02em;
+}
+
+/* ---- 复习题全部完成后的两按钮完成态 ---- */
+.review-chat-page__done {
+  flex-shrink: 0;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.review-chat-page__done-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.review-chat-page__done-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.review-chat-page__done-end,
+.review-chat-page__done-continue {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.review-chat-page__done-end {
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+.review-chat-page__done-end:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.review-chat-page__done-end:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.review-chat-page__done-continue {
+  border: 1px solid var(--brand);
+  background: var(--surface);
+  color: var(--brand);
+}
+
+.review-chat-page__done-continue:hover {
+  background: var(--brand-soft);
 }
 </style>

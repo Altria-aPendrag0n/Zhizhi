@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   extractNoteRefsFromSession: vi.fn(() => []),
   reviewFollowupStream: vi.fn(),
   reviewDebateStream: vi.fn(),
+  reviewFreeformStream: vi.fn(),
   extractNote: vi.fn(),
   parseMentionedNotes: vi.fn(),
   deleteFile: vi.fn().mockResolvedValue(undefined),
@@ -64,6 +65,7 @@ vi.mock('../utils/session-linker', () => ({
 vi.mock('../api/skills/review-quiz', () => ({
   reviewFollowupStream: mocks.reviewFollowupStream,
   reviewDebateStream: mocks.reviewDebateStream,
+  reviewFreeformStream: mocks.reviewFreeformStream,
 }))
 vi.mock('../api/skills/extract-note', () => ({ extractNote: mocks.extractNote }))
 vi.mock('../utils/review-gap', () => ({ parseMentionedNotes: mocks.parseMentionedNotes }))
@@ -305,7 +307,11 @@ describe('ReviewChatPage', () => {
     )
     // 末轮总结后推进题号（questions 只有 1 题 → 进度 1/1），辩论指示消失
     expect(wrapper.text()).toContain('1 / 1')
-    expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(true)
+    // 全部题目答完后，输入框替换为「结束复习 / 继续提问」两按钮
+    expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(false)
+    expect(wrapper.find('.review-chat-page__done').exists()).toBe(true)
+    expect(wrapper.text()).toContain('结束复习')
+    expect(wrapper.text()).toContain('继续提问')
   })
 
   it('簇模式：加载 review_cluster 展示簇面板并高亮当前笔记', async () => {
@@ -468,5 +474,81 @@ describe('ReviewChatPage', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('第 2 题 / 共 2 题')
     expect(wrapper.text()).toContain('为什么费曼法能暴露知识缺口？')
+  })
+
+  it('所有复习题答完后点击「继续提问」恢复输入框并调用 reviewFreeformStream', async () => {
+    mocks.reviewFreeformStream.mockReturnValue((async function* () {
+      yield { type: 'text', content: '补充说明' }
+    })())
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({
+        review_questions: [{ level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' }],
+        messages: [
+          { role: 'assistant', content: '## 复习目标' },
+          { role: 'user', content: '通过教别人来检验理解' },
+          { role: 'assistant', content: '判定：正确' },
+        ],
+      }),
+    )
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('.review-chat-page__done').exists()).toBe(true)
+    await wrapper.find('.review-chat-page__done-continue').trigger('click')
+    expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(true)
+    expect(wrapper.find('.review-chat-page__done').exists()).toBe(false)
+
+    await wrapper.findComponent({ name: 'Composer' }).vm.$emit('send', '能再举个例子吗？')
+    await flushPromises()
+
+    expect(mocks.reviewFreeformStream).toHaveBeenCalledWith(
+      '能再举个例子吗？',
+      expect.anything(),
+      note,
+      expect.anything(),
+      undefined,
+    )
+    expect(mocks.saveSessionToVault).toHaveBeenCalled()
+  })
+
+  it('重新打开已归档（review_completed）会话时保留输入框用于继续提问', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({
+        review_completed: true,
+        review_questions: [{ level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' }],
+        messages: [
+          { role: 'assistant', content: '## 复习目标' },
+          { role: 'user', content: '通过教别人来检验理解' },
+          { role: 'assistant', content: '判定：正确' },
+        ],
+      }),
+    )
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'Composer' }).exists()).toBe(true)
+    expect(wrapper.find('.review-chat-page__done').exists()).toBe(false)
+  })
+
+  it('所有复习题答完后退出页面时自动归档到已复习会话', async () => {
+    mocks.loadReviewSession.mockResolvedValue(
+      makeSession({
+        review_questions: [{ level: 'recognize', type: 'short_answer', question: '什么是费曼学习法？' }],
+        messages: [
+          { role: 'assistant', content: '## 复习目标' },
+          { role: 'user', content: '通过教别人来检验理解' },
+          { role: 'assistant', content: '判定：正确' },
+        ],
+      }),
+    )
+    const wrapper = createWrapper()
+    await flushPromises()
+    expect(wrapper.find('.review-chat-page__done').exists()).toBe(true)
+
+    wrapper.unmount()
+    await flushPromises()
+
+    const lastCall = mocks.saveSessionToVault.mock.calls[mocks.saveSessionToVault.mock.calls.length - 1]
+    expect(lastCall[1]).toMatchObject({ id: 'review_1', review_completed: true })
   })
 })

@@ -549,3 +549,52 @@ export async function* reviewDebateStream(
     }
   }
 }
+
+/**
+ * 继续提问（自由追问，流式）：题目全部答完后，用户围绕笔记继续追问，AI 结合笔记内容作答。
+ *
+ * @param question - 用户追问内容
+ * @param history - 会话历史消息（不含本条追问）
+ * @param note - 被复习的原子笔记（作答依据）
+ * @param provider - LLM 提供商
+ * @param clusterNotes - 复习簇上下文（可空）
+ * @returns 流式回复迭代器
+ */
+export async function* reviewFreeformStream(
+  question: string,
+  history: Message[],
+  note: Note,
+  provider: LLMProvider,
+  clusterNotes?: Note[],
+): AsyncIterable<StreamChunk> {
+  const notes = clusterNotes && clusterNotes.length > 0 ? clusterNotes : [note]
+  const noteContext = notes.map(serializeNoteForReview).join('\n\n---\n\n')
+  const systemPrompt = [
+    '你是知枝，一位复习伴读助手。用户的复习题已全部答完，现在想围绕笔记继续追问。',
+    '请结合下方笔记内容回答用户的追问，帮助其深化理解、建立知识关联。',
+    '回答要具体、贴合笔记，不要脱离笔记空谈；使用中文，语气友好、鼓励深入思考。',
+    '',
+    '笔记内容：',
+    noteContext,
+  ].join('\n')
+
+  const messages: Message[] = [
+    ...history.map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: question },
+  ]
+
+  try {
+    for await (const chunk of provider.chat(messages, {
+      systemPrompt,
+      temperature: 0.7,
+      maxTokens: 2048,
+    })) {
+      yield chunk
+    }
+  } catch (e) {
+    yield {
+      type: 'error',
+      content: `继续提问失败: ${(e as Error).message}`,
+    }
+  }
+}
