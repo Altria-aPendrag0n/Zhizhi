@@ -16,6 +16,7 @@ import { extractAllLinks } from '../../parser/wikilink'
 import { logError, logWarn } from '../../utils/logger'
 import {
   DEFAULT_MAX_ROUNDS,
+  dedupeQuestions,
   formatQuestionForDisplay,
   normalizeQuizQuestion,
   shouldEndDebate,
@@ -36,6 +37,27 @@ const MAX_CLUSTER_NOTE_LENGTH = 1200
 
 /** 毕业引导阈值：画像 high 置信度概念且复习掌握度 ≥ 0.9 视为可能已掌握（P3-4） */
 export const GRADUATION_MASTERY_THRESHOLD = 0.9
+
+/** 单条笔记复习最少题数（内容再少也至少出这些题） */
+export const MIN_REVIEW_QUESTIONS = 3
+/** 单条笔记复习题数上限 */
+export const MAX_SINGLE_REVIEW_QUESTIONS = 8
+/** 簇模式题数上限 */
+export const MAX_CLUSTER_REVIEW_QUESTIONS = 12
+/** 每多少字正文对应一道题（正文长度 / 该值 = 基础题数） */
+const CHARS_PER_REVIEW_QUESTION = 300
+
+/**
+ * 由复习对象的内容量估算本次目标题数：内容多则多出、内容少则少出，非固定 3-5。
+ *
+ * @param totalContentLength - 复习对象正文总长度（单条笔记为其正文长度；簇模式为各笔记正文长度之和）
+ * @param isCluster - 是否簇模式（簇模式上限更高，因为覆盖多篇笔记的关系型考点）
+ */
+export function estimateTargetQuestionCount(totalContentLength: number, isCluster = false): number {
+  const max = isCluster ? MAX_CLUSTER_REVIEW_QUESTIONS : MAX_SINGLE_REVIEW_QUESTIONS
+  const byLength = Math.max(MIN_REVIEW_QUESTIONS, Math.round(totalContentLength / CHARS_PER_REVIEW_QUESTION))
+  return Math.min(byLength, max)
+}
 
 /** 缓存解析后的 Skill 对象 */
 let _quizSkillCache: ReturnType<typeof parseSkill> | null = null
@@ -208,9 +230,9 @@ function parseQuizResponse(data: unknown): ReviewQuestion[] {
   if (!Array.isArray(d.questions)) {
     throw new Error('复习出题失败: 响应缺少 questions 数组')
   }
-  const questions = d.questions
-    .map(normalizeQuizQuestion)
-    .filter((q): q is ReviewQuestion => q !== null)
+  const questions = dedupeQuestions(
+    d.questions.map(normalizeQuizQuestion).filter((q): q is ReviewQuestion => q !== null),
+  )
   if (questions.length === 0) {
     throw new Error('复习出题失败: questions 中没有合法题目')
   }
@@ -260,6 +282,7 @@ export async function generateReviewQuestions(
       difficultySignal && difficultySignal.trim()
         ? difficultySignal.trim()
         : '（暂无卡片掌握度信号，按默认难度出题）',
+    target_question_count: String(estimateTargetQuestionCount(note.content.length)),
   })
 
   const messages: Message[] = [{ role: 'user', content: '请为上述笔记生成复习问题。' }]
@@ -317,7 +340,7 @@ function parseClusterQuizResponse(data: unknown): ClusterReviewQuestion[] {
   if (questions.length === 0) {
     throw new Error('复习出题失败: questions 中没有合法题目')
   }
-  return questions
+  return dedupeQuestions(questions)
 }
 
 /**
@@ -375,6 +398,12 @@ export async function generateClusterQuestions(
       difficultySignal && difficultySignal.trim()
         ? difficultySignal.trim()
         : '（暂无卡片掌握度信号，按默认难度出题）',
+    target_question_count: String(
+      estimateTargetQuestionCount(
+        notes.reduce((sum, note) => sum + note.content.length, 0),
+        true,
+      ),
+    ),
   })
 
   const messages: Message[] = [{ role: 'user', content: '请为上述复习簇生成关系型复习问题。' }]

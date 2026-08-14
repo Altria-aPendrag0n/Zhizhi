@@ -174,7 +174,7 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 
 ### 9.1 review-quiz skill（已完成，见 [09-skills-system.md](./09-skills-system.md#44-reviewquizts--复习出题与反馈p2-ai-复习会话)）
 
-- `generateReviewQuestions`：基于笔记 + 关联笔记 + 画像生成 3-5 个递进问题（recognize/apply/explain）。
+- `generateReviewQuestions`：基于笔记 + 关联笔记 + 画像生成递进问题（recognize/apply/explain），**题数非固定——按笔记内容量估算目标题数（3-8）并注入 prompt**，题型选择兼顾卡片掌握度与笔记内容难度，解析后按题干相似度去重并过滤低质量题（详见 [15 复习出题形式](./15-review-question-types.md)）。
 - `reviewFollowupStream`：对作答做费曼式反馈（对照笔记原文指出缺口）。
 
 ### 9.2 复习会话模型与上下文装载（`src/utils/review-session.ts`）

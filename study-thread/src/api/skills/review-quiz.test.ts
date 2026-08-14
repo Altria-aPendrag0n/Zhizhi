@@ -3,6 +3,7 @@ import type { LLMProvider, StreamChunk } from '../llm-provider'
 import type { Note, ReviewQuestion } from '../../types'
 import type { LearnerProfile } from '../../utils/learner-profile'
 import {
+  estimateTargetQuestionCount,
   generateReviewQuestions,
   reviewFollowupStream,
   reviewDebateStream,
@@ -12,6 +13,9 @@ import {
   serializeClusterNotes,
   serializeClusterRelations,
   GRADUATION_MASTERY_THRESHOLD,
+  MAX_SINGLE_REVIEW_QUESTIONS,
+  MAX_CLUSTER_REVIEW_QUESTIONS,
+  MIN_REVIEW_QUESTIONS,
 } from './review-quiz'
 
 const note: Note = {
@@ -88,6 +92,23 @@ describe('generateReviewQuestions', () => {
     ])
   })
 
+  it('解析时剔除语义近似重复的题目', async () => {
+    const dupJson = JSON.stringify({
+      questions: [
+        { level: 'recognize', type: 'short_answer', question: '费曼学习法的核心是什么？' },
+        { level: 'recognize', type: 'short_answer', question: '费曼学习法的核心是什么' },
+        { level: 'apply', type: 'short_answer', question: '如何用费曼法检验自己是否理解？' },
+      ],
+    })
+    const provider = mockProvider([{ type: 'text', content: dupJson }])
+    const questions = await generateReviewQuestions(note, [], provider)
+
+    expect(questions).toEqual([
+      { level: 'recognize', type: 'short_answer', question: '费曼学习法的核心是什么？' },
+      { level: 'apply', type: 'short_answer', question: '如何用费曼法检验自己是否理解？' },
+    ])
+  })
+
   it('LLM 响应带题型字段时透传（choice options / ordering steps / debate position）', async () => {
     const typedJson = JSON.stringify({
       questions: [
@@ -114,6 +135,14 @@ describe('generateReviewQuestions', () => {
     expect(systemPrompt).toContain('标题: 费曼学习法')
     expect(systemPrompt).toContain('费曼学习法的核心不是把知识讲得简单')
     expect(systemPrompt).toContain('### 工作记忆')
+  })
+
+  it('注入按笔记内容量估算的目标题数', async () => {
+    const provider = mockProvider([{ type: 'text', content: QUIZ_JSON }])
+    await generateReviewQuestions(note, [], provider)
+
+    const { systemPrompt } = lastChatArgs(provider)
+    expect(systemPrompt).toContain(`目标题数：${estimateTargetQuestionCount(note.content.length)} 道`)
   })
 
   it('无关联笔记时注入占位文案', async () => {
@@ -518,5 +547,26 @@ describe('reviewDebateStream', () => {
       chunks.push(chunk)
     }
     expect(chunks).toEqual([{ type: 'error', content: '辩论回复失败: LLM 挂了' }])
+  })
+})
+
+describe('estimateTargetQuestionCount', () => {
+  it('内容过少时至少出最小题数', () => {
+    expect(estimateTargetQuestionCount(0)).toBe(MIN_REVIEW_QUESTIONS)
+    expect(estimateTargetQuestionCount(50)).toBe(MIN_REVIEW_QUESTIONS)
+  })
+
+  it('按每 300 字一题线性增长', () => {
+    expect(estimateTargetQuestionCount(900)).toBe(3)
+    expect(estimateTargetQuestionCount(1200)).toBe(4)
+    expect(estimateTargetQuestionCount(1500)).toBe(5)
+  })
+
+  it('单条笔记题数封顶', () => {
+    expect(estimateTargetQuestionCount(5000)).toBe(MAX_SINGLE_REVIEW_QUESTIONS)
+  })
+
+  it('簇模式题数上限更高', () => {
+    expect(estimateTargetQuestionCount(5000, true)).toBe(MAX_CLUSTER_REVIEW_QUESTIONS)
   })
 })

@@ -41,6 +41,44 @@ export const QUESTION_TYPE_DIFFICULTY: Record<ReviewQuestionType, number> = {
   debate: 4,
 }
 
+/** 非辩论题题干去除空白后的最短有效长度：过短视为无价值/粗制滥造题目，直接丢弃 */
+export const MIN_QUESTION_LENGTH = 5
+/** 近似重复判定阈值（Dice 系数，0-1）：超过则视为重复题，丢弃后出现的题目 */
+export const DEDUP_SIMILARITY_THRESHOLD = 0.85
+
+/** 生成题干字符 bigram 集合（忽略大小写、标点与空白），用于近似去重 */
+function questionBigrams(text: string): Set<string> {
+  const compact = text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+  const grams = new Set<string>()
+  for (let i = 0; i + 1 < compact.length; i++) grams.add(compact.slice(i, i + 2))
+  return grams
+}
+
+/** 两道题干之间的相似度（Dice 系数，0-1），基于字符 bigram 重叠 */
+export function questionSimilarity(a: string, b: string): number {
+  const ga = questionBigrams(a)
+  const gb = questionBigrams(b)
+  if (ga.size === 0 || gb.size === 0) return 0
+  let intersection = 0
+  for (const gram of ga) {
+    if (gb.has(gram)) intersection++
+  }
+  return (2 * intersection) / (ga.size + gb.size)
+}
+
+/**
+ * 按题干相似度去重（保持原始顺序，保留先出现的题目）。
+ * 语义近似重复（同义改写、仅个别字差异）也一并剔除，避免一次复习出现重复题。
+ */
+export function dedupeQuestions<T extends ReviewQuestion>(questions: T[]): T[] {
+  const kept: T[] = []
+  for (const q of questions) {
+    if (kept.some((s) => questionSimilarity(s.question, q.question) >= DEDUP_SIMILARITY_THRESHOLD)) continue
+    kept.push(q)
+  }
+  return kept
+}
+
 /** 各题型的交互标签 */
 export const QUESTION_TYPE_LABELS: Record<ReviewQuestionType, string> = {
   choice: '选择题',
@@ -77,6 +115,7 @@ export function normalizeQuizQuestion(raw: unknown): ReviewQuestion | null {
   if (!raw || typeof raw !== 'object') return null
   const q = raw as Record<string, unknown>
   if (typeof q.question !== 'string') return null
+  if (!q.question.trim()) return null
   const level = q.level as ReviewQuestionLevel
   if (!REVIEW_QUESTION_LEVELS.includes(level)) return null
 
@@ -87,6 +126,8 @@ export function normalizeQuizQuestion(raw: unknown): ReviewQuestion | null {
   const type = REVIEW_QUESTION_TYPES.includes(q.type as ReviewQuestionType)
     ? (q.type as ReviewQuestionType)
     : 'short_answer'
+  // 无价值题目过滤：非辩论题题干过短（如"是什么？"）视为粗制滥造，丢弃；辩论题题干允许极短（辩题内容由 position 承载）
+  if (type !== 'debate' && q.question.replace(/\s+/g, '').length < MIN_QUESTION_LENGTH) return null
   const validator = FIELD_VALIDATORS[type]
   if (validator && !validator(q)) return null
 

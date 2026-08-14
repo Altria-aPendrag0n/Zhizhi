@@ -8,12 +8,43 @@
  * fsrs 波动大 → 补低难度稳定题）；画像 confidence 由调用方另行注入，冲突时取保守档。
  */
 
-import type { ReviewAlgorithm, ReviewTask } from '../types'
+import type { Note, ReviewAlgorithm, ReviewTask } from '../types'
 import { getIntervals } from './review-scheduler'
 import { estimateDifficulty, estimatePerformance } from './fsrs-scheduler'
 
 /** 掌握度档位：low < 0.3 ≤ medium < 0.6 ≤ high < 0.9 ≤ graduate */
 export type DifficultyBand = 'low' | 'medium' | 'high' | 'graduate'
+
+/** 笔记内容难度档位（由正文长度 + 笔记类型启发式估计，与掌握度档位解耦） */
+export type NoteDifficultyBand = 'low' | 'medium' | 'high'
+
+/** 正文长度达到该值即视为中等难度 */
+export const NOTE_DIFFICULTY_MEDIUM_CHARS = 400
+/** 正文长度达到该值即视为较高难度 */
+export const NOTE_DIFFICULTY_HIGH_CHARS = 1500
+
+const NOTE_DIFFICULTY_LABELS: Record<NoteDifficultyBand, string> = {
+  low: '简单',
+  medium: '中等',
+  high: '较难',
+}
+
+/**
+ * 由正文长度估计笔记内容难度档位：正文越长覆盖的知识点越多，复习出题越难。
+ * method/question 类笔记偏推理，等效长度按 1.5 倍加权后再定档，避免长篇浅层 fact 被高估。
+ */
+export function noteDifficultyBandFromLength(length: number): NoteDifficultyBand {
+  if (length >= NOTE_DIFFICULTY_HIGH_CHARS) return 'high'
+  if (length >= NOTE_DIFFICULTY_MEDIUM_CHARS) return 'medium'
+  return 'low'
+}
+
+/** 估计单条笔记的内容难度（正文长度 + 类型加权） */
+export function estimateNoteDifficulty(note: Pick<Note, 'content' | 'type'>): NoteDifficultyBand {
+  const length = note.content.length
+  const weighted = note.type === 'method' || note.type === 'question' ? Math.round(length * 1.5) : length
+  return noteDifficultyBandFromLength(weighted)
+}
 
 export const MASTERY_LOW_THRESHOLD = 0.3
 export const MASTERY_MEDIUM_THRESHOLD = 0.6
@@ -49,16 +80,21 @@ function intervalIndexIn(task: ReviewTask): number {
  * - fsrs：卡片掌握度 + 近 6 次加权表现分 + 评级波动；波动大时建议补低难度题稳定信心；
  * - 均输出「档位」结论，供出题规则直接定难度；无队列记录时应由调用方不调用本函数（走默认难度）。
  */
-export function describeDifficultyContext(task: ReviewTask, algorithm: ReviewAlgorithm): string {
+export function describeDifficultyContext(
+  task: ReviewTask,
+  algorithm: ReviewAlgorithm,
+  noteDifficulty?: NoteDifficultyBand,
+): string {
   const mastery = task.mastery
   const band = difficultyBandFromMastery(mastery)
+  const noteText = noteDifficulty ? `笔记内容难度 ${NOTE_DIFFICULTY_LABELS[noteDifficulty]}；` : ''
   const masteryText = `卡片掌握度 ${Math.round(mastery * 100)}%（${BAND_LABELS[band]}）`
 
   if (algorithm === 'fsrs') {
     const performance = estimatePerformance(task.history)
     const volatility = estimateDifficulty(task.history)
     return (
-      `${masteryText}；近 ${Math.min(task.history.length, 6)} 次评级加权表现分 ${performance.toFixed(1)}（0-1.5），` +
+      `${noteText}${masteryText}；近 ${Math.min(task.history.length, 6)} 次评级加权表现分 ${performance.toFixed(1)}（0-1.5），` +
       `评级波动 ${volatility.toFixed(2)}。` +
       `表现分高可上探更难题型；波动大（成绩忽高忽低）建议补 1 道低难度题稳定信心，反馈侧重巩固薄弱环节。`
     )
@@ -69,7 +105,7 @@ export function describeDifficultyContext(task: ReviewTask, algorithm: ReviewAlg
   const tailHalf = index + 1 > intervals.length / 2
   const intervalText = `当前间隔 ${task.interval} 天（${task.type} 类型序列 [${intervals.join(',')}] 第 ${index + 1} 档，共 ${intervals.length} 档）`
   return (
-    `${masteryText}；${intervalText}。` +
+    `${noteText}${masteryText}；${intervalText}。` +
     (tailHalf
       ? `间隔位于序列后半段，距上次复习较久，建议题单首题放 1 道识别题（选择题/判对错）校验记忆是否衰减。`
       : `间隔尚短，记忆较新鲜，可直接按档位出题。`)

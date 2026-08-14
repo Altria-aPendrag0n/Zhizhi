@@ -143,7 +143,7 @@ import type { Note, ReviewQuestion, ReviewRating, ReviewTask } from '../types'
 import { createProvider } from '../api/provider-factory'
 import { generateReviewQuestions, generateClusterQuestions, shouldSuggestGraduation } from '../api/skills/review-quiz'
 import { loadLearnerProfile, describeLearnerProfile } from '../utils/learner-profile'
-import { describeDifficultyContext } from '../utils/review-difficulty'
+import { describeDifficultyContext, estimateNoteDifficulty, noteDifficultyBandFromLength } from '../utils/review-difficulty'
 import { buildReviewRelatedNotes, createReviewSession, findIncompleteReviewSession, listOngoingReviewNotePaths } from '../utils/review-session'
 import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
@@ -277,7 +277,11 @@ async function handleStartReview(task: ReviewTask) {
       const profile = await loadLearnerProfile(vaultPath)
       const learnerProfile = describeLearnerProfile(profile)
       // P5-2 难度信号：卡片掌握度 + 复习曲线（classic 间隔档位 / fsrs 表现分·波动）→ 注入出题 prompt
-      const difficultyContext = describeDifficultyContext(task, settingsStore.reviewAlgorithm)
+      // 笔记内容难度：单条按正文长度 + 类型估计；簇模式按各笔记正文平均长度估计（簇内均为短 fact 则不强行出 debate）
+      const noteDifficulty = clusterMode
+        ? noteDifficultyBandFromLength(Math.round(cluster.reduce((sum, n) => sum + n.content.length, 0) / cluster.length))
+        : estimateNoteDifficulty(note)
+      const difficultyContext = describeDifficultyContext(task, settingsStore.reviewAlgorithm, noteDifficulty)
       if (clusterMode) {
         // P4 簇模式：按簇上下文出关系型问题（涉及笔记标注，供 P4-4 缺口回写）
         questions = await generateClusterQuestions(cluster, createProvider(config), learnerProfile, difficultyContext)

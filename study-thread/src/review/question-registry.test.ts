@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_MAX_ROUNDS,
+  dedupeQuestions,
   normalizeQuizQuestion,
+  questionSimilarity,
   serializeAnswer,
   shouldEndDebate,
 } from './question-registry'
@@ -34,8 +36,17 @@ describe('normalizeQuizQuestion', () => {
   })
 
   it('answer 为空串或纯空白时忽略', () => {
-    const q = normalizeQuizQuestion({ level: 'recognize', type: 'choice', question: 'Q', options: ['A', 'B'], answer: '  ' })
+    const q = normalizeQuizQuestion({ level: 'recognize', type: 'choice', question: '费曼学习法的核心是什么？', options: ['A', 'B'], answer: '  ' })
     expect(q?.answer).toBeUndefined()
+  })
+
+  it('非辩论题题干去除空白后过短（粗制滥造）时丢弃', () => {
+    expect(normalizeQuizQuestion({ level: 'recognize', type: 'short_answer', question: '是什么？' })).toBeNull()
+  })
+
+  it('辩论题允许极短题干（辩题内容由 position 承载，豁免最短长度约束）', () => {
+    const q = normalizeQuizQuestion({ level: 'explain', type: 'debate', question: '辩题', position: '支持' })
+    expect(q?.type).toBe('debate')
   })
 
   it('ordering：透传 steps', () => {
@@ -166,5 +177,29 @@ describe('shouldEndDebate', () => {
   it('debate maxRounds 缺省用默认 3', () => {
     expect(shouldEndDebate('debate', 2)).toBe(false)
     expect(shouldEndDebate('debate', 3)).toBe(true)
+  })
+})
+
+describe('questionSimilarity / dedupeQuestions', () => {
+  it('相同题干相似度为 1', () => {
+    expect(questionSimilarity('费曼学习法的核心是什么？', '费曼学习法的核心是什么？')).toBe(1)
+  })
+
+  it('仅标点差异的题干视为高度相似', () => {
+    expect(questionSimilarity('费曼学习法的核心是什么', '费曼学习法的核心是什么？')).toBeGreaterThanOrEqual(0.85)
+  })
+
+  it('无关题干相似度低', () => {
+    expect(questionSimilarity('费曼学习法的核心是什么？', '排序算法的复杂度如何计算？')).toBeLessThan(0.85)
+  })
+
+  it('去重保留先出现者，剔除近似重复题', () => {
+    const base = { level: 'recognize' as const, type: 'short_answer' as const }
+    const kept = dedupeQuestions([
+      { ...base, question: '费曼学习法的核心是什么？' },
+      { ...base, question: '费曼学习法的核心是什么' },
+      { ...base, question: '排序算法的复杂度如何计算？' },
+    ])
+    expect(kept.map((q) => q.question)).toEqual(['费曼学习法的核心是什么？', '排序算法的复杂度如何计算？'])
   })
 })
