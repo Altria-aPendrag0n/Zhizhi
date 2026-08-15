@@ -174,6 +174,7 @@ import { PROVIDER_PRESETS } from '../api/openai-compat'
 import { createProvider } from '../api/provider-factory'
 import { getLogs, clearLogs, MAX_LOGS, type LogEntry } from '../utils/logger'
 import VaultSettings from '../components/vault/VaultSettings.vue'
+import AboutSection from '../components/shell/AboutSection.vue'
 import type { ReviewAlgorithm } from '../types'
 
 const settingsStore = useSettingsStore()
