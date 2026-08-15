@@ -109,6 +109,7 @@ describe('序列化 round-trip', () => {
 describe('loadReviewSession', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    listDir.mockResolvedValue([])
   })
 
   it('解析复习会话文件并恢复 kind/reviewed_note/questions/消息', async () => {
@@ -162,8 +163,8 @@ describe('loadReviewSession', () => {
     expect(loaded!.review_questions![0].question).toBe('旧版复习题需要降级处理')
   })
 
-  it('文件路径使用 review- 前缀', () => {
-    expect(getReviewSessionFilePath('/vault', 'review_123')).toBe('/vault/sessions/review-review_123.md')
+  it('文件路径使用 id 前缀（新命名 review_，无 review- 文件前缀）', () => {
+    expect(getReviewSessionFilePath('/vault', 'review_123')).toBe('/vault/sessions/review_123.md')
   })
 })
 

@@ -21,7 +21,7 @@ function sanitizeFileName(name: string): string {
  * 将笔记数据序列化为 Markdown 格式
  *
  * @param note - 提取的笔记数据
- * @param sourceSession - 来源会话路径
+ * @param sourceSession - 来源会话稳定 id（非文件路径）
  * @param highlightSource - 来源划线文本
  * @returns Markdown 格式的笔记内容
  */

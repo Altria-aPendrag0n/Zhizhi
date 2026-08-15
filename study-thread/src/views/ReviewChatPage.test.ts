@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   applyReview: vi.fn().mockResolvedValue({}),
   loadReviewSession: vi.fn(),
   saveSessionToVault: vi.fn().mockResolvedValue('/vault/sessions/review-review_1.md'),
+  resolveSessionFile: vi.fn().mockResolvedValue(null),
   readFile: vi.fn().mockRejectedValue(new Error('ENOENT')),
   extractNoteRefsFromSession: vi.fn(() => []),
   reviewFollowupStream: vi.fn(),
@@ -56,6 +57,7 @@ vi.mock('../utils/review-session', () => ({
 
 vi.mock('../utils/session-serializer', () => ({
   saveSessionToVault: mocks.saveSessionToVault,
+  resolveSessionFile: mocks.resolveSessionFile,
 }))
 
 vi.mock('../utils/vault-fs', () => ({ readFile: mocks.readFile, deleteFile: mocks.deleteFile }))

@@ -14,6 +14,7 @@ import {
   parseNoteMetaFile,
 } from '../utils/note-serializer'
 import { removeSessionReferences } from '../utils/session-linker'
+import { sessionIdFromReference } from '../utils/session-serializer'
 import { loadStoredValue, saveStoredValue } from '../utils/local-storage'
 import { createReviewTask } from '../utils/review-scheduler'
 import { invalidateLearnerLinkCache } from '../utils/learner-note-link'
@@ -204,7 +205,8 @@ export const useNoteStore = defineStore('notes', () => {
       const notesDir = `${vaultPath}/notes`
       await createDir(notesDir)
       const filePath = `${notesDir}/${generateNoteFileName(note.title)}`
-      await writeFile(filePath, serializeNote(note, sourceSession, highlightSource))
+      const sourceSessionId = sessionIdFromReference(sourceSession)
+      await writeFile(filePath, serializeNote(note, sourceSessionId, highlightSource))
       const now = new Date().toISOString()
       const noteMeta: NoteMeta = {
         path: filePath,
@@ -214,7 +216,7 @@ export const useNoteStore = defineStore('notes', () => {
         created: now,
         updated: now,
         proposition: note.proposition,
-        source: { session: sourceSession, highlight: highlightSource },
+        source: { session: sourceSessionId, highlight: highlightSource },
       }
       // json sidecar：结构化元数据权威源（时间/标签/描述/来源/关联笔记），
       // md 内 frontmatter 保留供 Obsidian 查看，读取时 json 优先

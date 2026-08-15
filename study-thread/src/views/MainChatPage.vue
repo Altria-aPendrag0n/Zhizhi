@@ -58,7 +58,7 @@ import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { useToast } from '../composables/useToast'
-import { generateSessionTitle, getSessionFilePath, parseSessionFile } from '../utils/session-serializer'
+import { generateSessionTitle, getSessionFilePath, parseSessionFile, resolveSessionFile } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
 import { resolveMessageIndex } from '../utils/message-locator'
@@ -113,7 +113,8 @@ async function loadThreadMessages(threadId: string) {
     return
   }
   try {
-    const sessionPath = getSessionFilePath(vaultStore.vaultPath, threadId)
+    const sessionPath = await resolveSessionFile(vaultStore.vaultPath, threadId)
+      ?? getSessionFilePath(vaultStore.vaultPath, threadId)
     const session = parseSessionFile(await readFile(sessionPath), sessionPath)
     messages.value = session.messages
   } catch {
@@ -129,7 +130,8 @@ async function refreshNoteRefs(threadId: string) {
     return
   }
   try {
-    const sessionPath = getSessionFilePath(vaultStore.vaultPath, threadId)
+    const sessionPath = await resolveSessionFile(vaultStore.vaultPath, threadId)
+      ?? getSessionFilePath(vaultStore.vaultPath, threadId)
     // 过滤已删除笔记的悬空引用（会话文件引用行可能因旧版本/路径差异未被清理）
     extractedNotes.value = await filterExistingNoteRefs(extractNoteRefsFromSession(await readFile(sessionPath)))
   } catch {

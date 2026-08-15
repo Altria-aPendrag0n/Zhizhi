@@ -9,7 +9,7 @@
  */
 
 import type { Message, Note, ReviewQuestion, Session } from '../types'
-import { sanitizeFileName } from './session-serializer'
+import { getSessionFilePath, resolveSessionFile, sessionIdFromFileName } from './session-serializer'
 import { listDir, readFile } from './vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
 import { extractAllLinks } from '../parser/wikilink'
@@ -24,9 +24,10 @@ function notePathKey(path: string): string {
   return path.replace(/\\/g, '/').toLowerCase()
 }
 
-/** 从复习会话文件名推断会话 id：review-review_123.md → review_123（meta.session_id 缺失时兜底） */
-function sessionIdFromFileName(name: string): string {
-  return name.replace(/^review-/, '').replace(/\.md$/, '')
+/** 判断文件名是否为复习会话文件（兼容旧 `review-{id}.md` 与新 `{id}-{slug}.md`，id 前缀 review_ 区分） */
+function isReviewSessionFileName(name: string): boolean {
+  if (!name.endsWith('.md')) return false
+  return sessionIdFromFileName(name).startsWith('review_')
 }
 
 function toString(value: unknown): string {
@@ -134,9 +135,9 @@ export function buildReviewRelatedNotes(note: Note, allNotes: Note[], maxSize: n
   return related.slice(0, maxSize)
 }
 
-/** 复习会话文件路径：`<vault>/sessions/review-<id>.md` */
+/** 复习会话文件路径（写路径）：`<vault>/sessions/{id}-{slug}.md`，id 前缀 `review_` 区分类型 */
 export function getReviewSessionFilePath(vaultPath: string, sessionId: string): string {
-  return `${vaultPath}/sessions/review-${sanitizeFileName(sessionId)}.md`
+  return getSessionFilePath(vaultPath, sessionId)
 }
 
 /** 从 frontmatter 解析复习簇笔记路径（兼容 YAML 数组 / JSON 字符串两种形态） */
@@ -163,7 +164,8 @@ function parseReviewCluster(value: unknown): string[] | undefined {
  */
 export async function loadReviewSession(vaultPath: string, sessionId: string): Promise<Session | null> {
   try {
-    const raw = await readFile(getReviewSessionFilePath(vaultPath, sessionId))
+    const filePath = await resolveSessionFile(vaultPath, sessionId) ?? getReviewSessionFilePath(vaultPath, sessionId)
+    const raw = await readFile(filePath)
     const { meta, body } = parseFrontmatter(raw)
     const messages = parseMessages(body, Number.MAX_SAFE_INTEGER)
     const reviewQuestions = parseReviewQuestions(meta.review_questions)
@@ -191,7 +193,7 @@ export async function loadReviewSession(vaultPath: string, sessionId: string): P
 /**
  * 查找指定笔记是否存在未完成的复习会话（临时会话复用：不重复调用 AI 出题）。
  *
- * 遍历 `sessions/` 下 `review-*.md` 文件，解析 frontmatter 的 `reviewed_note`，
+ * 遍历 `sessions/` 下复习会话文件（兼容旧 `review-{id}.md` 与新 `{id}-{slug}.md`），解析 frontmatter 的 `reviewed_note`，
  * 按规范化路径（分隔符归一 + 小写）匹配该笔记；命中且**未完成**（`review_completed` 非 true）
  * 则返回**最新创建**的一个会话 id，无匹配返回 null。文件缺失/损坏的条目静默跳过，不抛错。
  *
@@ -209,7 +211,7 @@ export async function findIncompleteReviewSession(vaultPath: string, notePath: s
   }
   const candidates: Array<{ id: string; created: string }> = []
   for (const entry of entries) {
-    if (entry.is_dir || !entry.name.startsWith('review-') || !entry.name.endsWith('.md')) continue
+    if (entry.is_dir || !isReviewSessionFileName(entry.name)) continue
     try {
       const raw = await readFile(entry.path)
       const { meta } = parseFrontmatter(raw)
@@ -244,7 +246,7 @@ export interface ReviewSessionMeta {
 
 /**
  * 列出 vault 中全部复习会话（按创建时间倒序），供资源库「复习会话」分类展示。
- * 遍历 `sessions/` 下 `review-*.md`，解析 frontmatter；目录缺失/文件损坏静默跳过。
+ * 遍历 `sessions/` 下复习会话文件（兼容旧 `review-{id}.md` 与新 `{id}-{slug}.md`），解析 frontmatter；目录缺失/文件损坏静默跳过。
  */
 export async function listReviewSessions(vaultPath: string): Promise<ReviewSessionMeta[]> {
   let entries: Awaited<ReturnType<typeof listDir>>
@@ -255,7 +257,7 @@ export async function listReviewSessions(vaultPath: string): Promise<ReviewSessi
   }
   const result: ReviewSessionMeta[] = []
   for (const entry of entries) {
-    if (entry.is_dir || !entry.name.startsWith('review-') || !entry.name.endsWith('.md')) continue
+    if (entry.is_dir || !isReviewSessionFileName(entry.name)) continue
     try {
       const raw = await readFile(entry.path)
       const { meta } = parseFrontmatter(raw)
@@ -280,7 +282,7 @@ export async function listReviewSessions(vaultPath: string): Promise<ReviewSessi
 /**
  * 收集所有存在"未完成复习会话"的笔记规范化路径（学习地图「继续复习」按钮依据）。
  *
- * 遍历 `sessions/` 下 `review-*.md`，过滤掉 `review_completed: true` 的已完成会话，
+ * 遍历 `sessions/` 下复习会话文件（兼容旧 `review-{id}.md` 与新 `{id}-{slug}.md`），过滤掉 `review_completed: true` 的已完成会话，
  * 返回其 `reviewed_note` 的规范化路径列表（分隔符归一 + 小写，与 notePathKey 一致），
  * 供 ReviewDueList 判断某张到期卡片是「开始复习」还是「继续复习」。
  * 目录缺失/文件损坏静默跳过。
@@ -294,7 +296,7 @@ export async function listOngoingReviewNotePaths(vaultPath: string): Promise<str
   }
   const result = new Set<string>()
   for (const entry of entries) {
-    if (entry.is_dir || !entry.name.startsWith('review-') || !entry.name.endsWith('.md')) continue
+    if (entry.is_dir || !isReviewSessionFileName(entry.name)) continue
     try {
       const raw = await readFile(entry.path)
       const { meta } = parseFrontmatter(raw)

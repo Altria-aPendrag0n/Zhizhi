@@ -86,7 +86,7 @@ import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { resolveMessageIndex } from '../utils/message-locator'
-import { generateSessionTitle, getSessionFilePath } from '../utils/session-serializer'
+import { generateSessionTitle, getSessionFilePath, resolveSessionFile } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
 import { wrapHighlightInDOM, unwrapHighlight, isTableHighlight, wrapTableInDOM } from '../utils/highlight-dom'
@@ -200,8 +200,10 @@ async function loadContext() {
     return
   }
 
-  const parentFile = getSessionFilePath(vaultStore.vaultPath, sessionId.value, isBranchSession(sessionId.value))
-  const currentFile = getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
+  const parentFile = await resolveSessionFile(vaultStore.vaultPath, sessionId.value)
+    ?? getSessionFilePath(vaultStore.vaultPath, sessionId.value, isBranchSession(sessionId.value))
+  const currentFile = await resolveSessionFile(vaultStore.vaultPath, branchId.value)
+    ?? getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
 
   // 分叉点索引与上下文优先来自分支文件本身：
   // 划线创建分支时路由带 fork_index，但左侧目录/深链接进入时没有，只能依赖文件持久化内容
@@ -244,7 +246,8 @@ async function refreshNoteRefs() {
     return
   }
   try {
-    const currentFile = getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
+    const currentFile = await resolveSessionFile(vaultStore.vaultPath, branchId.value)
+      ?? getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
     const currentRaw = await readFile(currentFile)
     // 过滤已删除笔记的悬空引用（会话文件引用行可能因旧版本/路径差异未被清理）
     extractedNotes.value = await filterExistingNoteRefs(extractNoteRefsFromSession(currentRaw))

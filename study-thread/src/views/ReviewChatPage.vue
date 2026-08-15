@@ -249,7 +249,7 @@ import { detectPromptInjection } from '../review/review-input-guard'
 import { extractNote } from '../api/skills/extract-note'
 import { loadReviewSession, getReviewSessionFilePath } from '../utils/review-session'
 import { parseMentionedNotes } from '../utils/review-gap'
-import { saveSessionToVault } from '../utils/session-serializer'
+import { resolveSessionFile, saveSessionToVault } from '../utils/session-serializer'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { resolveMessageIndex } from '../utils/message-locator'
 import { extractNoteRefsFromSession, type NoteReference } from '../utils/session-linker'
@@ -413,7 +413,9 @@ async function load() {
 async function loadNoteRefs(): Promise<NoteReference[]> {
   if (!vaultStore.vaultPath || !session.value) return []
   try {
-    const content = await readFile(getReviewSessionFilePath(vaultStore.vaultPath, session.value.id))
+    const filePath = await resolveSessionFile(vaultStore.vaultPath, session.value.id)
+      ?? getReviewSessionFilePath(vaultStore.vaultPath, session.value.id)
+    const content = await readFile(filePath)
     return extractNoteRefsFromSession(content)
   } catch {
     return []

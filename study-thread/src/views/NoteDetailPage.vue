@@ -55,7 +55,7 @@ import { extractNote } from '../api/skills/extract-note'
 import { createProvider } from '../api/provider-factory'
 import { useToast } from '../composables/useToast'
 import type { Note, Session, ExtractedNote } from '../types'
-import { getSessionFilePath } from '../utils/session-serializer'
+import { getSessionFilePath, resolveSessionFile, sessionIdFromReference } from '../utils/session-serializer'
 import { loadBranchContext, parseMessages } from '../utils/branch-context'
 import { resolveMessageIndex } from '../utils/message-locator'
 import { readFile } from '../utils/vault-fs'
@@ -269,7 +269,10 @@ async function handleCreateBranch(highlightedText: string) {
 
   if (sourceSession) {
     try {
-      const sourceContent = await readFile(sourceSession)
+      const sourceId = sessionIdFromReference(sourceSession)
+      const sourceFile = await resolveSessionFile(vaultStore.vaultPath, sourceId)
+      if (!sourceFile) throw new Error('无效来源会话')
+      const sourceContent = await readFile(sourceFile)
       const { meta, body } = parseFrontmatter(sourceContent)
       const sourceMessages = parseMessages(body, Number.MAX_SAFE_INTEGER)
       const sessionId = typeof meta.session_id === 'string' ? meta.session_id : ''
@@ -280,7 +283,7 @@ async function handleCreateBranch(highlightedText: string) {
       if (forkMessageIndex === -1) {
         forkMessageIndex = sourceMessages.length - 1
       }
-      parentSessionFile = sourceSession
+      parentSessionFile = sourceFile
       parentSession = {
         id: sessionId,
         title: typeof meta.title === 'string' ? meta.title : currentNote.value.title,
@@ -288,7 +291,7 @@ async function handleCreateBranch(highlightedText: string) {
         parent_session: typeof meta.parent_session === 'string' ? meta.parent_session : null,
         fork_point: typeof meta.fork_point === 'string' ? meta.fork_point : null,
         tags: Array.isArray(meta.tags) ? meta.tags.filter((tag): tag is string => typeof tag === 'string') : [],
-        messages: await loadBranchContext(sourceSession, forkMessageIndex),
+        messages: await loadBranchContext(sourceFile, forkMessageIndex),
       }
     } catch {
       toast.error('无法读取笔记来源会话')

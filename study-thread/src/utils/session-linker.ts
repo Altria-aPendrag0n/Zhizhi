@@ -6,6 +6,7 @@
 
 import { readFile, listDir, writeFile } from './vault-fs'
 import { parseFrontmatter } from '../parser/frontmatter'
+import { sessionIdFromReference } from './session-serializer'
 import type { NoteMeta } from '../types'
 
 /**
@@ -94,12 +95,20 @@ export function extractNoteRefsFromSession(sessionContent: string): NoteReferenc
 
 /**
  * 扫描 vault 中所有笔记，查找引用指定会话的笔记
+ *
+ * 兼容 `source.session` 的新旧两种存储形态：旧版本存绝对路径，新版本存稳定 id。
+ * 比较时统一归一化为会话 id，避免路径格式（斜杠方向/大小写/文件名变化）导致的失配。
  */
 export async function findNotesBySession(
-  sessionPath: string,
+  sessionId: string,
   allNotes: NoteMeta[],
 ): Promise<NoteMeta[]> {
-  return allNotes.filter((note) => note.source?.session === sessionPath)
+  const targetId = sessionIdFromReference(sessionId)
+  return allNotes.filter((note) => {
+    const ref = note.source?.session
+    if (!ref) return false
+    return sessionIdFromReference(ref) === targetId
+  })
 }
 
 /** 路径归一化：统一小写与正斜杠（用于跨来源路径比较，兼容 Windows 反斜杠/大小写差异） */
