@@ -58,6 +58,11 @@
   <AiBusyOverlay />
   <Toast />
   <WelcomeOverlay />
+  <UpdatePrompt
+    :visible="updatePromptVisible"
+    :update="pendingUpdate"
+    @close="updatePromptVisible = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -70,6 +75,7 @@ import TopBar, { type TopBarMenuItem } from './components/shell/TopBar.vue'
 import Toast from './components/common/Toast.vue'
 import AiBusyOverlay from './components/common/AiBusyOverlay.vue'
 import WelcomeOverlay from './components/common/WelcomeOverlay.vue'
+import UpdatePrompt from './components/common/UpdatePrompt.vue'
 import { useToast } from './composables/useToast'
 import { useBusyStore } from './stores/busy'
 import type { Project } from './components/shell/ProjectRail.vue'
@@ -79,6 +85,7 @@ import { useVaultStore } from './stores/vault'
 import { useSessionStore } from './stores/session'
 import { useNoteStore } from './stores/notes'
 import type { SessionTreeNode } from './utils/session-tree'
+import { checkForUpdate, type AppUpdate } from './utils/updater'
 
 const router = useRouter()
 const route = useRoute()
@@ -98,6 +105,9 @@ const projects = ref<Project[]>(defaultProjects)
 const activeProjectId = ref('1')
 const activeThreadId = ref<string | null>(null)
 const noteDetailTitle = ref('')
+/** 启动自动检查更新：发现新版本时弹窗提示 */
+const updatePromptVisible = ref(false)
+const pendingUpdate = ref<AppUpdate | null>(null)
 
 /**
  * 会话栏列表：来自 vault sessions/*.md（仓库即真相，无本地缓存），
@@ -502,6 +512,15 @@ onMounted(() => {
         error,
       )
     })
+  // 启动时静默检查更新：发现新版本弹窗提示，失败/无更新不打扰用户
+  checkForUpdate()
+    .then((update) => {
+      if (update) {
+        pendingUpdate.value = update
+        updatePromptVisible.value = true
+      }
+    })
+    .catch(() => {})
   window.addEventListener('keydown', handleKeydown)
 })
 

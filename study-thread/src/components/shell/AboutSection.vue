@@ -72,12 +72,11 @@ import { onMounted, ref } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { save } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { check } from '@tauri-apps/plugin-updater'
-import { relaunch } from '@tauri-apps/plugin-process'
 import { Download, Copy, Mail, RefreshCw } from '@lucide/vue'
 import { getLogs, type LogEntry } from '../../utils/logger'
 import { writeFile } from '../../utils/vault-fs'
 import { useToast } from '../../composables/useToast'
+import { checkForUpdate, installUpdate } from '../../utils/updater'
 
 /** 反馈邮箱（测试版用户问题/建议统一收件地址） */
 const FEEDBACK_EMAIL = '1074253861@qq.com'
@@ -196,20 +195,14 @@ async function handleCheckUpdate() {
   if (checkingUpdate.value) return
   checkingUpdate.value = true
   try {
-    const update = await check()
+    const update = await checkForUpdate()
     if (!update) {
       toast.success('已是最新版本')
       return
     }
     toast.info(`发现新版本 v${update.version}，正在后台下载安装…`)
-    await update.downloadAndInstall((progress) => {
-      // 下载过程不打扰用户，仅在下载完成时提示
-      if (progress.event === 'Finished') {
-        toast.info('更新下载完成，正在安装…')
-      }
-    })
+    await installUpdate(update, () => toast.info('更新下载完成，正在安装…'))
     toast.success('更新已安装，应用即将重启')
-    await relaunch()
   } catch (e) {
     toast.error(`检查更新失败：${e instanceof Error ? e.message : String(e)}`)
   } finally {

@@ -25,7 +25,9 @@
 | `src/components/shell/ThreadList.vue` | 会话列表列（含分支树、右键菜单） |
 | `src/components/shell/ThreadBranch.vue` | 会话列内分支树节点（递归） |
 | `src/components/shell/TopBar.vue` | 顶栏（面包屑 + 内联标题编辑） |
-| `src/components/shell/AboutSection.vue` | 设置页「关于知枝」区块（版本号 + 测试版声明） |
+| `src/components/shell/AboutSection.vue` | 设置页「关于知枝」区块（版本号 + 测试版声明 + 手动检查更新） |
+| `src/components/common/UpdatePrompt.vue` | 更新提示对话框（发现新版本 → 立即更新 / 稍后） |
+| `src/utils/updater.ts` | 更新工具（检查 / 下载安装 / 重启），供启动自动检查与手动检查共用 |
 
 ## 3. 路由表（`src/router/index.ts`）
 
@@ -100,12 +102,16 @@ vaultStore.restoreLastVault()              // 恢复上次 Vault（localStorage:
 const engine = getEmbeddingEngine()
 engine.initialize()                        // 加载本地 embedding 模型
   .then(() => vaultStore.initIndex())      // 引擎就绪后再构建向量索引
+checkForUpdate()                           // 启动静默检查更新，发现新版本弹窗提示
+  .then(update => { if (update) openUpdatePrompt(update) })
+  .catch(() => {})                         // 未配置更新服务/网络异常静默忽略
 window.addEventListener('keydown', handleKeydown)
 ```
 
 - 监听 `vaultStore.vaultPath`：Vault 就绪后调用 `sessionStore.initSessionTree(path)` 加载分支树，供左侧会话列表展开分支。
 - Embedding 引擎加载失败（`engine.initialize().catch`）仅降级为 `console.warn`，不影响应用主体功能；提示文案为**本地模型资源缺失**（请确认安装包包含 `public/models` 完整模型文件），不再提示旧版在线下载场景的「开启代理/VPN」。
 - 删除会话/分支走 `sessionStore.deleteSessionNodeFromVault`（级联删除 vault 文件），无 vault 时视为本地会话直接放行；有 vault 但节点不在会话树中（本地模拟会话，如空的新会话改名而来的"知枝学习"）同样放行——否则这类会话无法从列表删除。
+- **启动自动检查更新**：`checkForUpdate()` 静默读取远端 `latest.json`，发现新版本时置 `pendingUpdate` 并打开 `UpdatePrompt` 弹窗（`updatePromptVisible = true`），用户点「立即更新」才下载安装；失败/无更新一律静默忽略（`.catch(() => {})`），不打扰用户。检测与安装逻辑封装在 `src/utils/updater.ts`，供启动检查与「关于」页手动检查两处复用。
 
 ## 5. 布局骨架 `AppShell.vue`
 
@@ -175,7 +181,7 @@ CSS Grid 五区布局，全部为具名插槽：
 - 设置页底部「关于知枝」区块（v0.1 发布前新增，为反馈定位版本）。
 - 展示产品名、发布状态（测试版徽标）、数据存放说明（本地 Vault，不自动上传）。
 - 版本号通过 `@tauri-apps/api/app` 的 `getVersion()` 获取（权限由 `core:default` 覆盖）；非 Tauri 环境或获取失败时降级展示默认版本号 `0.1.0`。
-- **自动更新**（v0.1 起）：「检查更新」按钮调用 `@tauri-apps/plugin-updater` 的 `check()` 读取远端 `latest.json`（GitHub Releases 托管）→ 有新版本时 `downloadAndInstall()` 后台下载安装 → `@tauri-apps/plugin-process` 的 `relaunch()` 重启应用；按钮旋转态防重复点击，异常降级为 toast 错误提示。Rust 侧由 `tauri-plugin-updater` + `tauri-plugin-process` 提供能力，`capabilities/default.json` 授予 `updater:default`、`process:default` 权限。发版清单生成与上传流程见 `docs/RUN.md` §4.4。
+- **自动更新**（v0.1 起）：检测/安装逻辑已抽取到 `src/utils/updater.ts` —— `checkForUpdate()` 调用 `@tauri-apps/plugin-updater` 的 `check()` 读取远端 `latest.json`（GitHub Releases 托管）→ `installUpdate()` 调 `downloadAndInstall()` 后台下载安装 → `@tauri-apps/plugin-process` 的 `relaunch()` 重启应用。「关于」页「检查更新」按钮复用这两个函数（toast 反馈进度、按钮旋转态防重复点击、异常降级为错误提示）；`App.vue` 启动时也调用 `checkForUpdate()` 静默检查，发现新版本弹 `UpdatePrompt` 对话框提示（立即更新 / 稍后）。Rust 侧由 `tauri-plugin-updater` + `tauri-plugin-process` 提供能力，`capabilities/default.json` 授予 `updater:default`、`process:default` 权限。发版清单生成与上传流程见 `docs/RUN.md` §4.4。
 - **反馈工具**（v0.1 反馈收集核心通道）：
   - 「导出调试日志」：`dialog.save` 选择保存路径 → `vault-fs.writeFile` 写入格式化反馈全文（版本/平台/最近 30 条日志/反馈指引）；
   - 「复制反馈信息」：`navigator.clipboard.writeText` 复制同样的反馈全文；
@@ -194,6 +200,8 @@ CSS Grid 五区布局，全部为具名插槽：
 - `src/router/index.test.ts`：路由配置
 - `src/App.test.ts`：根组件渲染与导航行为
 - `src/components/shell/ThreadList.test.ts`：会话列表交互
+- `src/components/common/UpdatePrompt.test.ts`：更新提示对话框（版本展示 / 立即更新 / 稍后 / 失败恢复）
+- `src/components/shell/AboutSection.test.ts`：关于区块（版本 / 日志导出 / 复制反馈 / 邮件反馈 / 检查更新）
 
 ---
 
