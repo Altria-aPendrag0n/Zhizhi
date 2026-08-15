@@ -52,10 +52,15 @@ parseHeadings(markdown): MarkdownHeading[]
 |------|------|
 | `generateSessionTitle(messages)` | 首条用户消息前 30 字（去换行）+ `...` |
 | `sanitizeFileName(name)` | 移除 `\ / : * ? " < > \|`，空值回退 `untitled` |
-| `serializeSession(session, noteRefs)` | 生成 Markdown：frontmatter（session_id/title/created/tags/parent_session/fork_point）+ 消息（`## 用户|知枝|系统 · 时间`）+ AI 思考区块（`<!-- thinking -->`，assistant 消息正文前）+ 笔记引用行（`> 已生成笔记: [[path|title]]`） |
+| `slugifyTitle(title)` | 标题 → 可读 slug：去非法字符/链接敏感字符、空白转 `-`、去首尾标点、截断 40 字；空标题回退 `''`（文件名保持纯 id） |
+| `buildSessionFileName(sessionId, title?)` | 组装 `{id}-{slug}.md`（无 slug 时 `{id}.md`）；类型由 id 前缀（`sess_`/`new_`/`branch_`/`review_`/`note_root_`）区分，不再使用 `branch-`/`review-` 文件前缀 |
+| `serializeSession(session, noteRefs)` | 生成 Markdown：frontmatter（session_id/title/created/tags/parent_session/fork_point）+ 消息（`## 用户\|知枝\|系统 · 时间`）+ AI 思考区块（`<!-- thinking -->`，assistant 消息正文前）+ 笔记引用行（`> 已生成笔记: [[path\|title]]`） |
 | `serializeThinkingBlock(text)` | 序列化 AI 思考过程为 `<!-- thinking -->` 包裹的区块文本；内容中的 `-->` 转义为 `--&gt;` 避免提前闭合标记 |
-| `getSessionFilePath(vaultPath, sessionId, isBranch)` | `sessions/{id}.md` 或 `sessions/branch-{id}.md` |
-| `saveSessionToVault(vaultPath, session, isBranch, noteRefs)` | 建目录 + 写文件，返回文件路径 |
+| `getSessionFilePath(vaultPath, sessionId, _isBranch?, _isReview?, title?)` | 写路径：统一 `sessions/{id}-{slug}.md`；`_isBranch`/`_isReview` 仅为签名兼容，类型由 id 前缀区分 |
+| `resolveSessionFile(vaultPath, sessionId)` | 读路径统一入口：按 id 扫描 `sessions/` 定位现有文件，兼容旧 `{id}.md`/`branch-{id}.md`/`review-{id}.md` 与新 `{id}-{slug}.md`；未命中返回 `null` |
+| `sessionIdFromReference(reference)` | 引用归一：id（无 `/`、`\`）直接返回；旧文件路径从文件名解析 id |
+| `sessionIdFromFileName(name)` | 从文件名解析稳定 id：先剥离旧 `branch-`/`review-` 前缀，再截断新命名 `{id}-{slug}` 的首个 `-` 之后部分 |
+| `saveSessionToVault(vaultPath, session, isBranch, noteRefs, isReview)` | 建目录；先 `resolveSessionFile` 复用现有路径（标题改动不重建文件），否则按新命名写文件，返回路径 |
 | `parseSessionMeta(content, filePath)` | 轻量解析 frontmatter（id/title/created），侧边栏会话列表用；缺失时按文件名兜底 |
 | `parseSessionMessages(body)` | 解析正文消息（保留 `## 角色 · 时间戳` 的消息级时间戳与 `message.thinking`；跳过 `<!-- fork-context -->`、`<!-- thinking -->` 区块与 `> 已生成笔记/分支` 引用标记行） |
 | `parseSessionFile(content, filePath?)` | 完整会话解析（frontmatter + 消息），读取侧唯一入口；复习会话建议走 `review-session.loadReviewSession`（含出题结果规范化） |
@@ -69,7 +74,7 @@ interface SessionTreeNode {
   id: string
   type: 'message' | 'branch'
   title: string
-  file: string          // 关联 Markdown 文件路径
+  file: string          // 关联会话稳定 id（运行时按 id 解析文件路径，不再存绝对路径）
   created: string
   fork_from: string | null
   children: SessionTreeNode[]
@@ -118,7 +123,13 @@ interface SessionTreeNode {
 
 ## 8. 文件格式约定（供参考）
 
-### 8.1 会话文件（`sessions/<id>.md`）
+### 8.1 会话文件（`sessions/{id}-{slug}.md`）
+
+> 文件命名采用「稳定 id + 标题 slug」混合规则：`{id}-{slug}.md`（无标题时 `{id}.md`）。
+> `id` 前缀区分类型（`sess_`/`new_`/`branch_`/`review_`），`slug` 由标题生成。
+> 文件名在首次创建后保持稳定：普通保存复用现有路径，仅显式重命名标题时更新 slug。
+> 笔记 `source.session` 与树节点 `file` 均存稳定 id（非路径），读取时按 id 动态解析，
+> 因此修改会话标题不会破坏笔记链接。旧文件 `branch-*`/`review-*` 由 `resolveSessionFile` 兼容读取。
 
 ```markdown
 ---
@@ -154,7 +165,7 @@ tags:
 created: ...
 updated: ...
 source:
-  session: sessions/xxx.md
+  session: sess_...        # 来源会话稳定 id（旧数据可能为 sessions/xxx.md 路径，读取侧已归一化）
   highlight: "划线原文"
 confidence: 0.5
 ---

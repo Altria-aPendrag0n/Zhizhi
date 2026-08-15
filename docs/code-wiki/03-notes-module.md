@@ -133,9 +133,9 @@ interface Note {
 
 | 函数 | 说明 |
 |------|------|
-| `getNoteSourceSession(notePath)` | 读取笔记 frontmatter 的 `source.session/highlight` |
+| `getNoteSourceSession(notePath)` | 读取笔记 frontmatter 的 `source.session/highlight`（`session` 为稳定 id，旧路径由调用侧归一化） |
 | `extractNoteRefsFromSession(sessionContent)` | 解析会话文件中的 `> 已生成笔记: [[path|title]]` 行，按消息分界（`## 用户/知枝/系统`）映射到 `messageIndex` |
-| `findNotesBySession(sessionPath, allNotes)` | 按 `source.session` 过滤笔记 |
+| `findNotesBySession(sessionId, allNotes)` | 按 `source.session` 过滤笔记；入参与笔记引用统一经 `sessionIdFromReference` 归一化，兼容旧路径与新稳定 id |
 | `removeSessionReferences(vaultPath, targets, kind)` | 删除笔记/分支后清理会话文件中的对应引用行；**路径归一化匹配**（统一小写与正斜杠，兼容 Windows 混合分隔符） |
 | `filterExistingNoteRefs(refs)` | 按文件存在性过滤已删除笔记的悬空引用（分支引用保留），聊天页 `refreshNoteRefs` 兜底使用 |
 

@@ -65,7 +65,7 @@
 | `currentSessionId` / `messages: Message[]` | 当前会话与消息 |
 | `isStreaming` | 流式标记（UI 使用） |
 | `sessionTree: SessionTreeNode \| null` | 分支树（来自 `.study-thread/session-tree.json`） |
-| `sessionList: SessionMeta[]` | 侧边栏会话列表（来自 vault `sessions/*.md`，排除 branch-/review- 前缀文件） |
+| `sessionList: SessionMeta[]` | 侧边栏会话列表（来自 vault `sessions/*.md`，按 id 前缀排除 `branch_`/`review_` 会话，兼容旧 `branch-`/`review-` 文件前缀） |
 | `MAX_BRANCH_DEPTH = 3` | 分支嵌套上限（主会话为 0 层） |
 
 | 动作 | 说明 |

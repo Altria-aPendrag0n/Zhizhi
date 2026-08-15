@@ -183,13 +183,13 @@ noteStore.loadNote ──► 合并 Note.review 镜像
 
 - **会话模型**：复习会话是**独立根会话**——`Session.kind === 'review'` + `reviewed_note`（被复习笔记路径），不进入 `session-tree.json`、不占用分支深度（≤3）。
 - **出题结果持久化**：`review_questions` 序列化到 frontmatter（YAML flow 序列/JSON 字符串双形态兼容），重新打开复习会话无需重新出题。
-- **文件命名**：`sessions/review-<id>.md`（`getReviewSessionFilePath` / `saveSessionToVault(..., isReview)`）。
+- **文件命名**：`sessions/review_{id}-{slug}.md`（`getReviewSessionFilePath` / `saveSessionToVault(..., isReview)`；旧文件 `review-<id>.md` 仍兼容读取）。
 - **序列化扩展**（`session-serializer.ts`）：frontmatter 新增 `kind` / `reviewed_note` / `review_questions`。
 - **装载工具**：
   - `createReviewSession(note, questions)`：构建复习会话，首条 assistant 消息为"复习目标 + 问题列表"。
   - `buildReviewRelatedNotes(note, allNotes)`：wikilink 目标优先、同标签补充，去重截断（上限 4 条；P3 可扩展 RAG）。
   - `loadReviewSession(vaultPath, sessionId)`：解析复习会话文件 → Session（含出题结果、消息与 `review_completed`）。
-  - `findIncompleteReviewSession(vaultPath, notePath)`：遍历 `sessions/` 下 `review-*.md`，按 `reviewed_note` 规范化路径（分隔符归一 + 小写）匹配，**跳过 `review_completed: true` 的会话**，返回**最新创建**的未完成会话 id；文件损坏/目录缺失静默跳过。
+  - `findIncompleteReviewSession(vaultPath, notePath)`：遍历 `sessions/` 下复习会话文件（兼容旧 `review-{id}.md` 与新 `review_{id}-{slug}.md`），按 `reviewed_note` 规范化路径（分隔符归一 + 小写）匹配，**跳过 `review_completed: true` 的会话**，返回**最新创建**的未完成会话 id；文件损坏/目录缺失静默跳过。
   - `listReviewSessions(vaultPath)`：列出全部复习会话元信息（id/标题/创建时间/被复习笔记/是否完成/题目数，按创建时间倒序），供资源库「复习会话」分类展示。
   - `listOngoingReviewNotePaths(vaultPath)`：收集所有存在**未完成**复习会话的笔记规范化路径（跳过 `review_completed: true`），供学习地图判断到期卡片显示「开始复习」还是「继续复习」。
 - **临时会话复用与完成标记（P6）**：复习会话是**按笔记临时生成**的——学习地图「开始复习」前先 `findIncompleteReviewSession`，命中则直接跳转已有会话（**不重复调用 LLM 出题**，出题结果已随会话文件持久化，节省 token）；重新打开时按已作答 user 消息数恢复答题进度。完成复习后（单条模式评级完成 / 簇模式点「完成复习」）将 `review_completed: true` 写回 frontmatter 并持久化——**不再删除会话文件**，保留在资源库「复习会话」分类供回看错题；已完成会话不会被「开始复习」复用，下次到期重新出题。此外，**所有复习题答完后退出页面也会自动写入 `review_completed: true`**（见 §9.4）。

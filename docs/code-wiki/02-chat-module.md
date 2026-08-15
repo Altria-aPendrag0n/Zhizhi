@@ -63,7 +63,7 @@
 - 高亮实现：**不在源文本中预插 `<mark>`（跨标记时会被 marked 破坏语法）**。创建分支时把划线文本持久化到分支文件 frontmatter `fork_highlight`（JSON 字符串保证 YAML 安全）；页面渲染分叉点上下文后，用 `wrapHighlightInDOM` 在 DOM 上把划线文本包裹为 `<mark class="fork-highlight">`（先 unwrap 旧标记保证幂等）。**表格划线例外**：划线文本为表格 Markdown 源码、渲染 DOM 文本无 `|` 分隔符无法定位，且跨单元格切分文本节点会破坏 `<table>` 结构——`isTableHighlight` 判定后改用 `wrapTableInDOM` 把整张渲染表格包裹为高亮标记（源文本不注入 mark，避免破坏表格语法）。
 - 创建分支时由 `createBranchInVault` 用 `buildForkContextPreview(父会话消息, forkMessageIndex, highlightedText)` 生成，随分支文件持久化。
 
-**分支会话文件格式**（`sessions/branch-*.md`）：
+**分支会话文件格式**（`sessions/branch_{id}-{slug}.md`，旧文件 `branch-*.md` 仍兼容读取）：
 
 ```markdown
 ---

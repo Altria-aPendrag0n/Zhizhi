@@ -19,7 +19,7 @@
 
 | 行为 | 日期来源 | 说明 |
 |------|----------|------|
-| 问答（qa） | 学习/分支会话文件中的用户消息 | 消息头 `## 用户 · <ISO>` 带时间戳 → 精确到当天；存量文件无时间戳 → 按 frontmatter `created` 近似。**复习会话 `review-*.md` 不计入问答** |
+| 问答（qa） | 学习/分支会话文件中的用户消息 | 消息头 `## 用户 · <ISO>` 带时间戳 → 精确到当天；存量文件无时间戳 → 按 frontmatter `created` 近似。**复习会话不计入问答（旧 `review-*.md` 与新 `review_*.md` 均排除）** |
 | 复习（review） | `.study-thread/review-state.json` | 队列 `queue[].history[].at`，每次评级记一次复习 |
 | 笔记（note） | `notes/*.md` frontmatter `created` | 每篇笔记记一次（当日新增） |
 
@@ -51,7 +51,7 @@
       2. 笔记复用 noteStore 元数据：当前 vault 已变更（重新添加资料库）或未加载时
          重新 loadAllNotes（避免误用上一个 vault 的本地缓存），否则直接复用
       3. collectLearningStats(vaultPath, noteMetas)
-           ├─ collectSessionQaDates  → sessions/*.md（排除 review-*）逐条用户消息日期
+           ├─ collectSessionQaDates  → sessions/*.md（排除复习会话）逐条用户消息日期
            ├─ collectReviewDates     → review-state.json 评级 history
            └─ extractNoteDates       → 笔记 created（或扫描 notes/ 目录）
          → aggregateDailyCounts → summarizeStats（total / streak）
@@ -89,7 +89,7 @@
 ## 8. 相关测试
 
 - `src/utils/learning-stats.test.ts`：日期键、消息日期提取（带/无时间戳、fallback、误匹配防护）、
-  review 解析、聚合、汇总（streak 边界）、vault 聚合（mock vault-fs，排除 review-*）
+  review 解析、聚合、汇总（streak 边界）、vault 聚合（mock vault-fs，排除复习会话）
 - `src/components/stats/ContributionGraph.test.ts`：格子数量、层级、hover 明细、自定义周数
 - `src/views/HomePage.test.ts`：空态引导、统计渲染、开始新会话回调、加载失败容错
 - `MainChatPage.test.ts` 断言用户消息携带时间戳（时间戳注入的回归保护）
@@ -101,5 +101,5 @@
 - **统计全为 0 时优先排查 vault 路径**：统计直接来自 vault 文件，若资料库被删除/移动/重命名后
   `openVault` 静默"打开成功"，扫描全部失败返回空。vault 打开/恢复现已校验路径有效性
   （见 [07-vault-module.md](./07-vault-module.md) 幽灵 Vault 防护），失效路径会回到"未打开 Vault"空态。
-- 复习会话文件（`review-*`）不计入问答，避免"复习中的回答"与"复习评级"重复计数。
+- 复习会话文件不计入问答（旧 `review-*` 与新 `review_*` 均排除），避免"复习中的回答"与"复习评级"重复计数。
 - 存量会话无消息级时间戳，按会话 `created` 近似归属，属已知口径妥协；新会话自动带时间戳后逐步精确。

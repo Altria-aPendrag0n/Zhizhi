@@ -129,7 +129,7 @@ d:\work\Zhizhi\
 | 数据类型 | 存储位置 | 说明 |
 |----------|----------|------|
 | 原子笔记 | `<vault>/notes/*.md` | YAML frontmatter + Markdown 正文 |
-| 学习会话 / 分支 | `<vault>/sessions/*.md`、`branch-*.md` | Markdown 对话记录 |
+| 学习会话 / 分支 / 复习 | `<vault>/sessions/{id}-{slug}.md` | Markdown 对话记录；`id` 前缀区分类型（`sess_`/`new_`/`branch_`/`review_`），`slug` 由标题生成；旧文件 `branch-*`/`review-*` 仍兼容读取 |
 | 会话分支树 | `<vault>/.study-thread/session-tree.json` | 分支树结构 |
 | 参考资料 | `<vault>/references/{id}/`（自包含文件夹：`{id}.json` + `{id}.{ext}` + `{id}.extracted.md`） | 元数据、原始文件与 pdf 提取产物同文件夹管理 |
 | 向量索引缓存 | `localStorage`（`study-thread-note-index`） | 索引持久化，避免重复嵌入 |
@@ -316,7 +316,7 @@ npm run tauri build    # vue-tsc + vite build + cargo build --release
      ├─ 若模型发起 tool_call（如 read_reference）→ executeClientTool 本地执行 → 结果作为 tool 消息回传 → 下一轮
      └─ 无工具调用 → 透传最终回答
   4. 流式渲染：thinking 折叠块 + StreamText / ChatMessage（marked 渲染）
-  5. 会话持久化：saveSessionToVault → <vault>/sessions/<id>.md（仓库即真相，无 localStorage 缓存；侧边栏列表由 loadSessionsFromVault 扫描该目录重建）
+  5. 会话持久化：saveSessionToVault → <vault>/sessions/{id}-{slug}.md（仓库即真相，无 localStorage 缓存；侧边栏列表由 loadSessionsFromVault 扫描该目录重建）
 ```
 
 ### 8.2 划线摘录 → 原子笔记
@@ -337,7 +337,7 @@ npm run tauri build    # vue-tsc + vite build + cargo build --release
 用户在消息上选"创建分支" → sessionStore.createBranchInVault
   1. initSessionTree 读取 .study-thread/session-tree.json（无则建根节点）
   2. 校验深度 < MAX_BRANCH_DEPTH(3)
-  3. 保存父会话文件（若不存在）→ 创建分支会话文件 sessions/branch-<id>.md
+  3. 保存父会话文件（若不存在）→ 创建分支会话文件 sessions/branch_{id}-{slug}.md
   4. addBranchToSessionTree + saveSessionTree
   5. 跳转 /chat/branch/:sessionId/:branchId
   分支对话：BranchChatPage 用 loadBranchContext(父文件, forkIndex) 提取分叉点前消息
