@@ -450,7 +450,7 @@ async function handleSend(content: string) {
     return
   }
 
-  // 用户消息携带时间戳（复习会话文件 review-* 不计入主界面问答统计，保持一致便于追溯）
+  // 用户消息携带时间戳（复习会话文件不计入主界面问答统计，保持一致便于追溯）
   messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
   // 新一轮作答开始（判定徽章随反馈消息注入，无需清除全局状态）
   const aiMessage: Message = { role: 'assistant', content: '' }

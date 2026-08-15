@@ -2,7 +2,7 @@
  * 学习统计工具
  *
  * 按天聚合三种学习行为，供主界面（/home）的数据总览与学习频率格子图使用：
- * - 问答（qa）：学习会话 / 分支会话中的用户消息次数（复习会话 review-* 不计入问答）
+ * - 问答（qa）：学习会话 / 分支会话中的用户消息次数（复习会话不计入问答）
  * - 复习（review）：`.study-thread/review-state.json` 队列中每次评级记录（history[].at）
  * - 笔记（note）：notes/ 目录下笔记 frontmatter 的 created 日期
  *
@@ -195,7 +195,7 @@ export async function collectLearningStats(vaultPath: string, noteMetas?: NoteMe
   return summarizeStats(aggregateDailyCounts({ qa: qaDates, review: reviewDates, note: noteDates }))
 }
 
-/** 扫描 sessions/ 目录，汇总所有学习/分支会话的用户消息日期（排除复习会话 review-*） */
+/** 扫描 sessions/ 目录，汇总所有学习/分支会话的用户消息日期（排除复习会话） */
 async function collectSessionQaDates(vaultPath: string): Promise<string[]> {
   try {
     const entries = await listDir(`${vaultPath}/sessions`)
@@ -203,7 +203,7 @@ async function collectSessionQaDates(vaultPath: string): Promise<string[]> {
     for (const entry of entries) {
       if (entry.is_dir) continue
       if (!entry.name.toLowerCase().endsWith('.md')) continue
-      if (entry.name.toLowerCase().startsWith('review-')) continue
+      if (entry.name.toLowerCase().startsWith('review-') || entry.name.toLowerCase().startsWith('review_')) continue
       try {
         const content = await readFile(entry.path)
         dates.push(...extractSessionQaDates(content))

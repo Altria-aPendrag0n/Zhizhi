@@ -187,7 +187,8 @@ describe('collectLearningStats（vault 聚合）', () => {
         return [
           { name: 'sess1.md', path: `${path}/sess1.md`, is_dir: false },
           { name: 'branch_1.md', path: `${path}/branch_1.md`, is_dir: false },
-          { name: 'review-1.md', path: `${path}/review-1.md`, is_dir: false }, // 复习会话不计入问答
+          { name: 'review-1.md', path: `${path}/review-1.md`, is_dir: false }, // 旧命名复习会话不计入问答
+          { name: 'review_2-复习.md', path: `${path}/review_2-复习.md`, is_dir: false }, // 新命名复习会话不计入问答
         ]
       }
       return [] // notes 由 noteMetas 提供，不触发目录扫描
@@ -214,6 +215,7 @@ describe('collectLearningStats（vault 聚合）', () => {
     expect(stats.daily.get('2026-08-06')).toEqual({ qa: 2, review: 1, note: 0 })
     // 复习会话文件不计入问答
     expect(vaultFs.readFile).not.toHaveBeenCalledWith(expect.stringContaining('review-1.md'))
+    expect(vaultFs.readFile).not.toHaveBeenCalledWith(expect.stringContaining('review_2'))
   })
 
   it('sessions 目录缺失或读取失败时静默返回空', async () => {
