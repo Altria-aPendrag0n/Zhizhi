@@ -8,6 +8,7 @@ import {
   getNodeDepth,
   collectSubtreeIds,
   removeNodeFromTree,
+  updateNodeTitle,
   serializeTree,
   deserializeTree,
   countNodes,
@@ -192,6 +193,26 @@ describe('removeNodeFromTree', () => {
     expect(removed).not.toBeNull()
     expect(removed!.id).toBe('root')
     expect(removed!.children).toEqual([])
+  })
+})
+
+describe('updateNodeTitle', () => {
+  it('更新嵌套节点的标题并保持不可变', () => {
+    const root = createRootNode('root', '主会话', 'main.md')
+    const b1 = createBranchNode('b1', '分支1', 'b1.md', 'root')
+    const b2 = createBranchNode('b2', '分支2', 'b2.md', 'b1')
+    let tree = addBranchToTree(root, 'root', b1)
+    tree = addBranchToTree(tree, 'b1', b2)
+
+    const updated = updateNodeTitle(tree, 'b2', '新标题')
+    expect(findNode(updated, 'b2')!.title).toBe('新标题')
+    expect(findNode(updated, 'b1')!.title).toBe('分支1')
+    expect(findNode(tree, 'b2')!.title).toBe('分支2') // 原树不受影响
+  })
+
+  it('节点不存在时返回原树引用', () => {
+    const root = createRootNode('root', '主会话', 'main.md')
+    expect(updateNodeTitle(root, 'nonexistent', '新标题')).toBe(root)
   })
 })
 

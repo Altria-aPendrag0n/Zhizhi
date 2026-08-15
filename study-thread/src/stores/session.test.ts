@@ -104,9 +104,9 @@ describe('session store', () => {
     expect(vaultFs.writeFile).not.toHaveBeenCalledWith('/vault/sessions/source-session.md', expect.any(String))
   })
 
-  it('从分支创建嵌套分支时按分支文件命名规则定位父会话', async () => {
-    const root = createRootNode('root', '主会话', '/vault/sessions/root.md')
-    const b1 = createBranchNode('branch_b1', '分支1', '/vault/sessions/branch-branch_b1.md', 'root')
+  it('从分支创建嵌套分支时按稳定 id 定位父会话并生成 slug 命名', async () => {
+    const root = createRootNode('root', '主会话', 'root')
+    const b1 = createBranchNode('branch_b1', '分支1', 'branch_b1', 'root')
     const tree = addBranchToTree(root, 'root', b1)
     vaultFs.readFile.mockResolvedValue(serializeTree(tree))
 
@@ -124,10 +124,10 @@ describe('session store', () => {
     const branchId = await store.createBranchInVault('/vault', parentBranch, 0, '分支2')
 
     expect(branchId).toMatch(/^branch_\d+_\d+$/)
-    // 父分支按 branch- 前缀文件定位（fileExists 为 true 时不重写父文件）
-    expect(vaultFs.fileExists).toHaveBeenCalledWith('/vault/sessions/branch-branch_b1.md')
-    // 新分支仍按分支文件命名规则保存
-    expect(vaultFs.writeFile).toHaveBeenCalledWith(`/vault/sessions/branch-${branchId}.md`, expect.any(String))
+    // 列表扫描为空时回退按 id 生成父文件路径（不再使用 branch- 双前缀）
+    expect(vaultFs.fileExists).toHaveBeenCalledWith('/vault/sessions/branch_b1.md')
+    // 新分支采用 id-标题 slug 混合命名保存
+    expect(vaultFs.writeFile).toHaveBeenCalledWith(`/vault/sessions/${branchId}-分支2.md`, expect.any(String))
   })
 
   it('分支深度达到上限（第 3 层）后拒绝再创建嵌套分支', async () => {
@@ -181,12 +181,12 @@ describe('session store', () => {
   describe('deleteSessionNodeFromVault', () => {
     /** root → [branch_b1 → branch_b1c, branch_b2] */
     function buildTree() {
-      const root = createRootNode('root', '主会话', '/vault/sessions/root.md')
-      const b1 = createBranchNode('branch_b1', '分支1', '/vault/sessions/branch-branch_b1.md', 'root')
+      const root = createRootNode('root', '主会话', 'root')
+      const b1 = createBranchNode('branch_b1', '分支1', 'branch_b1', 'root')
       let tree = addBranchToTree(root, 'root', b1)
-      const b2 = createBranchNode('branch_b2', '分支2', '/vault/sessions/branch-branch_b2.md', 'root')
+      const b2 = createBranchNode('branch_b2', '分支2', 'branch_b2', 'root')
       tree = addBranchToTree(tree, 'root', b2)
-      const b1c = createBranchNode('branch_b1c', '分支1子', '/vault/sessions/branch-branch_b1c.md', 'branch_b1')
+      const b1c = createBranchNode('branch_b1c', '分支1子', 'branch_b1c', 'branch_b1')
       tree = addBranchToTree(tree, 'branch_b1', b1c)
       return tree
     }
@@ -198,11 +198,11 @@ describe('session store', () => {
       const ok = await store.deleteSessionNodeFromVault('/vault', 'root')
 
       expect(ok).toBe(true)
-      // 主会话文件及其全部后代分支文件均被删除
+      // 主会话文件及其全部后代分支文件均按 id 定位删除
       expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/root.md')
-      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch-branch_b1.md')
-      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch-branch_b1c.md')
-      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch-branch_b2.md')
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch_b1.md')
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch_b1c.md')
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch_b2.md')
       // 根节点被移除 → 树清空
       expect(store.sessionTree).toBeNull()
     })
@@ -214,15 +214,30 @@ describe('session store', () => {
       const ok = await store.deleteSessionNodeFromVault('/vault', 'branch_b1')
 
       expect(ok).toBe(true)
-      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch-branch_b1.md')
-      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch-branch_b1c.md')
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch_b1.md')
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch_b1c.md')
       expect(vaultFs.deleteFile).not.toHaveBeenCalledWith('/vault/sessions/root.md')
-      expect(vaultFs.deleteFile).not.toHaveBeenCalledWith('/vault/sessions/branch-branch_b2.md')
+      expect(vaultFs.deleteFile).not.toHaveBeenCalledWith('/vault/sessions/branch_b2.md')
       // 树中该分支及其子分支已移除，上级与同级保留
       expect(findNode(store.sessionTree!, 'branch_b1')).toBeNull()
       expect(findNode(store.sessionTree!, 'branch_b1c')).toBeNull()
       expect(findNode(store.sessionTree!, 'branch_b2')).not.toBeNull()
       expect(store.sessionTree!.id).toBe('root')
+    })
+
+    it('按 id 扫描定位旧 branch- 前缀文件并删除（兼容旧数据）', async () => {
+      vaultFs.readFile.mockResolvedValue(serializeTree(buildTree()))
+      vaultFs.listDir.mockResolvedValue([
+        { name: 'branch-branch_b1.md', path: '/vault/sessions/branch-branch_b1.md', is_dir: false },
+        { name: 'branch-branch_b1c.md', path: '/vault/sessions/branch-branch_b1c.md', is_dir: false },
+      ])
+      const store = useSessionStore()
+
+      const ok = await store.deleteSessionNodeFromVault('/vault', 'branch_b1')
+
+      expect(ok).toBe(true)
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch-branch_b1.md')
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/branch-branch_b1c.md')
     })
 
     it('不在会话树中的本地会话放行并删除对应文件（若存在）', async () => {
@@ -278,12 +293,14 @@ describe('session store', () => {
   })
 
   describe('loadSessionsFromVault 仓库会话列表', () => {
-    it('扫描 sessions/ 解析 frontmatter，排除分支与复习会话，按创建时间倒序', async () => {
+    it('扫描 sessions/ 解析 frontmatter，排除新旧命名的分支与复习会话，按创建时间倒序', async () => {
       vaultFs.listDir.mockResolvedValue([
         { name: 'sess_2.md', path: '/vault/sessions/sess_2.md', is_dir: false },
-        { name: 'sess_1.md', path: '/vault/sessions/sess_1.md', is_dir: false },
+        { name: 'sess_1-费曼学习.md', path: '/vault/sessions/sess_1-费曼学习.md', is_dir: false },
         { name: 'branch-b1.md', path: '/vault/sessions/branch-b1.md', is_dir: false },
         { name: 'review-r1.md', path: '/vault/sessions/review-r1.md', is_dir: false },
+        { name: 'branch_b2-分支追问.md', path: '/vault/sessions/branch_b2-分支追问.md', is_dir: false },
+        { name: 'review_r2-复习.md', path: '/vault/sessions/review_r2-复习.md', is_dir: false },
       ])
       vaultFs.readFile.mockImplementation((path) => {
         if (String(path).includes('sess_1')) {
@@ -301,6 +318,7 @@ describe('session store', () => {
       // 分支/复习会话不进入列表；按 created 倒序（sess_2 晚于 sess_1）
       expect(store.sessionList.map((s) => s.id)).toEqual(['sess_2', 'sess_1'])
       expect(vaultFs.readFile).not.toHaveBeenCalledWith('/vault/sessions/branch-b1.md', expect.anything())
+      expect(vaultFs.readFile).not.toHaveBeenCalledWith('/vault/sessions/branch_b2-分支追问.md', expect.anything())
     })
 
     it('sessions 目录缺失时列表为空，不抛错', async () => {
@@ -314,11 +332,15 @@ describe('session store', () => {
   })
 
   describe('renameSessionTitle 重命名会话', () => {
-    it('改写会话 md 的 frontmatter title 并刷新列表', async () => {
+    it('改写 frontmatter 并按新标题更新文件名 slug，再刷新列表', async () => {
       const raw = '---\nsession_id: sess_1\ntitle: 旧标题\ncreated: 2026-01-01T00:00:00.000Z\n---\n\n## 用户\n内容'
-      vaultFs.listDir.mockResolvedValue([
-        { name: 'sess_1.md', path: '/vault/sessions/sess_1.md', is_dir: false },
-      ])
+      vaultFs.listDir
+        .mockResolvedValueOnce([
+          { name: 'sess_1.md', path: '/vault/sessions/sess_1.md', is_dir: false },
+        ])
+        .mockResolvedValue([
+          { name: 'sess_1-新标题.md', path: '/vault/sessions/sess_1-新标题.md', is_dir: false },
+        ])
       const calls: string[] = []
       vaultFs.readFile.mockImplementation((path) => {
         calls.push(String(path))
@@ -332,9 +354,10 @@ describe('session store', () => {
 
       expect(ok).toBe(true)
       expect(vaultFs.writeFile).toHaveBeenCalledWith(
-        '/vault/sessions/sess_1.md',
+        '/vault/sessions/sess_1-新标题.md',
         expect.stringContaining('title: 新标题'),
       )
+      expect(vaultFs.deleteFile).toHaveBeenCalledWith('/vault/sessions/sess_1.md')
       expect(store.sessionList[0].title).toBe('新标题')
     })
 

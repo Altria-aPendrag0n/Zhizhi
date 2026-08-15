@@ -15,7 +15,7 @@ export interface SessionTreeNode {
   type: 'message' | 'branch'
   /** 标题 */
   title: string
-  /** 关联的 Markdown 文件路径 */
+  /** 关联会话的稳定 id（文件名由 id 动态定位，标题重命名不改变该值） */
   file: string
   /** 创建时间 */
   created: string
@@ -88,6 +88,26 @@ export function addBranchToTree(
     ...tree,
     children: tree.children.map((child) => addBranchToTree(child, parentId, branch)),
   }
+}
+
+/**
+ * 更新树中指定节点的标题（不可变更新，节点不存在时返回原树）
+ */
+export function updateNodeTitle(
+  tree: SessionTreeNode,
+  id: string,
+  title: string,
+): SessionTreeNode {
+  if (tree.id === id) {
+    return { ...tree, title }
+  }
+  let changed = false
+  const children = tree.children.map((child) => {
+    const updated = updateNodeTitle(child, id, title)
+    if (updated !== child) changed = true
+    return updated
+  })
+  return changed ? { ...tree, children } : tree
 }
 
 /**

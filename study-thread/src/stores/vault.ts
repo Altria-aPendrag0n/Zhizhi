@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { DirEntry, NoteMeta } from '../types'
 import { listDir, startWatching, stopWatching, readFile, deleteFile, fileExists } from '../utils/vault-fs'
-import { getSessionFilePath, saveSessionToVault } from '../utils/session-serializer'
+import { getSessionFilePath, resolveSessionFile, saveSessionToVault } from '../utils/session-serializer'
 import type { NoteReference } from '../utils/session-linker'
 import type { Session } from '../types'
 import { getNoteIndexer, type NoteIndexer } from '../embedding/indexer'
@@ -250,7 +250,8 @@ export const useVaultStore = defineStore('vault', () => {
     if (!vaultPath.value) return true
 
     try {
-      const filePath = getSessionFilePath(vaultPath.value, sessionId, isBranch)
+      const filePath = await resolveSessionFile(vaultPath.value, sessionId)
+        ?? getSessionFilePath(vaultPath.value, sessionId, isBranch)
       if (await fileExists(filePath)) {
         await deleteFile(filePath)
       }

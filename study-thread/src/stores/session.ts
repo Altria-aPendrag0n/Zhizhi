@@ -10,11 +10,12 @@ import {
   getNodeDepth,
   collectSubtreeIds,
   removeNodeFromTree,
+  updateNodeTitle,
   serializeTree,
   deserializeTree,
 } from '../utils/session-tree'
 import { readFile, writeFile, createDir, fileExists, deleteFile, listDir } from '../utils/vault-fs'
-import { getSessionFilePath, saveSessionToVault, parseSessionMeta, type SessionMeta } from '../utils/session-serializer'
+import { getSessionFilePath, resolveSessionFile, saveSessionToVault, parseSessionMeta, type SessionMeta } from '../utils/session-serializer'
 import { buildForkContextPreview } from '../utils/branch-context'
 import { removeSessionReferences } from '../utils/session-linker'
 
@@ -109,8 +110,8 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * 从 vault 加载侧边栏会话列表（仓库即真相：扫描 sessions/*.md 解析 frontmatter）。
    *
-   * 分支（branch-*.md）在会话树中按父会话嵌套展示、复习会话（review-*.md）在资源库
-   * 「复习会话」分类展示，均不进入顶层会话列表；按创建时间倒序排列。
+   * 分支与复习会话（旧 branch-/review- 前缀、新 branch_/review_ id 前缀）在会话树中
+   * 按父会话嵌套展示，均不进入顶层会话列表；按创建时间倒序排列。
    */
   async function loadSessionsFromVault(vaultPath: string): Promise<void> {
     try {
@@ -118,7 +119,12 @@ export const useSessionStore = defineStore('session', () => {
       const metas: SessionMeta[] = []
       for (const entry of entries) {
         if (entry.is_dir || !entry.name.toLowerCase().endsWith('.md')) continue
-        if (entry.name.startsWith('branch-') || entry.name.startsWith('review-')) continue
+        if (
+          entry.name.startsWith('branch-') ||
+          entry.name.startsWith('review-') ||
+          entry.name.startsWith('branch_') ||
+          entry.name.startsWith('review_')
+        ) continue
         try {
           const content = await readFile(entry.path)
           const meta = parseSessionMeta(content, entry.path)
@@ -158,14 +164,30 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   /**
-   * 重命名会话：直接改写 vault 中会话 md 的 frontmatter title（仓库即真相），
-   * 并刷新侧边栏列表。分支/复习会话的重命名当前不在 UI 暴露，仅支持顶层会话。
+   * 重命名会话：改写 vault 中会话 md 的 frontmatter title（仓库即真相），
+   * 并同步更新文件名 slug 与会话树节点标题。引用方以稳定 id 定位文件，
+   * 因此文件名随标题变化不会破坏笔记/分支链接。分支/复习会话的重命名当前
+   * 不在 UI 暴露，仅支持顶层会话。
    */
   async function renameSessionTitle(vaultPath: string, sessionId: string, title: string): Promise<boolean> {
-    const filePath = getSessionFilePath(vaultPath, sessionId, sessionId.startsWith('branch_'))
+    const isBranch = sessionId.startsWith('branch_')
+    const isReview = sessionId.startsWith('review_')
+    const currentFile = await resolveSessionFile(vaultPath, sessionId)
+      ?? getSessionFilePath(vaultPath, sessionId, isBranch, isReview)
+    const newFile = getSessionFilePath(vaultPath, sessionId, isBranch, isReview, title)
     try {
-      const content = await readFile(filePath)
-      await writeFile(filePath, replaceFrontmatterTitle(content, title))
+      const content = await readFile(currentFile)
+      const updated = replaceFrontmatterTitle(content, title)
+      if (newFile !== currentFile) {
+        await writeFile(newFile, updated)
+        await deleteFile(currentFile)
+      } else {
+        await writeFile(currentFile, updated)
+      }
+      if (sessionTree.value && findNode(sessionTree.value, sessionId)) {
+        sessionTree.value = updateNodeTitle(sessionTree.value, sessionId, title)
+        await saveSessionTree(vaultPath)
+      }
       await loadSessionsFromVault(vaultPath)
       return true
     } catch {
@@ -173,12 +195,12 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  function addBranchToSessionTree(parentId: string, branchId: string, title: string, file: string): void {
+  function addBranchToSessionTree(parentId: string, branchId: string, title: string): void {
     if (!sessionTree.value) return
     sessionTree.value = addBranchToTree(
       sessionTree.value,
       parentId,
-      createBranchNode(branchId, title, file, parentId),
+      createBranchNode(branchId, title, branchId, parentId),
     )
   }
 
@@ -210,14 +232,16 @@ export const useSessionStore = defineStore('session', () => {
         }
       }
 
-      // 父会话可能是分支（嵌套分支），需按对应文件命名规则定位/保存
+      // 父会话可能是分支（嵌套分支），先按稳定 id 定位已有文件，找不到再回退旧路径/生成
       const isParentBranch = parentSession.id.startsWith('branch_')
-      const parentFile = parentSessionFile || getSessionFilePath(vaultPath, parentSession.id, isParentBranch)
+      const parentFile = await resolveSessionFile(vaultPath, parentSession.id)
+        ?? parentSessionFile
+        ?? getSessionFilePath(vaultPath, parentSession.id, isParentBranch)
       if (!(await fileExists(parentFile))) await saveSessionToVault(vaultPath, parentSession, isParentBranch)
       await initSessionTree(vaultPath)
 
       if (!sessionTree.value || !findNode(sessionTree.value, parentSession.id)) {
-        sessionTree.value = createRootNode(parentSession.id, parentSession.title, parentFile)
+        sessionTree.value = createRootNode(parentSession.id, parentSession.title, parentSession.id)
       }
 
       const branchId = createBranch(parentSession.id, String(forkMessageIndex), branchTitle)
@@ -232,8 +256,8 @@ export const useSessionStore = defineStore('session', () => {
       // 划线文本在消息中的出现序号（第 N 处），重复文本时 DOM 高亮按序号定位
       if (occurrence > 1) branchSession.fork_highlight_occ = occurrence
 
-      const branchFile = await saveSessionToVault(vaultPath, branchSession, true)
-      addBranchToSessionTree(parentSession.id, branchId, branchTitle, branchFile)
+      await saveSessionToVault(vaultPath, branchSession, true)
+      addBranchToSessionTree(parentSession.id, branchId, branchTitle)
       await saveSessionTree(vaultPath)
       return branchId
     } catch (error) {
@@ -272,16 +296,18 @@ export const useSessionStore = defineStore('session', () => {
       if (!sessionTree.value || !findNode(sessionTree.value, nodeId)) {
         // 本地模拟会话（不在 vault 会话树中，如空的新会话改名而来、内置示例会话等）：
         // 按 id 尝试删除对应会话文件（若存在），文件不存在也视为本地会话放行
-        const filePath = getSessionFilePath(vaultPath, nodeId, nodeId.startsWith('branch_'))
+        const filePath = await resolveSessionFile(vaultPath, nodeId)
+          ?? getSessionFilePath(vaultPath, nodeId, nodeId.startsWith('branch_'))
         if (await fileExists(filePath)) await deleteFile(filePath)
         return true
       }
 
-      // 级联删除该会话及其所有子分支的会话文件
+      // 级联删除该会话及其所有子分支的会话文件（按 id 定位，兼容新旧命名）
       const ids = collectSubtreeIds(sessionTree.value, nodeId)
       for (const id of ids) {
         const isBranch = id.startsWith('branch_')
-        const filePath = getSessionFilePath(vaultPath, id, isBranch)
+        const filePath = await resolveSessionFile(vaultPath, id)
+          ?? getSessionFilePath(vaultPath, id, isBranch)
         if (await fileExists(filePath)) await deleteFile(filePath)
       }
 

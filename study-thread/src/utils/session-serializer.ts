@@ -145,17 +145,17 @@ export function serializeThinkingBlock(text: string): string {
 }
 
 /**
- * 保存会话到 vault
+ * 生成会话文件路径（写路径）。文件名统一为 `{id}-{slug}.md`，id 区分类型，
+ * 不再使用旧的 branch-/review- 双前缀。isBranch/isReview 仅保留签名兼容。
  * @param vaultPath vault 根目录路径
- * @param session 会话数据
- * @param isBranch 是否为分支会话
- * @param isReview 是否为复习会话（文件名前缀 review-，独立根会话）
+ * @param sessionId 会话稳定 id
+ * @param title 可选标题，用于生成可读 slug
  */
 export function getSessionFilePath(
   vaultPath: string,
   sessionId: string,
-  isBranch = false,
-  isReview = false,
+  _isBranch = false,
+  _isReview = false,
   title?: string,
 ): string {
   const sessionsDir = `${vaultPath}/sessions`
