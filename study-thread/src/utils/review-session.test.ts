@@ -150,7 +150,7 @@ describe('loadReviewSession', () => {
       'reviewed_note: notes/费曼学习法.md',
       'review_questions:',
       '  - level: recognize',
-      '    question: 旧题',
+      '    question: 旧版复习题需要降级处理',
       '---',
       '正文内容',
     ].join('\n')
@@ -159,7 +159,7 @@ describe('loadReviewSession', () => {
     expect(loaded).not.toBeNull()
     expect(loaded!.review_questions).toHaveLength(1)
     expect(loaded!.review_questions![0].type).toBe('short_answer')
-    expect(loaded!.review_questions![0].question).toBe('旧题')
+    expect(loaded!.review_questions![0].question).toBe('旧版复习题需要降级处理')
   })
 
   it('文件路径使用 review- 前缀', () => {
