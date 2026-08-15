@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Zhizhi",
+  "productName": "知枝",
   "version": "0.2.1",
   "identifier": "com.study-thread.app",
   "build": {
