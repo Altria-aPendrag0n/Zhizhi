@@ -36,7 +36,7 @@
 | `handleRetry()` | 移除失败的 AI 消息后重发最后一条用户消息 |
 | `handleStop()` | 仅 abort 流式请求，不清空状态 |
 
-**系统提示词（SYSTEM_PROMPT）**：硬编码于 `MainChatPage.vue`，定义学习伴读角色与回答要求，并含**流程图规范**——要求 AI 展示流程/决策时用 ASCII 字符画（盒子 `+ - |`、方向 `> < v ^`）拼流程图并用 Markdown 代码块包裹，明确「中文占 2 字符宽、ASCII 占 1 字符宽」对齐规则，禁用 `┌─┐` 等 Unicode 框线字符与 `① ② ✓ ← →` 等宽度不一致符号（配合渲染层 `wrapDiagramBlocks` 的 ASCII 盒子识别，见 3.2）。
+**系统提示词（SYSTEM_PROMPT）**：硬编码于 `MainChatPage.vue`，定义学习伴读角色与回答要求，并含**流程图规范（分层）**——简单线性流程用 ASCII 字符画（盒子 `+ - |`、方向 `> < v ^`，中文 2 字符宽 / ASCII 1 字符宽对齐，禁用 `┌─┐` 等 Unicode 框线字符与 `① ② ✓ ← →` 等宽度不一致符号，配合渲染层 `wrapDiagramBlocks` 的 ASCII 盒子识别）；复杂流程（多分支 / 循环 / 菱形判断 / 嵌套）改用 Mermaid 代码块（`flowchart` 语法，渲染层 `renderMermaidBlocks` 转 SVG，见 3.2）。
 
 **会话消息持久化（仓库即真相，无本地缓存）**：会话以 md + 特殊标记符（frontmatter、`## 角色 · 时间戳` 消息头、`<!-- fork-context -->` 区块、`> 已生成笔记/分支` 引用行）保存在 vault `sessions/*.md`。`loadThreadMessages` 按 `route.query.thread` 读取对应 md 并经 `parseSessionFile` 解析消息（保留消息级时间戳，跳过分叉上下文区块与划线引用标记行）；新会话（`new_*`）首条消息 `saveCurrentSession` 落盘后由 `sessionStore.loadSessionsFromVault` 刷新侧边栏列表。曾用 localStorage `study-thread-messages` 缓存与内置演示会话，已随本次改造移除。
 
