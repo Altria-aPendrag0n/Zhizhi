@@ -1,13 +1,21 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   generateSessionTitle,
   sanitizeFileName,
+  slugifyTitle,
+  buildSessionFileName,
+  sessionIdFromFileName,
+  sessionIdFromReference,
+  resolveSessionFile,
   serializeSession,
   parseSessionMeta,
   parseSessionMessages,
   parseSessionFile,
 } from './session-serializer'
 import type { Session } from '../types'
+
+const { listDirMock } = vi.hoisted(() => ({ listDirMock: vi.fn() }))
+vi.mock('./vault-fs', () => ({ listDir: listDirMock }))
 
 describe('generateSessionTitle', () => {
   it('从首条用户消息提取标题（<=30字）', () => {
@@ -434,5 +442,127 @@ describe('parseSessionFile 完整会话解析', () => {
     }
     const parsed = parseSessionFile(serializeSession(session))
     expect(parsed.messages).toEqual(session.messages)
+  })
+})
+
+describe('slugifyTitle 标题转文件名 slug', () => {
+  it('中文标题原样保留', () => {
+    expect(slugifyTitle('费曼学习法')).toBe('费曼学习法')
+  })
+
+  it('空白压缩为连字符', () => {
+    expect(slugifyTitle('Hello World 测试')).toBe('Hello-World-测试')
+  })
+
+  it('移除链接敏感字符', () => {
+    expect(slugifyTitle('a#b[c](d){e}')).toBe('abcde')
+  })
+
+  it('连续/首尾连字符归一化并修剪', () => {
+    expect(slugifyTitle('-标题-')).toBe('标题')
+    expect(slugifyTitle('多----连字符')).toBe('多-连字符')
+  })
+
+  it('超过 40 字截断', () => {
+    expect(slugifyTitle('一'.repeat(50))).toHaveLength(40)
+  })
+
+  it('空标题或被过滤成 untitled 时返回空串', () => {
+    expect(slugifyTitle('')).toBe('')
+    expect(slugifyTitle('   ')).toBe('')
+    expect(slugifyTitle('###')).toBe('')
+  })
+})
+
+describe('buildSessionFileName 会话文件名生成', () => {
+  it('带标题时生成 id-slug 命名', () => {
+    expect(buildSessionFileName('sess_123', '费曼学习法')).toBe('sess_123-费曼学习法.md')
+  })
+
+  it('无标题时退化为纯 id 命名', () => {
+    expect(buildSessionFileName('sess_123')).toBe('sess_123.md')
+    expect(buildSessionFileName('sess_123', '   ')).toBe('sess_123.md')
+  })
+
+  it('分支/复习 id 不再加双前缀', () => {
+    expect(buildSessionFileName('branch_1', '分支追问')).toBe('branch_1-分支追问.md')
+    expect(buildSessionFileName('review_1', '复习')).toBe('review_1-复习.md')
+  })
+})
+
+describe('sessionIdFromFileName 从文件名解析 id', () => {
+  it('纯 id 命名原样返回', () => {
+    expect(sessionIdFromFileName('/vault/sessions/sess_1.md')).toBe('sess_1')
+  })
+
+  it('新命名剥离 slug 后缀', () => {
+    expect(sessionIdFromFileName('/vault/sessions/sess_1-费曼学习法.md')).toBe('sess_1')
+    expect(sessionIdFromFileName('/vault/sessions/branch_123_0-分支追问.md')).toBe('branch_123_0')
+  })
+
+  it('兼容旧 branch-/review- 前缀', () => {
+    expect(sessionIdFromFileName('/vault/sessions/branch-branch_1.md')).toBe('branch_1')
+    expect(sessionIdFromFileName('/vault/sessions/review-review_1.md')).toBe('review_1')
+  })
+})
+
+describe('sessionIdFromReference 引用规范化', () => {
+  it('纯 id 直接返回', () => {
+    expect(sessionIdFromReference('sess_1')).toBe('sess_1')
+  })
+
+  it('路径提取文件名 id（新旧命名均兼容）', () => {
+    expect(sessionIdFromReference('/vault/sessions/sess_1-费曼学习法.md')).toBe('sess_1')
+    expect(sessionIdFromReference('/vault/sessions/branch-branch_1.md')).toBe('branch_1')
+  })
+
+  it('空引用返回空串', () => {
+    expect(sessionIdFromReference('')).toBe('')
+  })
+})
+
+describe('resolveSessionFile 按 id 定位会话文件', () => {
+  beforeEach(() => {
+    listDirMock.mockReset()
+  })
+
+  it('精确匹配纯 id 命名', async () => {
+    listDirMock.mockResolvedValue([
+      { name: 'sess_1.md', path: '/vault/sessions/sess_1.md', is_dir: false },
+    ])
+    await expect(resolveSessionFile('/vault', 'sess_1')).resolves.toBe('/vault/sessions/sess_1.md')
+  })
+
+  it('按 id- 前缀匹配 slug 命名', async () => {
+    listDirMock.mockResolvedValue([
+      { name: 'sess_1-费曼学习法.md', path: '/vault/sessions/sess_1-费曼学习法.md', is_dir: false },
+    ])
+    await expect(resolveSessionFile('/vault', 'sess_1')).resolves.toBe('/vault/sessions/sess_1-费曼学习法.md')
+  })
+
+  it('兼容旧 branch-/review- 前缀', async () => {
+    listDirMock.mockResolvedValue([
+      { name: 'branch-branch_1.md', path: '/vault/sessions/branch-branch_1.md', is_dir: false },
+      { name: 'review-review_1.md', path: '/vault/sessions/review-review_1.md', is_dir: false },
+    ])
+    await expect(resolveSessionFile('/vault', 'branch_1')).resolves.toBe('/vault/sessions/branch-branch_1.md')
+    await expect(resolveSessionFile('/vault', 'review_1')).resolves.toBe('/vault/sessions/review-review_1.md')
+  })
+
+  it('忽略目录与非 md 文件', async () => {
+    listDirMock.mockResolvedValue([
+      { name: 'sess_1', path: '/vault/sessions/sess_1', is_dir: true },
+      { name: 'sess_1.txt', path: '/vault/sessions/sess_1.txt', is_dir: false },
+      { name: 'sess_1.md', path: '/vault/sessions/sess_1.md', is_dir: false },
+    ])
+    await expect(resolveSessionFile('/vault', 'sess_1')).resolves.toBe('/vault/sessions/sess_1.md')
+  })
+
+  it('找不到或目录不可读时返回 null', async () => {
+    listDirMock.mockResolvedValue([])
+    await expect(resolveSessionFile('/vault', 'missing_1')).resolves.toBeNull()
+
+    listDirMock.mockRejectedValue(new Error('目录不存在'))
+    await expect(resolveSessionFile('/vault', 'sess_1')).resolves.toBeNull()
   })
 })

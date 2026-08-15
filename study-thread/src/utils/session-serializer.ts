@@ -5,7 +5,8 @@
 
 import type { Session, Message } from '../types'
 import type { NoteReference } from './session-linker'
-import { writeFile, createDir } from './vault-fs'
+import { writeFile, createDir, listDir } from './vault-fs'
+import type { DirEntry } from './vault-fs'
 import { serializeForkContext, FORK_CONTEXT_START, FORK_CONTEXT_END, THINKING_START, THINKING_END } from './branch-context'
 import { parseFrontmatter } from '../parser/frontmatter'
 
@@ -24,6 +25,30 @@ export function generateSessionTitle(messages: Message[]): string {
  */
 export function sanitizeFileName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, '').trim() || 'untitled'
+}
+
+/**
+ * 将标题转换为文件名可读 slug：去空白/链接敏感字符，压缩连字符，截断 40 字。
+ * 空标题或全被过滤时返回空串（文件名不加 slug，保持纯 id）。
+ */
+export function slugifyTitle(title: string): string {
+  const slug = sanitizeFileName(title)
+    .replace(/\s+/g, '-')
+    .replace(/[#\[\](){}^|]+/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^[-_.]+|[-_.]+$/g, '')
+    .slice(0, 40)
+  return slug === 'untitled' ? '' : slug
+}
+
+/**
+ * 生成会话文件名：`{id}-{slug}.md`（slug 存在时）或 `{id}.md`（无标题）。
+ * 文件类型由 id 前缀（sess_/new_/branch_/review_/note_root_）区分，不再使用 branch-/review- 文件前缀。
+ */
+export function buildSessionFileName(sessionId: string, title?: string): string {
+  const safeId = sanitizeFileName(sessionId)
+  const slug = title ? slugifyTitle(title) : ''
+  return slug ? `${safeId}-${slug}.md` : `${safeId}.md`
 }
 
 /**
@@ -126,11 +151,54 @@ export function serializeThinkingBlock(text: string): string {
  * @param isBranch 是否为分支会话
  * @param isReview 是否为复习会话（文件名前缀 review-，独立根会话）
  */
-export function getSessionFilePath(vaultPath: string, sessionId: string, isBranch = false, isReview = false): string {
+export function getSessionFilePath(
+  vaultPath: string,
+  sessionId: string,
+  isBranch = false,
+  isReview = false,
+  title?: string,
+): string {
   const sessionsDir = `${vaultPath}/sessions`
-  const safeId = sanitizeFileName(sessionId)
-  const fileName = isReview ? `review-${safeId}.md` : isBranch ? `branch-${safeId}.md` : `${safeId}.md`
-  return `${sessionsDir}/${fileName}`
+  return `${sessionsDir}/${buildSessionFileName(sessionId, title)}`
+}
+
+/**
+ * 按 sessionId 定位 vault 中实际存在的会话文件（读路径统一入口）。
+ * 兼容新旧命名：`{id}.md`、`{id}-{slug}.md` 以及旧前缀 `branch-{id}.md` / `review-{id}.md`。
+ * 找不到返回 null（调用方决定回退到 getSessionFilePath 生成新路径）。
+ */
+export async function resolveSessionFile(vaultPath: string, sessionId: string): Promise<string | null> {
+  const sessionsDir = `${vaultPath}/sessions`
+  let entries: DirEntry[]
+  try {
+    entries = await listDir(sessionsDir)
+  } catch {
+    return null
+  }
+  const safeId = sanitizeFileName(sessionId).toLowerCase()
+  const exact = `${safeId}.md`
+  const slugPrefix = `${safeId}-`
+  const legacyBranch = `branch-${safeId}.md`
+  const legacyReview = `review-${safeId}.md`
+  for (const entry of entries) {
+    if (entry.is_dir) continue
+    const name = entry.name.toLowerCase()
+    if (!name.endsWith('.md')) continue
+    if (name === exact || name.startsWith(slugPrefix) || name === legacyBranch || name === legacyReview) {
+      return entry.path
+    }
+  }
+  return null
+}
+
+/**
+ * 将引用（可能是 id，也可能是旧数据写入的文件路径）规范化为稳定 sessionId。
+ * id 不含 `/`、`\`，路径含分隔符；路径场景从文件名提取 id。
+ */
+export function sessionIdFromReference(reference: string): string {
+  if (!reference) return ''
+  if (!/[\\/]/.test(reference)) return reference
+  return sessionIdFromFileName(reference)
 }
 
 export async function saveSessionToVault(
@@ -141,10 +209,14 @@ export async function saveSessionToVault(
   isReview = false,
 ): Promise<string> {
   const sessionsDir = `${vaultPath}/sessions`
-  const filePath = getSessionFilePath(vaultPath, session.id, isBranch, isReview)
-
-  // 确保目录存在
   await createDir(sessionsDir)
+
+  // 已存在同 id 文件则沿用其路径（兼容旧命名 {id}.md / branch-{id}.md 与旧 slug），
+  // 文件名在首次创建后保持稳定；标题变更仅在显式重命名时改变 slug。
+  let filePath = await resolveSessionFile(vaultPath, session.id)
+  if (!filePath) {
+    filePath = getSessionFilePath(vaultPath, session.id, isBranch, isReview, session.title)
+  }
 
   const content = serializeSession(session, noteRefs)
   await writeFile(filePath, content)
@@ -176,10 +248,17 @@ function toTags(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : []
 }
 
-/** frontmatter session_id 缺失时按文件名兜底（sess_xxx.md → sess_xxx） */
-function sessionIdFromFileName(filePath: string): string {
+/** frontmatter session_id 缺失时按文件名兜底，兼容新旧命名（sess_1-标题.md / branch-branch_1.md → sess_1 / branch_1） */
+export function sessionIdFromFileName(filePath: string): string {
   const name = filePath.split(/[\\/]/).pop() || ''
-  return name.replace(/\.md$/i, '')
+  const base = name.replace(/\.md$/i, '')
+  let id = base
+  if (id.startsWith('branch-')) id = id.slice('branch-'.length)
+  else if (id.startsWith('review-')) id = id.slice('review-'.length)
+  // 新命名 {id}-{slug}：id 由下划线+数字组成、不含 '-'，首个 '-' 之后为 slug
+  const dash = id.indexOf('-')
+  if (dash > 0) id = id.slice(0, dash)
+  return id
 }
 
 /** 移除正文中的分叉点上下文区块（解析消息前调用，避免区块内容被当作消息） */
