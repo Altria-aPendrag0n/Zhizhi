@@ -15,6 +15,7 @@
  * 输出流程图。这类内容落在普通段落时，HTML 会把连续空格折叠为单个空格、且默认
  * 非等宽字体，导致框线错位、流程图"看着不对"。因此检测由框线字符构成的段落，
  * 包裹为 `text` 围栏代码块，交给 `<pre><code>` 以等宽字体 + 保留空白渲染。
+ * 同时也识别 ASCII 字符画（`+---+` / `|` / `v` 等）拼出的流程图盒子。
  */
 
 /** 可出现在 `**` 内侧的起始标点（开引号/括号） */
@@ -29,6 +30,12 @@ const QUOTE_BOLD_RE = new RegExp(`\\*\\*([${OPEN_PUNCT}])([^*\\n]+?)([${CLOSE_PU
 const BOX_DRAWING_CHARS = new Set('─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬╭╮╰╯'.split(''))
 /** 箭头与几何形状字符：流程图中的方向与节点标记 */
 const ARROW_SHAPE_CHARS = new Set('→←↑↓↔↕⇒⇐⇑⇓➜➤▼▲►◄▶◀'.split(''))
+/**
+ * ASCII 盒子角：`+` 紧邻至少两个 `-`（如 `+----` / `----+`）。
+ * 用于识别 AI 用普通字符（`+ - |` 等）拼出的流程图盒子，这类同样需要等宽保留空白。
+ * 要求至少两个 `-` 可避免误判 `+-`（正负号）等普通文本。
+ */
+const ASCII_BOX_CORNER_RE = /\+-{2,}|-{2,}\+/
 
 function countCharsIn(str: string, set: ReadonlySet<string>): number {
   let count = 0
@@ -42,6 +49,7 @@ function countCharsIn(str: string, set: ReadonlySet<string>): number {
  * 判断一个由连续非空行组成的段落是否为框线字符画（流程图）。
  * 规则：至少两处框线字符，或至少一处框线字符配至少一处箭头/形状字符。
  * 单独一个 `→` 之类出现在普通句子里不会被误判。
+ * 另识别 ASCII 盒子（`+---+`）流程图：`+` 紧邻至少两个 `-` 视为盒子角。
  */
 function isDiagramParagraph(lines: string[]): boolean {
   let boxCount = 0
@@ -50,7 +58,9 @@ function isDiagramParagraph(lines: string[]): boolean {
     boxCount += countCharsIn(line, BOX_DRAWING_CHARS)
     arrowCount += countCharsIn(line, ARROW_SHAPE_CHARS)
   }
-  return boxCount >= 2 || (boxCount >= 1 && arrowCount >= 1)
+  const unicodeDiagram = boxCount >= 2 || (boxCount >= 1 && arrowCount >= 1)
+  const asciiDiagram = ASCII_BOX_CORNER_RE.test(lines.join('\n'))
+  return unicodeDiagram || asciiDiagram
 }
 
 /**

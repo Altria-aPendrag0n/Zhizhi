@@ -87,4 +87,20 @@ describe('wrapDiagramBlocks（框线字符画流程图）', () => {
     expect(html).toContain('<table>')
     expect(html).not.toContain('<pre>')
   })
+
+  it('把 ASCII 字符画流程图（+---+）包裹为 text 代码块', () => {
+    const md = '开始\n  |\n  v\n+--------+\n| 判断   |\n+--------+'
+    expect(wrapDiagramBlocks(md)).toBe('```text\n' + md + '\n```')
+  })
+
+  it('渲染后 ASCII 流程图保留空白进入等宽代码块', () => {
+    const html = render('开始\n  |\n  v\n+--------+\n| 判断   |\n+--------+')
+    expect(html).toContain('<pre><code')
+    expect(html).toContain('+--------+')
+    expect(html).toContain('| 判断   |')
+  })
+
+  it('正负号 +- 单独出现不被误判为流程图', () => {
+    expect(wrapDiagramBlocks('结果是 +- 3')).toBe('结果是 +- 3')
+  })
 })
