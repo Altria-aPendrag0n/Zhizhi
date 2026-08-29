@@ -62,6 +62,30 @@ describe('notes store', () => {
     expect(reloadedStore.notes[0].title).toBe('费曼学习法')
   })
 
+  it('saveNote 传入 body 时正文使用 body（图片转笔记场景）', async () => {
+    const store = useNoteStore()
+    const note: ExtractedNote = {
+      title: '图片笔记',
+      description: '从图片识别',
+      proposition: '',
+      explanation: '',
+      type: 'concept',
+      tags: ['图片'],
+      confidence: 0.5,
+    }
+    const body = '## 正文\n\n| A | B |\n| --- | --- |\n| 1 | 2 |'
+
+    const path = await store.saveNote('/vault', note, '', '划线原文', body)
+    expect(path).not.toBeNull()
+
+    const written = vaultFs.writeFile.mock.calls.find((call) => call[0] === path)?.[1] as string
+    expect(written).toContain('## 正文')
+    expect(written).toContain('| 1 | 2 |')
+    // frontmatter 溯源保留划线原文，正文不使用划线原文
+    expect(written).toContain('highlight: "划线原文"')
+    expect(written).not.toContain('# 划线原文')
+  })
+
   it('saveNote 写入的标签经 frontmatter round-trip 重新加载后完整保留', async () => {
     const store = useNoteStore()
     const note: ExtractedNote = {

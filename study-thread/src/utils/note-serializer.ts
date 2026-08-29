@@ -22,16 +22,20 @@ function sanitizeFileName(name: string): string {
  *
  * @param note - 提取的笔记数据
  * @param sourceSession - 来源会话稳定 id（非文件路径）
- * @param highlightSource - 来源划线文本
+ * @param highlightSource - 来源划线文本（写入 frontmatter 的 source.highlight 溯源）
+ * @param body - 可选：笔记正文。缺省用 highlightSource（划线原文）；图片转笔记等场景传入
+ *              识别出的 Markdown 正文（正文不再重复写入一级标题）
  * @returns Markdown 格式的笔记内容
  */
 export function serializeNote(
   note: ExtractedNote,
   sourceSession: string,
   highlightSource: string,
+  body?: string,
 ): string {
   const now = new Date().toISOString()
   const lines: string[] = []
+  const noteBody = body !== undefined ? body : highlightSource
 
   // YAML frontmatter
   lines.push('---')
@@ -55,10 +59,10 @@ export function serializeNote(
   lines.push('---')
   lines.push('')
 
-  // Body：划线原文原样保存，不加工
+  // Body：划线原文原样保存（或传入的自定义正文），不加工
   lines.push(`# ${note.title}`)
   lines.push('')
-  lines.push(highlightSource.trim())
+  lines.push(noteBody.trim())
 
   return lines.join('\n')
 }

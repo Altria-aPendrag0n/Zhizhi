@@ -93,6 +93,28 @@ describe('serializeNote', () => {
     expect(result).toContain('highlight: "他说\\"你好\\""')
   })
 
+  it('传入 body 时正文使用 body，frontmatter 的 source.highlight 仍写划线原文（图片转笔记场景）', () => {
+    const body = '## 主要观点\n\n- 观点一\n\n| 列A | 列B |\n| --- | --- |\n| 1 | 2 |'
+    const result = serializeNote(note, 'sessions/test/main.md', '划线原文', body)
+
+    // frontmatter 溯源保留划线原文
+    expect(result).toContain('highlight: "划线原文"')
+    // 正文使用 body（含表格）
+    expect(result).toContain('## 主要观点')
+    expect(result).toContain('| 1 | 2 |')
+    // round-trip：正文与元信息完整保留
+    const { meta, body: parsedBody } = parseFrontmatter(result)
+    expect(meta.title).toBe('费曼学习法')
+    expect(meta.source).toMatchObject({ session: 'sessions/test/main.md', highlight: '划线原文' })
+    expect(parsedBody).toContain('| 1 | 2 |')
+  })
+
+  it('缺省 body 时正文仍为划线原文（行为不变）', () => {
+    const result = serializeNote(note, 'sessions/test/main.md', '划线原文')
+    expect(result).toContain('# 费曼学习法')
+    expect(result).toContain('划线原文')
+  })
+
   it('处理多种笔记类型', () => {
     const conceptNote: ExtractedNote = { ...note, type: 'concept' }
     const result = serializeNote(conceptNote, 'sessions/test/main.md', '')

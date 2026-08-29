@@ -198,6 +198,7 @@ export const useNoteStore = defineStore('notes', () => {
     note: ExtractedNote,
     sourceSession: string,
     highlightSource: string,
+    body?: string,
   ): Promise<string | null> {
     if (!vaultPath) return null
     currentVaultPath.value = vaultPath
@@ -206,7 +207,8 @@ export const useNoteStore = defineStore('notes', () => {
       await createDir(notesDir)
       const filePath = `${notesDir}/${generateNoteFileName(note.title)}`
       const sourceSessionId = sessionIdFromReference(sourceSession)
-      await writeFile(filePath, serializeNote(note, sourceSessionId, highlightSource))
+      const noteBody = body !== undefined ? body : highlightSource
+      await writeFile(filePath, serializeNote(note, sourceSessionId, highlightSource, noteBody))
       const now = new Date().toISOString()
       const noteMeta: NoteMeta = {
         path: filePath,
@@ -220,7 +222,7 @@ export const useNoteStore = defineStore('notes', () => {
       }
       // json sidecar：结构化元数据权威源（时间/标签/描述/来源/关联笔记），
       // md 内 frontmatter 保留供 Obsidian 查看，读取时 json 优先
-      await writeFile(getNoteMetaPath(filePath), serializeNoteMeta(noteMeta, extractAllLinks(highlightSource)))
+      await writeFile(getNoteMetaPath(filePath), serializeNoteMeta(noteMeta, extractAllLinks(noteBody)))
       upsertLocalNote(noteMeta)
       notes.value = sortNotes([...notes.value.filter((item) => item.path !== filePath), noteMeta])
       // 笔记变更 → 画像概念映射缓存失效
