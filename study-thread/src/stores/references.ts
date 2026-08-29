@@ -18,6 +18,10 @@ import {
 import { getNoteIndexer } from '../embedding/indexer'
 import { chunkPdfByChapters, PDF_CHUNK_MIN_CHARS } from '../utils/pdf-chunk'
 import { chunkMdByChapters, MD_CHUNK_MIN_CHARS } from '../utils/md-chunk'
+import { compressImageFile } from '../utils/image-compress'
+import { imageToMarkdown, type ImageNoteResult } from '../api/skills/image-to-note'
+import { createVisionProvider } from '../api/provider-factory'
+import { useSettingsStore } from './settings'
 
 function sortReferences(references: ReferenceMeta[]): ReferenceMeta[] {
   return [...references].sort((a, b) => b.updated.localeCompare(a.updated))
@@ -33,13 +37,13 @@ function toReferenceTitle(fileName: string): string {
 }
 
 /**
- * 构建用于向量索引的文本：标题、描述、标签、正文（md 读原文件，已解析的 pdf 读提取产物）
+ * 构建用于向量索引的文本：标题、描述、标签、正文（md 读原文件，已解析的 pdf/png 读提取产物）
  */
 async function buildIndexText(meta: ReferenceMeta): Promise<string> {
   let content = ''
   if (meta.fileType === 'md') {
     content = await readFile(meta.filePath)
-  } else if (meta.fileType === 'pdf' && meta.extractedPath) {
+  } else if ((meta.fileType === 'pdf' || meta.fileType === 'png') && meta.extractedPath) {
     try {
       content = await readFile(meta.extractedPath)
     } catch {
@@ -204,6 +208,27 @@ export const useReferenceStore = defineStore('references', () => {
             return
           }
         }
+      } else if (meta.fileType === 'png' && meta.extractedPath) {
+        // 已识别的 PNG：识别产物按章节分块多向量索引（与 md 一致），小产物单块索引
+        let markdown = ''
+        try {
+          markdown = await readFile(meta.extractedPath)
+        } catch {
+          markdown = ''
+        }
+        if (markdown.length > MD_CHUNK_MIN_CHARS) {
+          const chunks = chunkMdByChapters(markdown)
+          if (chunks.length > 1) {
+            await getNoteIndexer().updateChunks(
+              meta.path,
+              chunks.map((chunk) => ({
+                text: chunk.text,
+                chunkTitle: chunk.title || meta.title,
+              })),
+            )
+            return
+          }
+        }
       }
       const indexText = await buildIndexText(meta)
       await getNoteIndexer().updateNote(meta.path, indexText)
@@ -257,6 +282,82 @@ export const useReferenceStore = defineStore('references', () => {
     const vaultPath = currentVaultPath.value
     if (!vaultPath) return
     await parseReference(meta, vaultPath)
+  }
+
+  /**
+   * 写入 PNG 识别产物（{id}.extracted.md）并回填元数据（成功路径）。
+   * 返回是否成功；失败时由调用方决定是否回填 failed 状态。
+   */
+  async function persistPngResult(meta: ReferenceMeta, vaultPath: string, result: ImageNoteResult): Promise<boolean> {
+    try {
+      const extractedPath = getReferenceExtractedPath(vaultPath, meta.id)
+      await writeFile(extractedPath, result.markdown)
+      const parsed: ReferenceMeta = {
+        ...meta,
+        parseStatus: 'parsed',
+        parseError: undefined,
+        extractedPath,
+        extractedChars: result.markdown.length,
+        extractedAt: new Date().toISOString(),
+      }
+      await persistMeta(parsed)
+      await refreshIndex(parsed)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * 识别 PNG 参考资料为 Markdown 提取产物（{id}.extracted.md）。
+   *
+   * @param meta - PNG 参考资料元数据
+   * @param vaultPath - Vault 根目录
+   * @param result - 可选：调用方（ImageToMarkdownDialog 预览确认后）已完成的识别结果；
+   *                 传入时仅落盘（不再重复调用 LLM）；缺省时在此完整执行 读取→压缩→识别。
+   * @returns 是否成功
+   */
+  async function recognizePngReference(meta: ReferenceMeta, vaultPath: string, result?: ImageNoteResult): Promise<boolean> {
+    if (meta.fileType !== 'png') return false
+    if (result) {
+      return persistPngResult(meta, vaultPath, result)
+    }
+
+    // 完整识别流程：进入 parsing 状态（UI 状态立即可见）
+    const parsing: ReferenceMeta = { ...meta, parseStatus: 'parsing', parseError: undefined }
+    await persistMeta(parsing)
+
+    try {
+      const config = useSettingsStore().getVisionProviderConfig()
+      if (!config) {
+        const failed: ReferenceMeta = { ...parsing, parseStatus: 'failed', parseError: '尚未配置图片转笔记模型' }
+        await persistMeta(failed)
+        return false
+      }
+      const bytes = await readFileBytes(meta.filePath)
+      const file = new File([bytes], meta.fileName, { type: 'image/png' })
+      const image = await compressImageFile(file)
+      const provider = createVisionProvider(config)
+      const res = await imageToMarkdown(image, provider, 'reference')
+      return await persistPngResult(parsing, vaultPath, res)
+    } catch (e) {
+      const failed: ReferenceMeta = {
+        ...parsing,
+        parseStatus: 'failed',
+        parseError: e instanceof Error ? e.message : String(e),
+      }
+      await persistMeta(failed)
+      return false
+    }
+  }
+
+  /** 重新识别识别失败的 PNG 参考资料（UI「重试」按钮） */
+  async function retryRecognizePng(metaPath: string): Promise<void> {
+    const meta = references.value.find((item) => item.path === metaPath)
+    if (!meta || meta.fileType !== 'png') return
+    const vaultPath = currentVaultPath.value
+    if (!vaultPath) return
+    await recognizePngReference(meta, vaultPath)
   }
 
   async function uploadReference(vaultPath: string, file: File): Promise<ReferenceMeta | null> {
@@ -377,5 +478,7 @@ export const useReferenceStore = defineStore('references', () => {
     deleteReference,
     loadReferencePreview,
     retryParseReference,
+    recognizePngReference,
+    retryRecognizePng,
   }
 })
