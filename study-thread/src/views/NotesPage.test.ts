@@ -94,6 +94,12 @@ vi.mock('../composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
+vi.mock('../stores/settings', () => ({
+  useSettingsStore: () => ({
+    getVisionProviderConfig: vi.fn().mockReturnValue(null),
+  }),
+}))
+
 vi.mock('../utils/review-session', () => ({
   listReviewSessions: state.listReviewSessions,
 }))
@@ -302,6 +308,67 @@ describe('NotesPage', () => {
     expect(state.uploadReference).toHaveBeenCalledTimes(2)
     expect(state.uploadReference).toHaveBeenCalledWith('/vault', fileA)
     expect(state.uploadReference).toHaveBeenCalledWith('/vault', fileB)
+    wrapper.unmount()
+  })
+
+  it('上传 PNG 后自动弹出图片转笔记确认框（reference 模式）', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    const pngMeta: ReferenceMeta = {
+      id: 'ref-png',
+      path: '/vault/references/ref-png/ref-png.json',
+      title: '示意图',
+      description: '',
+      tags: [],
+      fileType: 'png',
+      fileName: '示意图.png',
+      filePath: '/vault/references/ref-png/ref-png.png',
+      created: '2026-01-01T00:00:00.000Z',
+      updated: '2026-01-01T00:00:00.000Z',
+    }
+    state.uploadReference.mockResolvedValue(pngMeta)
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    const file = new File(['x'], '示意图.png', { type: 'image/png' })
+    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('upload', [file])
+    await flushPromises()
+
+    const dialog = wrapper.findComponent({ name: 'ImageToMarkdownDialog' })
+    expect(dialog.props('visible')).toBe(true)
+    expect(dialog.props('mode')).toBe('reference')
+    expect(dialog.props('reference')).toEqual(pngMeta)
+    wrapper.unmount()
+  })
+
+  it('参考资料卡片「转为 Markdown」按钮打开 reference 模式弹窗', async () => {
+    testGlobals().__notesPageRoute!.query = { tab: 'references' }
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    const pngMeta: ReferenceMeta = {
+      id: 'ref-png',
+      path: '/vault/references/ref-png/ref-png.json',
+      title: '示意图',
+      description: '',
+      tags: [],
+      fileType: 'png',
+      fileName: '示意图.png',
+      filePath: '/vault/references/ref-png/ref-png.png',
+      created: '2026-01-01T00:00:00.000Z',
+      updated: '2026-01-01T00:00:00.000Z',
+    }
+    testGlobals().__notesPageReferences!.value = [pngMeta]
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('recognize', pngMeta.path)
+    await flushPromises()
+
+    const dialog = wrapper.findComponent({ name: 'ImageToMarkdownDialog' })
+    expect(dialog.props('visible')).toBe(true)
+    expect(dialog.props('mode')).toBe('reference')
+    expect(dialog.props('reference')).toEqual(pngMeta)
     wrapper.unmount()
   })
 

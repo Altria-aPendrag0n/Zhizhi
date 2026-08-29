@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useReferenceStore } from './references'
+import { useSettingsStore } from './settings'
 import type { ReferenceMeta } from '../types'
 
 const vaultFs = vi.hoisted(() => ({
@@ -16,10 +17,22 @@ const vaultFs = vi.hoisted(() => ({
 const updateNote = vi.hoisted(() => vi.fn())
 const updateChunks = vi.hoisted(() => vi.fn())
 const removeNote = vi.hoisted(() => vi.fn())
+const compressImageFile = vi.hoisted(() => vi.fn())
+const imageToMarkdown = vi.hoisted(() => vi.fn())
+const createVisionProvider = vi.hoisted(() => vi.fn())
 
 vi.mock('../utils/vault-fs', () => vaultFs)
 vi.mock('../embedding/indexer', () => ({
   getNoteIndexer: () => ({ updateNote, updateChunks, removeNote }),
+}))
+vi.mock('../utils/image-compress', () => ({
+  compressImageFile,
+}))
+vi.mock('../api/skills/image-to-note', () => ({
+  imageToMarkdown,
+}))
+vi.mock('../api/provider-factory', () => ({
+  createVisionProvider,
 }))
 
 /** 构造一个最小可用的伪 File 对象（不依赖浏览器 File 实现） */
@@ -379,5 +392,145 @@ describe('references store', () => {
     expect(chunks[1].chunkTitle).toBe('第二章')
     expect(chunks[1].pageFrom).toBeUndefined()
     expect(chunks[1].pageTo).toBeUndefined()
+  })
+
+  describe('PNG 识别（recognizePngReference）', () => {
+    const pngMeta = (): ReferenceMeta => makeMeta({
+      id: 'png-1',
+      path: '/vault/references/png-1/png-1.json',
+      fileType: 'png',
+      fileName: '示意图.png',
+      filePath: '/vault/references/png-1/png-1.png',
+    })
+
+    /** 取对元数据路径的最近一次写入（前序 parsing 状态写入会被后续状态覆盖） */
+    function lastMetaWrite(path: string): [string, string] {
+      const calls = vaultFs.writeFile.mock.calls.filter((c: [string, string]) => c[0] === path) as Array<[string, string]>
+      expect(calls.length).toBeGreaterThan(0)
+      return calls[calls.length - 1]
+    }
+
+    beforeEach(() => {
+      compressImageFile.mockResolvedValue({ mimeType: 'image/jpeg', base64: 'QUJD' })
+      imageToMarkdown.mockResolvedValue({
+        title: '示意图',
+        description: '一张示意图',
+        tags: ['图'],
+        markdown: '## 说明\n\n| A | B |\n| --- | --- |\n| 1 | 2 |',
+      })
+      createVisionProvider.mockReturnValue({ chat: vi.fn() } as never)
+      const settings = useSettingsStore()
+      settings.visionEnabled = true
+      settings.visionApiKey = 'sk-vision'
+      vaultFs.readFileBytes.mockResolvedValue(new Uint8Array([1, 2, 3]))
+      vaultFs.readFile.mockResolvedValue('')
+    })
+
+    it('完整流程：读取→压缩→识别→写提取产物并回填元数据', async () => {
+      const store = useReferenceStore()
+      const meta = pngMeta()
+
+      const ok = await store.recognizePngReference(meta, '/vault')
+
+      expect(ok).toBe(true)
+      expect(vaultFs.readFileBytes).toHaveBeenCalledWith(meta.filePath)
+      expect(compressImageFile).toHaveBeenCalled()
+      expect(imageToMarkdown).toHaveBeenCalledWith(
+        { mimeType: 'image/jpeg', base64: 'QUJD' },
+        expect.anything(),
+        'reference',
+      )
+
+      // 写入 {id}.extracted.md
+      const extractCall = vaultFs.writeFile.mock.calls.find(
+        (c: [string, string]) => c[0] === '/vault/references/png-1/png-1.extracted.md',
+      )
+      expect(extractCall).toBeTruthy()
+      expect(extractCall![1]).toContain('| 1 | 2 |')
+
+      // 元数据最终回填 parsed
+      const saved = JSON.parse(lastMetaWrite(meta.path)[1])
+      expect(saved.parseStatus).toBe('parsed')
+      expect(saved.extractedPath).toBe('/vault/references/png-1/png-1.extracted.md')
+      expect(saved.extractedChars).toBeGreaterThan(0)
+      expect(saved.extractedAt).toBeTruthy()
+      expect(updateNote).toHaveBeenCalled()
+    })
+
+    it('传入 result 时仅落盘（不重复识别）', async () => {
+      const store = useReferenceStore()
+      const meta = pngMeta()
+      const result = { title: 't', description: 'd', tags: ['a'], markdown: '正文' }
+
+      const ok = await store.recognizePngReference(meta, '/vault', result)
+
+      expect(ok).toBe(true)
+      expect(imageToMarkdown).not.toHaveBeenCalled()
+      expect(vaultFs.readFileBytes).not.toHaveBeenCalled()
+      expect(JSON.parse(lastMetaWrite(meta.path)[1]).parseStatus).toBe('parsed')
+    })
+
+    it('未配置转笔记模型时标记 failed 并返回 false', async () => {
+      useSettingsStore().visionEnabled = false
+      const store = useReferenceStore()
+      const meta = pngMeta()
+
+      const ok = await store.recognizePngReference(meta, '/vault')
+
+      expect(ok).toBe(false)
+      const saved = JSON.parse(lastMetaWrite(meta.path)[1])
+      expect(saved.parseStatus).toBe('failed')
+      expect(saved.parseError).toContain('尚未配置图片转笔记模型')
+    })
+
+    it('识别失败时标记 failed 并保留错误信息', async () => {
+      imageToMarkdown.mockRejectedValue(new Error('LLM 调用失败: API 错误 (401)'))
+      const store = useReferenceStore()
+      const meta = pngMeta()
+
+      const ok = await store.recognizePngReference(meta, '/vault')
+
+      expect(ok).toBe(false)
+      const saved = JSON.parse(lastMetaWrite(meta.path)[1])
+      expect(saved.parseStatus).toBe('failed')
+      expect(saved.parseError).toContain('API 错误 (401)')
+    })
+
+    it('非 png 类型直接返回 false 不做任何写入', async () => {
+      const store = useReferenceStore()
+      const meta = makeMeta({ fileType: 'md' })
+
+      const ok = await store.recognizePngReference(meta, '/vault')
+
+      expect(ok).toBe(false)
+      expect(vaultFs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('retryRecognizePng 对失败 PNG 重新识别', async () => {
+      useSettingsStore().visionEnabled = false
+      const store = useReferenceStore()
+      const meta = pngMeta()
+      store.references.push(meta)
+      store.currentVaultPath = '/vault'
+
+      await store.retryRecognizePng(meta.path)
+
+      expect(JSON.parse(lastMetaWrite(meta.path)[1]).parseStatus).toBe('failed')
+    })
+
+    it('已识别的 png 在 refreshIndex 中按提取产物索引', async () => {
+      const store = useReferenceStore()
+      const meta: ReferenceMeta = {
+        ...pngMeta(),
+        parseStatus: 'parsed',
+        extractedPath: '/vault/references/png-1/png-1.extracted.md',
+        extractedChars: 10,
+      }
+      vaultFs.readFile.mockResolvedValue('## 章节\n\n内容')
+
+      await store.updateReference(meta)
+
+      expect(updateNote).toHaveBeenCalledWith(meta.path, expect.stringContaining('## 章节'))
+    })
   })
 })

@@ -70,7 +70,7 @@ describe('read_reference 工具', () => {
     expect(result.length).toBeLessThan(READ_REFERENCE_MAX_CHARS + 500)
   })
 
-  it('pdf/png 参考资料返回无法读取文本的说明', async () => {
+  it('未识别的 png 参考资料返回引导说明（可转为 Markdown 后读取）', async () => {
     readFile.mockImplementation(async (p: string) => {
       if (p === '/vault/references/ref-1/ref-1.json') {
         return metaJson({ fileType: 'png', fileName: 'ref.png', filePath: '/vault/references/ref-1/ref-1.png' })
@@ -80,7 +80,51 @@ describe('read_reference 工具', () => {
 
     const result = await executeReadReference({ reference_id: 'ref-1' }, { vaultPath: VAULT })
 
-    expect(result).toContain('png 文件，无法读取文本内容')
+    expect(result).toContain('尚未识别为 Markdown')
+    expect(result).toContain('转为 Markdown')
+  })
+
+  it('已识别的 png 参考资料按行读取识别产物', async () => {
+    readFile.mockImplementation(async (p: string) => {
+      if (p === '/vault/references/ref-1/ref-1.json') {
+        return metaJson({
+          fileType: 'png',
+          fileName: 'ref.png',
+          filePath: '/vault/references/ref-1/ref-1.png',
+          parseStatus: 'parsed',
+          extractedPath: '/vault/references/ref-1/ref-1.extracted.md',
+        })
+      }
+      if (p === '/vault/references/ref-1/ref-1.extracted.md') {
+        return '| A | B |\n| --- | --- |\n| 1 | 2 |'
+      }
+      return ''
+    })
+
+    const result = await executeReadReference({ reference_id: 'ref-1' }, { vaultPath: VAULT })
+
+    expect(result).toContain('Showing lines 1-3 of 3 total lines')
+    expect(result).toContain('| 1 | 2 |')
+  })
+
+  it('识别失败的 png 返回失败原因', async () => {
+    readFile.mockImplementation(async (p: string) => {
+      if (p === '/vault/references/ref-1/ref-1.json') {
+        return metaJson({
+          fileType: 'png',
+          fileName: 'ref.png',
+          filePath: '/vault/references/ref-1/ref-1.png',
+          parseStatus: 'failed',
+          parseError: '尚未配置图片转笔记模型',
+        })
+      }
+      return ''
+    })
+
+    const result = await executeReadReference({ reference_id: 'ref-1' }, { vaultPath: VAULT })
+
+    expect(result).toContain('识别失败')
+    expect(result).toContain('尚未配置图片转笔记模型')
   })
 
   it('未知 reference_id 返回错误说明', async () => {

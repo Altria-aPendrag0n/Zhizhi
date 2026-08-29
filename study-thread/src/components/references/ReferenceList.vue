@@ -37,6 +37,7 @@
         @select="$emit('select', $event)"
         @contextmenu="openContextMenu($event, reference.path)"
         @retry-parse="$emit('retry-parse', $event)"
+        @recognize="$emit('recognize', $event)"
       />
     </div>
 
@@ -77,6 +78,7 @@ const emit = defineEmits<{
   upload: [files: File[]]
   delete: [path: string]
   'retry-parse': [path: string]
+  recognize: [path: string]
 }>()
 
 const sortBy = ref<'updated' | 'title'>('updated')

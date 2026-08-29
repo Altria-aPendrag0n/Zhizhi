@@ -28,7 +28,7 @@ export interface ToolContext {
 export const readReferenceTool: ToolDefinition = {
   name: 'read_reference',
   description:
-    '读取参考资料（用户上传的学习资料）的正文内容。检索结果中会给出每个资料条目的正文预览和 reference_id（形如 {vault}/references/{id}/{id}.json），需要完整内容时用本工具读取。md 文档按行读取：offset 为 0 起始的行号，limit 为最多读取的行数；pdf 文档按页读取：offset 为 0 起始的页码，limit 为最多读取的页数。返回会标明当前读取的范围与总行数/总页数；若内容未读完，请用 offset 继续读取后续部分。',
+    '读取参考资料（用户上传的学习资料）的正文内容。检索结果中会给出每个资料条目的正文预览和 reference_id（形如 {vault}/references/{id}/{id}.json），需要完整内容时用本工具读取。md 文档按行读取：offset 为 0 起始的行号，limit 为最多读取的行数；pdf 文档按页读取：offset 为 0 起始的页码，limit 为最多读取的页数；已识别为 Markdown 的图片（png）按行读取识别产物。返回会标明当前读取的范围与总行数/总页数；若内容未读完，请用 offset 继续读取后续部分。',
   parameters: {
     type: 'object',
     properties: {
@@ -149,15 +149,34 @@ export async function executeReadReference(
     return readPdfReference(args, meta)
   }
 
+  if (meta.fileType === 'png' && meta.extractedPath) {
+    return readMarkdownReference(args, meta, '图片')
+  }
+
+  if (meta.fileType === 'png') {
+    if (meta.parseStatus === 'failed') {
+      return `该图片（${meta.title}）识别失败${meta.parseError ? `：${meta.parseError}` : ''}，无法读取内容。`
+    }
+    return `该图片（${meta.title}）尚未识别为 Markdown（当前状态：${meta.parseStatus || '待识别'}），请先在参考资料中执行「转为 Markdown」。`
+  }
+
   if (meta.fileType !== 'md') {
     return `该参考资料（${meta.title}）为 ${meta.fileType} 文件，无法读取文本内容。`
   }
 
+  return readMarkdownReference(args, meta, 'md')
+}
+
+/**
+ * 按行读取 Markdown 正文（md 原文件 / png 识别产物共用）。
+ * offset/limit 语义为起始行号（0 起）/ 行数。
+ */
+async function readMarkdownReference(args: Record<string, unknown>, meta: ReferenceMeta, kind: string): Promise<string> {
   let content: string
   try {
-    content = await readFile(meta.filePath)
+    content = meta.fileType === 'png' ? await readFile(meta.extractedPath!) : await readFile(meta.filePath)
   } catch {
-    return `错误：无法读取参考资料 "${meta.title}" 的正文文件。`
+    return `错误：无法读取参考资料 "${meta.title}" 的${kind === '图片' ? '识别产物' : '正文'}文件。`
   }
 
   const lines = content.split('\n')

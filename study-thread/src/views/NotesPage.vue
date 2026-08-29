@@ -81,6 +81,7 @@
               @upload="handleUploadReference"
               @delete="handleDeleteReference"
               @retry-parse="handleRetryParse"
+              @recognize="handleRecognizeReference"
             />
 
             <ReferenceEditDialog
@@ -109,6 +110,14 @@
               @open="handleOpenReviewSession"
             />
           </template>
+
+          <ImageToMarkdownDialog
+            :visible="imageDialogVisible"
+            :mode="imageDialogMode"
+            :reference="imageDialogReference"
+            @close="handleImageDialogClose"
+            @saved="handleImageDialogSaved"
+          />
         </template>
       </div>
     </div>
@@ -126,6 +135,7 @@ import NoteList from '../components/notes/NoteList.vue'
 import ReferenceList from '../components/references/ReferenceList.vue'
 import ReferenceEditDialog from '../components/references/ReferenceEditDialog.vue'
 import ReviewSessionList from '../components/review/ReviewSessionList.vue'
+import ImageToMarkdownDialog from '../components/notes/ImageToMarkdownDialog.vue'
 import { listReviewSessions, type ReviewSessionMeta } from '../utils/review-session'
 import type { ReferenceMeta } from '../types'
 
@@ -140,6 +150,10 @@ const selectedReferencePath = ref<string>()
 const editVisible = ref(false)
 const reviewSessions = ref<ReviewSessionMeta[]>([])
 const reviewSessionsLoading = ref(false)
+// 图片转笔记弹窗（三模式：note 新建笔记 / insert 编辑器导入 / reference 参考资料识别）
+const imageDialogVisible = ref(false)
+const imageDialogMode = ref<'note' | 'insert' | 'reference'>('note')
+const imageDialogReference = ref<ReferenceMeta | null>(null)
 
 const selectedReference = computed<ReferenceMeta | null>(
   () => referenceStore.references.find((item) => item.path === selectedReferencePath.value) ?? null,
@@ -236,9 +250,13 @@ async function handleUploadReference(files: File[]) {
   const vaultPath = vaultStore.vaultPath
   if (!vaultPath) return
   let uploaded = 0
+  let lastPng: ReferenceMeta | null = null
   for (const file of files) {
     const meta = await referenceStore.uploadReference(vaultPath, file)
-    if (meta) uploaded++
+    if (meta) {
+      uploaded++
+      if (meta.fileType === 'png') lastPng = meta
+    }
   }
   if (uploaded === 0) {
     toast.error('上传参考资料失败')
@@ -247,6 +265,37 @@ async function handleUploadReference(files: File[]) {
   } else {
     toast.success(`成功上传 ${uploaded}/${files.length} 份参考资料`)
   }
+  // 上传 PNG 后弹确认框询问是否识别为 Markdown（避免静默消耗 token）
+  if (lastPng) {
+    openImageDialog('reference', lastPng)
+  }
+}
+
+function handleRecognizeReference(path: string) {
+  const reference = referenceStore.references.find((item) => item.path === path)
+  if (reference) openImageDialog('reference', reference)
+}
+
+/** 打开图片转笔记弹窗 */
+function openImageDialog(mode: 'note' | 'reference', reference: ReferenceMeta | null = null) {
+  imageDialogMode.value = mode
+  imageDialogReference.value = reference
+  imageDialogVisible.value = true
+}
+
+function handleImageDialogClose() {
+  imageDialogVisible.value = false
+}
+
+async function handleImageDialogSaved(path: string) {
+  imageDialogVisible.value = false
+  if (imageDialogMode.value === 'reference') {
+    toast.success('图片已识别为 Markdown 参考资料')
+    return
+  }
+  // note 模式：保存成功后跳转到新笔记详情
+  toast.success('笔记已保存')
+  router.push(`/notes/${encodeURIComponent(path)}`)
 }
 
 async function handleRetryParse(path: string) {

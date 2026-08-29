@@ -88,4 +88,53 @@ describe('ReferenceCard', () => {
     })
     expect(wrapper.find('.ref-parse').exists()).toBe(false)
   })
+
+  it('png 未识别时显示「转为 Markdown」按钮，点击触发 recognize', async () => {
+    const wrapper = mount(ReferenceCard, {
+      props: { reference: { ...reference, fileType: 'png', fileName: '示意图.png' } },
+    })
+    expect(wrapper.find('.ref-parse-retry--recognize').text()).toContain('转为 Markdown')
+    await wrapper.find('.ref-parse-retry--recognize').trigger('click')
+    expect(wrapper.emitted('recognize')![0]).toEqual([reference.path])
+  })
+
+  it('png 识别中显示「识别中…」且不显示已识别提示', () => {
+    const wrapper = mount(ReferenceCard, {
+      props: { reference: { ...reference, fileType: 'png', parseStatus: 'parsing' } },
+    })
+    expect(wrapper.find('.ref-parse-retry--recognize').text()).toContain('识别中…')
+    expect(wrapper.find('.ref-recognized').exists()).toBe(false)
+  })
+
+  it('png 已识别显示「已识别」徽标与字符数，且不再显示转为按钮', () => {
+    const wrapper = mount(ReferenceCard, {
+      props: {
+        reference: {
+          ...reference,
+          fileType: 'png',
+          parseStatus: 'parsed',
+          extractedChars: 120,
+        },
+      },
+    })
+    expect(wrapper.find('.ref-parse').text()).toContain('已识别')
+    expect(wrapper.find('.ref-recognized').text()).toContain('120')
+    expect(wrapper.find('.ref-parse-retry--recognize').exists()).toBe(false)
+  })
+
+  it('png 识别失败显示错误与重试按钮，点击触发 retry-parse', async () => {
+    const wrapper = mount(ReferenceCard, {
+      props: {
+        reference: {
+          ...reference,
+          fileType: 'png',
+          parseStatus: 'failed',
+          parseError: '尚未配置图片转笔记模型',
+        },
+      },
+    })
+    expect(wrapper.find('.ref-parse-error__text').text()).toContain('尚未配置图片转笔记模型')
+    await wrapper.find('.ref-parse-retry').trigger('click')
+    expect(wrapper.emitted('retry-parse')![0]).toEqual([reference.path])
+  })
 })

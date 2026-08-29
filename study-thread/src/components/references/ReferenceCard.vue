@@ -15,9 +15,18 @@
     <h3>{{ reference.title }}</h3>
     <p v-if="reference.description" class="ref-desc">{{ reference.description }}</p>
     <div v-if="reference.parseStatus === 'failed'" class="ref-parse-error">
-      <span class="ref-parse-error__text">{{ reference.parseError || '解析失败' }}</span>
+      <span class="ref-parse-error__text">{{ reference.parseError || '识别失败' }}</span>
       <button class="ref-parse-retry" type="button" @click.stop="$emit('retry-parse', reference.path)">重试</button>
     </div>
+    <div v-if="isPng && reference.parseStatus !== 'parsed' && reference.parseStatus !== 'failed'" class="ref-parse-error">
+      <span class="ref-parse-error__text">识别后可全文检索图片内容</span>
+      <button class="ref-parse-retry ref-parse-retry--recognize" type="button" @click.stop="$emit('recognize', reference.path)">
+        {{ reference.parseStatus === 'parsing' ? '识别中…' : '转为 Markdown' }}
+      </button>
+    </div>
+    <p v-if="isPng && reference.parseStatus === 'parsed' && reference.extractedChars" class="ref-recognized">
+      已识别 · {{ reference.extractedChars }} 字
+    </p>
     <div v-if="reference.tags.length" class="tags">
       <span v-for="tag in reference.tags" :key="tag" class="tag">{{ tag }}</span>
     </div>
@@ -38,6 +47,7 @@ defineEmits<{
   select: [path: string]
   contextmenu: [event: MouseEvent]
   'retry-parse': [path: string]
+  recognize: [path: string]
 }>()
 
 const typeLabels: Record<string, string> = {
@@ -48,21 +58,37 @@ const typeLabels: Record<string, string> = {
 
 const typeLabel = computed(() => typeLabels[props.reference.fileType] || props.reference.fileType.toUpperCase())
 
-/** 解析状态徽标文本（仅 pdf 显示） */
+const isPng = computed(() => props.reference.fileType === 'png')
+
+/** 识别/解析状态徽标文本（pdf 与 png 显示） */
 const parseBadge = computed(() => {
-  if (props.reference.fileType !== 'pdf') return ''
-  switch (props.reference.parseStatus) {
-    case 'pending':
-      return '待解析'
-    case 'parsing':
-      return '解析中…'
-    case 'failed':
-      return '解析失败'
-    case 'parsed':
-      return props.reference.pageCount ? `${props.reference.pageCount} 页` : '已解析'
-    default:
-      return ''
+  if (props.reference.fileType === 'pdf') {
+    switch (props.reference.parseStatus) {
+      case 'pending':
+        return '待解析'
+      case 'parsing':
+        return '解析中…'
+      case 'failed':
+        return '解析失败'
+      case 'parsed':
+        return props.reference.pageCount ? `${props.reference.pageCount} 页` : '已解析'
+      default:
+        return ''
+    }
   }
+  if (props.reference.fileType === 'png') {
+    switch (props.reference.parseStatus) {
+      case 'parsing':
+        return '识别中…'
+      case 'failed':
+        return '识别失败'
+      case 'parsed':
+        return '已识别'
+      default:
+        return ''
+    }
+  }
+  return ''
 })
 
 const formattedDate = computed(() => formatNoteShortDate(props.reference.updated))
@@ -195,6 +221,23 @@ const formattedDate = computed(() => formatNoteShortDate(props.reference.updated
 .ref-parse-retry:hover {
   background: var(--state-error, #c2413b);
   color: #fff;
+}
+
+.ref-parse-retry--recognize {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.ref-parse-retry--recognize:hover {
+  background: var(--brand);
+  color: #fff;
+}
+
+.ref-recognized {
+  margin: 6px 0 0;
+  color: var(--brand-strong, #174438);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .type-md {
