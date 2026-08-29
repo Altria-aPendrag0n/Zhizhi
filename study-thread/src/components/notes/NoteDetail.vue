@@ -69,9 +69,11 @@
       <!-- 编辑器 -->
       <div ref="editorContentRef" class="note-editor" data-highlightable="true" @mouseup="handleMouseUp">
         <MarkdownEditor
+          ref="editorRef"
           :model-value="content"
           :current-note-path="note?.path"
           @update:model-value="handleContentChange"
+          @image-import="emit('image-import')"
         />
       </div>
 
@@ -105,6 +107,7 @@ const emit = defineEmits<{
   openSource: [source: NonNullable<Note['source']>]
   extractNote: [text: string]
   createBranch: [text: string]
+  'image-import': []
 }>()
 
 const editableTitle = ref('')
@@ -114,6 +117,7 @@ const showTagInput = ref(false)
 const newTag = ref('')
 const tagInputRef = ref<HTMLInputElement>()
 const editorContentRef = ref<HTMLElement | null>(null)
+const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null)
 const highlightMenu = reactive({
   visible: false,
   x: 0,
@@ -208,6 +212,13 @@ watch(showTagInput, async (val) => {
     tagInputRef.value?.focus()
   }
 })
+
+/** 转发给内部编辑器：在光标处插入识别出的 Markdown */
+function insertMarkdownAtCursor(text: string) {
+  editorRef.value?.insertMarkdownAtCursor(text)
+}
+
+defineExpose({ insertMarkdownAtCursor })
 </script>
 
 <style scoped>

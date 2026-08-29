@@ -46,6 +46,7 @@ import {
   List,
   Quote,
   Code2,
+  Image,
 } from '@lucide/vue'
 import LinkHint from './LinkHint.vue'
 import type { LinkSuggestion } from '../../embedding/linker'
@@ -64,6 +65,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'image-import': []
 }>()
 
 const router = useRouter()
@@ -85,6 +87,7 @@ const tools = [
   { label: '列表', icon: List, action: () => prefixLine('- ') },
   { label: '引用', icon: Quote, action: () => prefixLine('> ') },
   { label: '代码块', icon: Code2, action: () => wrapSelection('\n```\n', '\n```\n') },
+  { label: '图片导入', icon: Image, action: () => emit('image-import') },
 ]
 
 // ---------- Markdown 行渲染（非光标行的预览） ----------
@@ -353,6 +356,19 @@ function prefixLine(prefix: string) {
   editorView.dispatch({ changes: { from: line.from, insert: prefix } })
   editorView.focus()
 }
+
+/** 在光标处插入文本（图片转笔记识别结果插入用），光标移动到插入内容末尾 */
+function insertMarkdownAtCursor(text: string) {
+  if (!editorView) return
+  const { from, to } = editorView.state.selection.main
+  editorView.dispatch({
+    changes: { from, to, insert: text },
+    selection: { anchor: from + text.length, head: from + text.length },
+  })
+  editorView.focus()
+}
+
+defineExpose({ insertMarkdownAtCursor })
 
 function handleLinkSelect(item: LinkSuggestion) {
   if (!editorView) return

@@ -156,5 +156,44 @@ describe('MarkdownEditor', () => {
     const sourceLines = wrapper.findAll('.cm-line')
     expect(sourceLines.map((line) => line.text())).toEqual(['| a | b |', '| --- | --- |', '| 1 | 2 |'])
   })
+
+  it('工具栏「图片导入」按钮 emit image-import', async () => {
+    const wrapper = mount(MarkdownEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+      },
+      props: { modelValue: '内容' },
+    })
+
+    await nextTick()
+
+    const button = wrapper.find('.tool-btn[title="图片导入"]')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    expect(wrapper.emitted('image-import')).toBeTruthy()
+  })
+
+  it('insertMarkdownAtCursor 在光标处插入文本并更新 modelValue', async () => {
+    const wrapper = mount(MarkdownEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createTestingPinia({ createSpy: vi.fn })],
+      },
+      props: { modelValue: '开始\n| 名称 |\n| --- |\n| 虾 |' },
+    })
+
+    await nextTick()
+
+    const markdown = '## 补充\n\n- 内容一'
+    ;(wrapper.vm as unknown as { insertMarkdownAtCursor: (t: string) => void }).insertMarkdownAtCursor(markdown)
+    await nextTick()
+
+    const emitted = wrapper.emitted('update:modelValue')
+    expect(emitted).toBeTruthy()
+    const last = emitted![emitted!.length - 1][0] as string
+    expect(last).toContain(markdown)
+    expect(last.startsWith(markdown)).toBe(true)
+  })
 })
 

@@ -4,12 +4,14 @@
       <!-- 主体 -->
       <main class="detail-main">
         <NoteDetail
+          ref="noteDetailRef"
           :note="currentNote"
           :loading="isLoading"
           @update="handleNoteUpdate"
           @open-source="handleOpenSource"
           @extract-note="handleExtractNote"
           @create-branch="handleCreateBranch"
+          @image-import="handleImageImport"
         />
         <button v-if="currentNote" class="delete-note-button" type="button" @click="handleDeleteNote">
           删除笔记
@@ -41,6 +43,13 @@
       @close="cancelExtract"
       @confirm="confirmExtract"
     />
+
+    <ImageToMarkdownDialog
+      :visible="imageDialogVisible"
+      mode="insert"
+      @close="imageDialogVisible = false"
+      @insert="handleImageInsert"
+    />
   </div>
 </template>
 
@@ -65,6 +74,7 @@ import NoteDetail from '../components/notes/NoteDetail.vue'
 import Backlinks, { type BacklinkEntry } from '../components/editor/Backlinks.vue'
 import LocalGraph from '../components/graph/LocalGraph.vue'
 import ExtractNoteDialog from '../components/notes/ExtractNoteDialog.vue'
+import ImageToMarkdownDialog from '../components/notes/ImageToMarkdownDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -90,6 +100,19 @@ const extractDialog = reactive({
   error: '',
   draft: null as ExtractedNote | null,
 })
+
+/** 图片导入弹窗状态（insert 模式：识别后插入光标处） */
+const imageDialogVisible = ref(false)
+const noteDetailRef = ref<InstanceType<typeof NoteDetail> | null>(null)
+
+function handleImageImport() {
+  imageDialogVisible.value = true
+}
+
+function handleImageInsert(markdown: string) {
+  imageDialogVisible.value = false
+  noteDetailRef.value?.insertMarkdownAtCursor(markdown)
+}
 
 const noteId = computed(() => {
   return decodeURIComponent((route.params.id as string) || '')

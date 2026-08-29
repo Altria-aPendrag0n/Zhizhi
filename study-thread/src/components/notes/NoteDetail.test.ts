@@ -4,9 +4,21 @@ import { nextTick } from 'vue'
 import NoteDetail from './NoteDetail.vue'
 import type { Note } from '../../types'
 
+const editorState = vi.hoisted(() => ({ inserted: '' }))
+
 vi.mock('../editor/MarkdownEditor.vue', () => ({
   default: {
-    template: '<div class="cm-content" data-highlightable="true">笔记正文选中文本</div>',
+    emits: ['update:modelValue', 'image-import'],
+    template:
+      '<div class="mock-editor">'
+      + '<div class="cm-content" data-highlightable="true">笔记正文选中文本</div>'
+      + '<button class="mock-import-btn" @click="$emit(\'image-import\')">图片导入</button>'
+      + '</div>',
+    methods: {
+      insertMarkdownAtCursor(text: string) {
+        editorState.inserted = text
+      },
+    },
   },
 }))
 
@@ -119,5 +131,22 @@ describe('NoteDetail', () => {
       props: { note: { ...note, created: 'not-a-date', updated: 'not-a-date' } },
     })
     expect(wrapper.find('.note-meta').text()).not.toContain('Invalid')
+  })
+
+  it('编辑器「图片导入」事件向上透传为 image-import', async () => {
+    const wrapper = mount(NoteDetail, { props: { note } })
+
+    await wrapper.find('.mock-import-btn').trigger('click')
+
+    expect(wrapper.emitted('image-import')).toBeTruthy()
+  })
+
+  it('insertMarkdownAtCursor 转发给内部编辑器', () => {
+    editorState.inserted = ''
+    const wrapper = mount(NoteDetail, { props: { note } })
+
+    ;(wrapper.vm as unknown as { insertMarkdownAtCursor: (t: string) => void }).insertMarkdownAtCursor('| 表 |\n| --- |')
+
+    expect(editorState.inserted).toBe('| 表 |\n| --- |')
   })
 })
