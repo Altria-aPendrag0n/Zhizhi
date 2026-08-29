@@ -26,6 +26,7 @@
 | Skill | 触发方式 | 执行器 | 输入变量 | 输出 |
 |-------|---------|--------|----------|------|
 | **extract-note** | 用户划线 → 点"生成笔记" | `api/skills/extract-note.ts` | `highlighted_text`、`session_context`、`user_title_block` | JSON `{title, description, tags}` |
+| **image-to-note** | 图片转笔记（新建/编辑器导入/参考资料识别） | `api/skills/image-to-note.ts` | `image_intent`（note/reference）+ 多模态图片块 | JSON `{title, description, tags, markdown}` |
 | **branch-followup** | 进入分支会话追问 | `api/skills/branch-followup.ts` | `fork_context`、`user_question`、`related_notes` | 流式 Markdown（回顾/深入解答/延伸思考） |
 | **update-learner** | 会话结束后生成画像 diff | `api/skills/update-learner.ts` | `session_transcript`、`existing_profile`、`new_notes` | JSON `ProfileDiff` |
 | **review-quiz** | 到期笔记开始复习 | `api/skills/review-quiz.ts` | `note_content`、`related_notes`、`learner_profile` | 出题 JSON `{questions[]}` + 反馈流式 Markdown |

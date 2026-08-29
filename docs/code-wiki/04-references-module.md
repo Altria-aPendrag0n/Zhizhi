@@ -7,9 +7,9 @@
 
 ## 1. 模块职责
 
-- 管理 `<vault>/references/` 目录下的参考资料，每个参考资料一个**自包含文件夹**（原始文件 + 元数据 JSON + pdf 提取产物）。
-- 支持三种类型：`md`（可全文检索/工具读取，超大 md 按章节分块检索）、`pdf`（上传后后台解析为 Markdown，可检索/按页读取/按章节分块索引）、`png`（图片预览）。
-- 上传/编辑/解析后**尽力而为地同步向量索引**（小 md/小 pdf 全文单块嵌入，超大 md 与大 pdf 按章节分块多向量），供 RAG 检索与 `read_reference` 工具使用（见 [08]/[10] 模块）。
+- 管理 `<vault>/references/` 目录下的参考资料，每个参考资料一个**自包含文件夹**（原始文件 + 元数据 JSON + pdf 提取产物 + png 识别产物）。
+- 支持三种类型：`md`（可全文检索/工具读取，超大 md 按章节分块检索）、`pdf`（上传后后台解析为 Markdown，可检索/按页读取/按章节分块索引）、`png`（图片预览；可**识别为 Markdown 提取产物** `{id}.extracted.md`，识别后全文检索/按行读取）。
+- 上传/编辑/解析/识别后**尽力而为地同步向量索引**（小 md/小 pdf/小 png 产物全文单块嵌入，超大 md 与大 pdf/大 png 产物按章节分块多向量），供 RAG 检索与 `read_reference` 工具使用（见 [08]/[10] 模块）。
 
 ## 2. 数据模型（`src/types/index.ts`）
 
@@ -28,13 +28,13 @@ interface ReferenceMeta {
   filePath: string  // 实际文件路径：{vault}/references/{id}/{id}.{ext}
   created: string   // ISO
   updated: string   // ISO
-  // —— pdf 解析字段（向后兼容，可选）——
-  parseStatus?: ReferenceParseStatus  // pending/parsing/parsed/failed
-  parseError?: string                 // 解析失败原因（扫描件无文本层等）
+  // —— pdf 解析字段（png 识别复用，向后兼容，可选）——
+  parseStatus?: ReferenceParseStatus  // pending/parsing/parsed/failed（pdf 解析 / png 识别共用状态机）
+  parseError?: string                 // 解析/识别失败原因（扫描件无文本层等）
   pageCount?: number                  // pdf 页数（parsed 后写入）
   extractedChars?: number             // 提取产物字符数
-  extractedPath?: string              // {vault}/references/{id}/{id}.extracted.md
-  extractedAt?: string                // 提取时间
+  extractedPath?: string              // {vault}/references/{id}/{id}.extracted.md（pdf 提取 / png 识别共用）
+  extractedAt?: string                // 提取/识别时间
 }
 
 interface Reference extends ReferenceMeta {
@@ -81,11 +81,13 @@ interface Reference extends ReferenceMeta {
 | `loadReferencePreview(meta)` | md → 返回正文；png → base64 data URL；pdf → `''` |
 | `parseReference(meta, vaultPath)` | pdf 解析状态机：`pending → parsing → parsed/failed`；成功写 `{id}.extracted.md` 并回填 pageCount/extractedChars，失败写 parseError |
 | `retryParseReference(metaPath)` | 重新解析失败的 pdf（UI「重试」按钮） |
+| `recognizePngReference(meta, vaultPath, result?)` | PNG 识别为 Markdown 产物：传入 `result`（弹窗预览确认后）仅落盘；缺省完整执行 读取→压缩→识别；成功写 `{id}.extracted.md` + 回填 parseStatus/extractedChars/extractedAt，失败写 parseError |
+| `retryRecognizePng(metaPath)` | 重新识别失败的 png（UI「重试」按钮） |
 
 辅助函数：
 - `toReferenceTitle(fileName)`：去掉扩展名的清理文件名作为标题。
-- `buildIndexText(meta)`：`title + description + tags + md 正文`（或小 pdf 的提取正文）。
-- `refreshIndex(meta)`：小 pdf/md 单块 `updateNote`；**大 pdf（`extractedChars > PDF_CHUNK_MIN_CHARS`）按章节 `chunkPdfByChapters` 分块后 `updateChunks` 多向量索引**（无标题退化按页）；**超大 md（字符数 > `MD_CHUNK_MIN_CHARS`）按 H1/H2 章节 `chunkMdByChapters` 分块后 `updateChunks` 多向量索引**（无标题按预算逐行切分）。
+- `buildIndexText(meta)`：`title + description + tags + md 正文`（或已解析 pdf / 已识别 png 的提取产物正文）。
+- `refreshIndex(meta)`：小 pdf/md 单块 `updateNote`；**大 pdf（`extractedChars > PDF_CHUNK_MIN_CHARS`）按章节 `chunkPdfByChapters` 分块后 `updateChunks` 多向量索引**（无标题退化按页）；**超大 md（字符数 > `MD_CHUNK_MIN_CHARS`）按 H1/H2 章节 `chunkMdByChapters` 分块后 `updateChunks` 多向量索引**（无标题按预算逐行切分）；**已识别 png 按 `MD_CHUNK_MIN_CHARS` 同 md 分块策略**（小产物单块索引）。
 - `bytesToBase64(bytes)`：分块（0x8000）拼接避免大数组栈溢出。
 
 > 注意：上传/编辑/解析后的索引同步是**尽力而为**（try/catch 静默），失败不影响文件操作本身。
@@ -100,9 +102,10 @@ interface Reference extends ReferenceMeta {
 
 ### 5.2 `ReferenceCard.vue` — 卡片
 
-- props：`reference: ReferenceMeta`、`isSelected?`；emits：`select(path)`、`contextmenu(event)`、`retry-parse(path)`。
+- props：`reference: ReferenceMeta`、`isSelected?`；emits：`select(path)`、`contextmenu(event)`、`retry-parse(path)`、`recognize(path)`。
 - 类型徽标按 fileType 着色：md 绿 / pdf 棕 / png 蓝；展示标题、描述、标签、短日期。
 - pdf 额外展示**解析状态徽标**：pending（待解析）/ parsing（解析中）/ parsed（已解析）/ failed（解析失败，附「重试」按钮触发 `retry-parse`）。
+- png 额外展示**识别状态徽标**：parsing（识别中…）/ parsed（已识别，附「已识别 · N 字」）/ failed（识别失败，附「重试」）；未识别时显示「转为 Markdown」按钮（触发 `recognize`，由 [19 图片转笔记](./19-image-to-note.md) 弹窗处理）。
 
 ### 5.3 `ReferenceEditDialog.vue` — 编辑弹窗
 
@@ -115,15 +118,16 @@ interface Reference extends ReferenceMeta {
 
 ```
 NotesPage（参考资料 tab）
-  ├─ ReferenceList（上传/搜索/删除）
+  ├─ ReferenceList（上传/搜索/删除/识别）
   ├─ ReferenceEditDialog（编辑/预览/打开原文件）
   └─ referencesStore
        ├─ writeFileBytes → Rust write_file_bytes          [13 Rust 后端]
        ├─ pdf 上传 → extractPdfText → Rust extract_pdf_text（本地 pdf_oxide 解析）
        ├─ 解析成功 → writeFile({id}.extracted.md) + 回填元数据
+       ├─ png 识别 → readFileBytes → compressImageFile → imageToMarkdown（[19]）→ 写 {id}.extracted.md + 回填元数据
        └─ getNoteIndexer().updateNote / updateChunks → 向量索引  [10 Embedding]
 
-LLM 侧：knowledge-retrieval 检索命中（pdf 块带章节/页码）→ read_reference 按页读取 [08/10]
+LLM 侧：knowledge-retrieval 检索命中（pdf 块带章节/页码；png 识别产物按 md 章节）→ read_reference 读取（pdf 按页 / png 与 md 按行）[08/10]
 ```
 
 ## 7. 相关测试

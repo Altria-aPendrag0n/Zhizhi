@@ -162,6 +162,7 @@ d:\work\Zhizhi\
 | 16 | 主界面与学习统计模块 | [16-learning-stats-home.md](./16-learning-stats-home.md) | `src/utils/learning-stats.ts`、`src/components/stats/ContributionGraph.vue`、`src/views/HomePage.vue` | 知枝按钮直达 `/home` 数据总览、问答/复习/笔记按天聚合、GitHub 风格学习频率格子图 |
 | 17 | 全局 AI 忙碌遮罩 | [17-busy-overlay.md](./17-busy-overlay.md) | `src/stores/busy.ts`、`src/components/common/AiBusyOverlay.vue` | 非流式 AI 等待期间的全屏遮罩与全局快捷键禁用，避免反复创建或提交 |
 | 18 | 调试日志系统 | [18-debug-logging.md](./18-debug-logging.md) | `src/utils/logger.ts`、`src/views/SettingsPage.vue`（调试日志区块） | 统一运行时日志（console + localStorage 环形缓冲）与设置页查看/清空面板 |
+| 19 | 图片转笔记模块 | [19-image-to-note.md](./19-image-to-note.md) | `src/api/skills/image-to-note.ts`、`src/utils/image-compress.ts`、`src/components/notes/ImageToMarkdownDialog.vue` | 多模态图片识别为 Markdown（含表格还原）：三入口（新建笔记/编辑器导入/参考资料识别）+ 独立转笔记模型配置 |
 
 ---
 

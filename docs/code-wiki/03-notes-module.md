@@ -61,6 +61,7 @@ interface Note {
 
 - props：`notes: NoteMeta[]`、`selectedPath?`、`loading?`；emits：`select(path)`、`openSource(source)`、`delete(path)`。
 - 链式过滤：排序（updated/created/title）+ 标签筛选（逗号/空格分隔多条件，需同时满足，AND 匹配，输入框带 `datalist` 汇总所有已有标签提示）+ 关键词搜索（标题/标签）→ `filteredNotes`。
+- **新建笔记入口**：工具栏「新建笔记」按钮 → 下拉菜单「从图片导入」→ emit `create-from-image`（由 NotesPage 打开 [19 图片转笔记](./19-image-to-note.md) 的 note 模式弹窗）。
 - **单字/拼音匹配**：筛选与搜索统一走 `utils/pinyin-match.ts` 的 `tagMatchesQuery`——中文按子串匹配（输入 `虾` 命中所有含"虾"字的标签），纯字母输入按拼音匹配（全拼 `xia` / 首字母 `dsx`，经 `pinyin-pro` 转换，含 Map 缓存）。
 - **加载占位仅在 `loading && notes.length === 0` 时显示**：已有缓存笔记时立即渲染列表（后台静默刷新），避免每次进入资料库都闪现"正在加载笔记…"中间态。
 - 右键菜单 Teleport 定位（边缘 clamp）；document 级 pointerdown / Escape 关闭。
@@ -73,9 +74,10 @@ interface Note {
 
 ### 4.3 `NoteDetail.vue` — 笔记详情主体
 
-- props：`note: Note | null`、`loading?`；emits：`update(note)`、`openSource(source)`、`extractNote(text)`、`createBranch(text)`。
+- props：`note: Note | null`、`loading?`；emits：`update(note)`、`openSource(source)`、`extractNote(text)`、`createBranch(text)`、`image-import`。
 - 内联编辑标题/标签（增删）；嵌入 `MarkdownEditor`；展示来源会话与划线引用。
 - `handleMouseUp` 校验选区在编辑器容器内才弹 `HighlightMenu`，且**不清除浏览器选区**（避免破坏 CodeMirror 光标）。
+- **图片导入**：编辑器「图片导入」事件向上透传 `image-import`（页面层打开 [19 图片转笔记](./19-image-to-note.md) insert 模式弹窗）；`defineExpose({ insertMarkdownAtCursor })` 转发给内部编辑器，识别结果插入光标处。
 
 ### 4.4 `ExtractNoteDialog.vue` — 摘录为笔记弹窗
 
@@ -103,7 +105,7 @@ interface Note {
 | `loadAllNotes(vaultPath)` | 递归收集 `notes/` 下所有 `.md`（`collectNotes`），过滤掉本地缓存中已不在 vault 的条目 |
 | `loadNote(path)` | 读文件 → `readNoteMeta`（json 优先，frontmatter 兜底）→ `parseFrontmatter` 取正文 → 组装 `Note`（缓存于 noteIndex） |
 | `updateNote(note)` | 重写文件：保留原 meta，仅更新 title/tags/updated；**同步重写 json sidecar**（含关联笔记 links）；刷新列表与本地缓存 |
-| `saveNote(vaultPath, extractedNote, sourceSession, highlight)` | 生成文件名 `notes/<sanitized>.md` → `serializeNote` 写入 md → **写入 json sidecar**（结构化元数据权威源）→ 更新列表 |
+| `saveNote(vaultPath, extractedNote, sourceSession, highlight, body?)` | 生成文件名 `notes/<sanitized>.md` → `serializeNote` 写入 md → **写入 json sidecar**（结构化元数据权威源）→ 更新列表；可选 `body` 指定正文（图片转笔记场景，缺省用划线原文） |
 | `deleteNote(path)` | 路径校验（必须位于 `<vault>/notes/` 且 `.md`）→ 删除 md 与 json sidecar、本地缓存与向量索引 |
 
 - 本地缓存键：`study-thread-extracted-notes`。
@@ -114,7 +116,7 @@ interface Note {
 
 | 函数 | 说明 |
 |------|------|
-| `serializeNote(note, sourceSession, highlightSource)` | 生成完整 Markdown：frontmatter + 正文（`# 标题` + 划线原文原样）。**所有字符串字段经 `JSON.stringify` 序列化**（title/description/session/highlight/各标签）：既转义引号，也把多行划线文本（如表格）的换行转义为 `\n`，避免 YAML 因裸换行整体解析失败而丢失 tags 等字段 |
+| `serializeNote(note, sourceSession, highlightSource, body?)` | 生成完整 Markdown：frontmatter + 正文（`# 标题` + 划线原文原样；可选 `body` 覆盖正文，图片转笔记场景传入识别出的 Markdown）。**所有字符串字段经 `JSON.stringify` 序列化**（title/description/session/highlight/各标签）：既转义引号，也把多行划线文本（如表格）的换行转义为 `\n`，避免 YAML 因裸换行整体解析失败而丢失 tags 等字段 |
 | `generateNoteFileName(title)` | 清理非法字符（`\ / : * ? " < > \|`）、空白转 `_`、截断 80 字符，拼 `.md` |
 | `getNoteMetaPath(notePath)` | 返回对应 json sidecar 路径：`notes/<标题>.md` → `notes/<标题>.json` |
 | `serializeNoteMeta(meta, links)` | 将 `NoteMeta`（附关联笔记 links）序列化为格式化 JSON 文本 |
@@ -147,6 +149,7 @@ interface Note {
 - **旧笔记 frontmatter 容错**：旧版本 `serializeNote` 曾把多行划线文本（表格）裸写入 `highlight` 字段，换行未转义导致整个 frontmatter YAML 解析失败（tags 等字段一并丢失）。`parser/frontmatter.ts` 的 `parseFrontmatter` 捕获解析失败后调用 `parseFrontmatterLenient`：丢弃跨行未闭合的 highlight 值再重新解析，尽力恢复 title/tags/description 等关键字段。
 - **LLM 生成开关**：设置页的「自动生成笔记标题 / 自动生成笔记标签」控制摘录时是否调用 LLM 生成对应字段。标题关闭时用划线文本前 20 字兜底（用户手动指定的标题始终优先）；标签关闭时统一 `['未分类']`。两个开关都关闭时 `extractNote` 完全不调用 LLM（描述同样用划线文本前 80 字兜底），调用方（`MainChatPage`/`BranchChatPage`/`NoteDetailPage`）也会跳过 API Key 校验。
 - 加入笔记：`ChatView` 划线 → `AddToNoteDialog` → `note-insert` 插入 → `noteStore.updateNote`。
+- **图片转笔记**：`NotesPage`（新建笔记 note 模式）/ `NoteDetailPage`（编辑器导入 insert 模式）打开 `ImageToMarkdownDialog` → `imageToMarkdown` 识别 → note 模式 `noteStore.saveNote(vaultPath, note, '', markdown, markdown)`（正文 = 识别出的 Markdown），insert 模式经 `insertMarkdownAtCursor` 插入光标处（见 [19 图片转笔记](./19-image-to-note.md)）。
 - 反链与关系图：`NoteDetailPage` → `parser/wikilink`（[11]）+ `LocalGraph`（[06]）。
 - 向量索引：`noteStore.saveNote/updateNote/deleteNote` 同步 `getNoteIndexer()` 更新（[10]）。
 

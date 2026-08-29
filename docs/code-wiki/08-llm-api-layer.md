@@ -17,9 +17,12 @@
 ```ts
 type MessageRole = 'system' | 'user' | 'assistant' | 'tool'
 
+interface ImageContent { mimeType: string; base64: string }
+
 interface Message {
   role: MessageRole
   content: string
+  images?: ImageContent[]   // 多模态图片（图片转笔记场景），适配器各自转供应商格式
   toolCalls?: ToolCall[]   // assistant 附带：本轮发起的工具调用
   toolCallId?: string      // tool 附带：所响应的工具调用 id
 }
@@ -52,6 +55,7 @@ interface LLMProvider {
 - 消息转换 `toAnthropicMessages`：
   - 连续 `tool` 消息合并为一条 `user` 消息（`tool_result` blocks，Anthropic 规范）。
   - assistant 消息带 `toolCalls` → `tool_use` content blocks。
+  - 消息带 `images` → content 转为 `[{type:'text', text}, ...{type:'image', source:{type:'base64', media_type, data}}]`（多模态，防御性支持）。
 - 工具：客户端工具 → `{name, description, input_schema}`；`enableWebSearch` → `{type: 'web_search_20250305', name: 'web_search', max_uses: 3}`。
 - SSE 事件处理：
   - `content_block_start`：`tool_use` 块初始化累积。
@@ -74,7 +78,7 @@ interface LLMProvider {
 | ollama | `http://localhost:11434` | `llama3` |
 
 - 请求降级策略 `buildAttempts(enableWebSearch, tools)`：优先"web_search + 客户端工具" → 仅客户端工具 → 无工具；带工具请求遇 **400/404**（服务端不支持）自动降级重试更简单请求。
-- 消息转换 `toApiMessages`：`tool` → `{role:'tool', tool_call_id, content}`；assistant 带 toolCalls → `tool_calls`（function 格式）。
+- 消息转换 `toApiMessages`：`tool` → `{role:'tool', tool_call_id, content}`；assistant 带 toolCalls → `tool_calls`（function 格式）；消息带 `images` → content 转为 `[{type:'text', text}, ...{type:'image_url', image_url:{url:'data:{mimeType};base64,{base64}'}}]`（多模态）。
 - SSE 解析：`delta.content` → `text`；`delta.reasoning_content`（DeepSeek 等国产模型）→ `thinking`；`delta.tool_calls` 按 `index` 分片累积。
 - 流结束：有工具调用则逐条发 `tool_call` + `stop`，否则直接 `stop`。
 
@@ -90,6 +94,8 @@ switch (config.type) {
       → new OpenAICompatProvider(apiKey, baseUrl, model)
 }
 ```
+
+- `createVisionProvider(config)`：图片转笔记专用模型 Provider（[19 图片转笔记](./19-image-to-note.md)）。统一走 OpenAI Chat Completions（不套 DeepSeek 特判），并包装 `withBusyOverlay` 支持 `busyMessage` 忙碌遮罩。
 
 ## 4. 流式工具封装（`stream.ts`）
 
