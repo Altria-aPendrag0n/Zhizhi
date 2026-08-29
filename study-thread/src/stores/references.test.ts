@@ -405,7 +405,7 @@ describe('references store', () => {
 
     /** 取对元数据路径的最近一次写入（前序 parsing 状态写入会被后续状态覆盖） */
     function lastMetaWrite(path: string): [string, string] {
-      const calls = vaultFs.writeFile.mock.calls.filter((c: [string, string]) => c[0] === path) as Array<[string, string]>
+      const calls = vaultFs.writeFile.mock.calls.filter((c) => c[0] === path) as Array<[string, string]>
       expect(calls.length).toBeGreaterThan(0)
       return calls[calls.length - 1]
     }
@@ -443,10 +443,10 @@ describe('references store', () => {
 
       // 写入 {id}.extracted.md
       const extractCall = vaultFs.writeFile.mock.calls.find(
-        (c: [string, string]) => c[0] === '/vault/references/png-1/png-1.extracted.md',
+        (c) => c[0] === '/vault/references/png-1/png-1.extracted.md',
       )
       expect(extractCall).toBeTruthy()
-      expect(extractCall![1]).toContain('| 1 | 2 |')
+      expect((extractCall as [string, string])[1]).toContain('| 1 | 2 |')
 
       // 元数据最终回填 parsed
       const saved = JSON.parse(lastMetaWrite(meta.path)[1])

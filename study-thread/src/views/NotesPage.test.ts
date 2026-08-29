@@ -335,10 +335,11 @@ describe('NotesPage', () => {
     wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('upload', [file])
     await flushPromises()
 
-    const dialog = wrapper.findComponent({ name: 'ImageToMarkdownDialog' })
-    expect(dialog.props('visible')).toBe(true)
-    expect(dialog.props('mode')).toBe('reference')
-    expect(dialog.props('reference')).toEqual(pngMeta)
+    // 异步加载的弹窗渲染到 body（Teleport），reference 模式标题为「识别图片为 Markdown」
+    await vi.waitFor(() => {
+      expect(document.querySelector('.imd')?.textContent).toContain('识别图片为 Markdown')
+    })
+    expect(document.querySelector('.imd')?.textContent).toContain('取消')
     wrapper.unmount()
   })
 
@@ -365,10 +366,9 @@ describe('NotesPage', () => {
     wrapper.findComponent({ name: 'ReferenceList' }).vm.$emit('recognize', pngMeta.path)
     await flushPromises()
 
-    const dialog = wrapper.findComponent({ name: 'ImageToMarkdownDialog' })
-    expect(dialog.props('visible')).toBe(true)
-    expect(dialog.props('mode')).toBe('reference')
-    expect(dialog.props('reference')).toEqual(pngMeta)
+    await vi.waitFor(() => {
+      expect(document.querySelector('.imd')?.textContent).toContain('识别图片为 Markdown')
+    })
     wrapper.unmount()
   })
 
@@ -381,10 +381,9 @@ describe('NotesPage', () => {
     wrapper.findComponent({ name: 'NoteList' }).vm.$emit('create-from-image')
     await flushPromises()
 
-    const dialog = wrapper.findComponent({ name: 'ImageToMarkdownDialog' })
-    expect(dialog.props('visible')).toBe(true)
-    expect(dialog.props('mode')).toBe('note')
-    expect(dialog.props('reference')).toBeNull()
+    await vi.waitFor(() => {
+      expect(document.querySelector('.imd')?.textContent).toContain('从图片导入笔记')
+    })
     wrapper.unmount()
   })
 

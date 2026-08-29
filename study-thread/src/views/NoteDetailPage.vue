@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount, inject, reactive } from 'vue'
+import { ref, watch, computed, onBeforeUnmount, inject, reactive, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '../stores/notes'
 import { useVaultStore } from '../stores/vault'
@@ -74,7 +74,9 @@ import NoteDetail from '../components/notes/NoteDetail.vue'
 import Backlinks, { type BacklinkEntry } from '../components/editor/Backlinks.vue'
 import LocalGraph from '../components/graph/LocalGraph.vue'
 import ExtractNoteDialog from '../components/notes/ExtractNoteDialog.vue'
-import ImageToMarkdownDialog from '../components/notes/ImageToMarkdownDialog.vue'
+
+// 图片转笔记弹窗按需加载（仅在打开时解析，避免增加路由首屏加载权重）
+const ImageToMarkdownDialog = defineAsyncComponent(() => import('../components/notes/ImageToMarkdownDialog.vue'))
 
 const route = useRoute()
 const router = useRouter()

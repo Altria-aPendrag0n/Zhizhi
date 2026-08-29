@@ -65,9 +65,12 @@ const pngReference: ReferenceMeta = {
   updated: '2026-01-01T00:00:00.000Z',
 }
 
-function createDialog(props: Record<string, unknown>) {
+function createDialog(props: Partial<{
+  mode: 'note' | 'insert' | 'reference'
+  reference?: ReferenceMeta | null
+}>) {
   return mount(ImageToMarkdownDialog, {
-    props: { visible: true, ...props },
+    props: { visible: true, mode: 'note', ...props },
     global: { stubs: { teleport: true } },
   })
 }

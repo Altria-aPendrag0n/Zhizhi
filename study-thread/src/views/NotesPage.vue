@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '../stores/notes'
 import { useReferenceStore } from '../stores/references'
@@ -136,9 +136,11 @@ import NoteList from '../components/notes/NoteList.vue'
 import ReferenceList from '../components/references/ReferenceList.vue'
 import ReferenceEditDialog from '../components/references/ReferenceEditDialog.vue'
 import ReviewSessionList from '../components/review/ReviewSessionList.vue'
-import ImageToMarkdownDialog from '../components/notes/ImageToMarkdownDialog.vue'
 import { listReviewSessions, type ReviewSessionMeta } from '../utils/review-session'
 import type { ReferenceMeta } from '../types'
+
+// 图片转笔记弹窗按需加载（仅在打开时解析，避免增加路由首屏加载权重）
+const ImageToMarkdownDialog = defineAsyncComponent(() => import('../components/notes/ImageToMarkdownDialog.vue'))
 
 const route = useRoute()
 const router = useRouter()

@@ -60,10 +60,10 @@
             <button
               class="imd__btn imd__btn--primary"
               type="button"
-              :disabled="phase === 'pick' || !compressed || phase === 'recognizing'"
+              :disabled="phase === 'pick' || !compressed"
               @click="handleRecognize"
             >
-              {{ phase === 'recognizing' ? '识别中…' : '识别图片' }}
+              识别图片
             </button>
           </template>
           <template v-else-if="result">
