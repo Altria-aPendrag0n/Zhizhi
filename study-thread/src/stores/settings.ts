@@ -15,6 +15,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const autoGenerateNoteTags = ref(true)
   /** 复习间隔算法（P1 增强）：classic 经典间隔序列（默认） / fsrs 个性化遗忘曲线 */
   const reviewAlgorithm = ref<ReviewAlgorithm>('classic')
+  /** 图片转笔记专用模型（独立于对话模型，OpenAI 兼容格式） */
+  const visionEnabled = ref(false)
+  const visionBaseUrl = ref('https://open.bigmodel.cn/api/paas')
+  const visionApiKey = ref('')
+  const visionModel = ref('glm-4v-flash')
   const recentVaults = ref<string[]>([])
 
   function saveSettings() {
@@ -27,6 +32,10 @@ export const useSettingsStore = defineStore('settings', () => {
       autoGenerateNoteTitle: autoGenerateNoteTitle.value,
       autoGenerateNoteTags: autoGenerateNoteTags.value,
       reviewAlgorithm: reviewAlgorithm.value,
+      visionEnabled: visionEnabled.value,
+      visionBaseUrl: visionBaseUrl.value,
+      visionApiKey: visionApiKey.value,
+      visionModel: visionModel.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   }
@@ -44,6 +53,10 @@ export const useSettingsStore = defineStore('settings', () => {
         autoGenerateNoteTitle.value = data.autoGenerateNoteTitle !== false
         autoGenerateNoteTags.value = data.autoGenerateNoteTags !== false
         reviewAlgorithm.value = data.reviewAlgorithm === 'fsrs' ? 'fsrs' : 'classic'
+        visionEnabled.value = data.visionEnabled === true
+        visionBaseUrl.value = data.visionBaseUrl || 'https://open.bigmodel.cn/api/paas'
+        visionApiKey.value = data.visionApiKey || ''
+        visionModel.value = data.visionModel || 'glm-4v-flash'
       } catch {
         // 解析失败则使用默认值
       }
@@ -77,6 +90,20 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  /**
+   * 获取图片转笔记专用模型配置（OpenAI 兼容格式）。
+   * 未启用或未填写 API Key 时返回 null（调用方应引导用户去设置页配置）。
+   */
+  function getVisionProviderConfig(): ProviderConfig | null {
+    if (!visionEnabled.value || !visionApiKey.value.trim()) return null
+    return {
+      type: 'openai-compat',
+      apiKey: visionApiKey.value.trim(),
+      baseUrl: visionBaseUrl.value.trim() || 'https://open.bigmodel.cn/api/paas',
+      model: visionModel.value.trim() || 'glm-4v-flash',
+    }
+  }
+
   // 初始化时加载设置
   loadSettings()
 
@@ -89,11 +116,16 @@ export const useSettingsStore = defineStore('settings', () => {
     autoGenerateNoteTitle,
     autoGenerateNoteTags,
     reviewAlgorithm,
+    visionEnabled,
+    visionBaseUrl,
+    visionApiKey,
+    visionModel,
     recentVaults,
     saveSettings,
     loadSettings,
     addRecentVault,
     removeRecentVault,
     getProviderConfig,
+    getVisionProviderConfig,
   }
 })

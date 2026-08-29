@@ -19,6 +19,10 @@ describe('settings store', () => {
     expect(store.autoGenerateNoteTags).toBe(true)
     expect(store.reviewAlgorithm).toBe('classic')
     expect(store.recentVaults).toEqual([])
+    expect(store.visionEnabled).toBe(false)
+    expect(store.visionBaseUrl).toBe('https://open.bigmodel.cn/api/paas')
+    expect(store.visionApiKey).toBe('')
+    expect(store.visionModel).toBe('glm-4v-flash')
   })
 
   it('saveSettings 写入 localStorage', () => {
@@ -31,6 +35,10 @@ describe('settings store', () => {
     store.autoGenerateNoteTitle = false
     store.autoGenerateNoteTags = false
     store.reviewAlgorithm = 'fsrs'
+    store.visionEnabled = true
+    store.visionBaseUrl = 'https://open.bigmodel.cn/api/paas'
+    store.visionApiKey = 'sk-vision-key'
+    store.visionModel = 'glm-4v-flash'
     store.saveSettings()
 
     const raw = localStorage.getItem('study-thread-settings')
@@ -44,6 +52,9 @@ describe('settings store', () => {
     expect(data.autoGenerateNoteTitle).toBe(false)
     expect(data.autoGenerateNoteTags).toBe(false)
     expect(data.reviewAlgorithm).toBe('fsrs')
+    expect(data.visionEnabled).toBe(true)
+    expect(data.visionApiKey).toBe('sk-vision-key')
+    expect(data.visionModel).toBe('glm-4v-flash')
   })
 
   it('loadSettings 从 localStorage 恢复设置', () => {
@@ -56,6 +67,10 @@ describe('settings store', () => {
       autoGenerateNoteTitle: false,
       autoGenerateNoteTags: false,
       reviewAlgorithm: 'fsrs',
+      visionEnabled: true,
+      visionBaseUrl: 'https://open.bigmodel.cn/api/paas',
+      visionApiKey: 'sk-saved-vision',
+      visionModel: 'qwen-vl-plus',
     }))
 
     const store = useSettingsStore()
@@ -67,6 +82,10 @@ describe('settings store', () => {
     expect(store.autoGenerateNoteTitle).toBe(false)
     expect(store.autoGenerateNoteTags).toBe(false)
     expect(store.reviewAlgorithm).toBe('fsrs')
+    expect(store.visionEnabled).toBe(true)
+    expect(store.visionBaseUrl).toBe('https://open.bigmodel.cn/api/paas')
+    expect(store.visionApiKey).toBe('sk-saved-vision')
+    expect(store.visionModel).toBe('qwen-vl-plus')
   })
 
   it('loadSettings 处理无效的 reviewAlgorithm 回退 classic', () => {
@@ -124,6 +143,35 @@ describe('settings store', () => {
       baseUrl: 'https://custom.api',
       model: 'custom-model',
       enableWebSearch: false,
+    })
+  })
+
+  it('getVisionProviderConfig 未启用时返回 null', () => {
+    const store = useSettingsStore()
+    store.visionEnabled = false
+    store.visionApiKey = 'sk-vision-key'
+    expect(store.getVisionProviderConfig()).toBeNull()
+  })
+
+  it('getVisionProviderConfig 未填写 Key 时返回 null', () => {
+    const store = useSettingsStore()
+    store.visionEnabled = true
+    store.visionApiKey = ''
+    expect(store.getVisionProviderConfig()).toBeNull()
+  })
+
+  it('getVisionProviderConfig 启用且填写 Key 时返回 openai-compat 配置', () => {
+    const store = useSettingsStore()
+    store.visionEnabled = true
+    store.visionApiKey = ' sk-vision-key '
+    store.visionBaseUrl = 'https://open.bigmodel.cn/api/paas'
+    store.visionModel = 'glm-4v-flash'
+
+    expect(store.getVisionProviderConfig()).toEqual({
+      type: 'openai-compat',
+      apiKey: 'sk-vision-key',
+      baseUrl: 'https://open.bigmodel.cn/api/paas',
+      model: 'glm-4v-flash',
     })
   })
 })

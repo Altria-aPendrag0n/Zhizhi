@@ -115,6 +115,80 @@
         </p>
       </div>
 
+      <!-- 图片转笔记模型（独立配置，与对话模型解耦） -->
+      <div class="form-group form-group--toggle">
+        <div class="toggle-row">
+          <label class="form-label" for="vision-enabled">图片转笔记模型</label>
+          <label class="toggle">
+            <input id="vision-enabled" v-model="visionEnabled" type="checkbox" />
+            <span class="toggle__slider"></span>
+          </label>
+        </div>
+        <p class="form-hint">用于把图片识别为 Markdown 笔记或参考资料（OCR + 表格还原）。OpenAI 兼容格式，默认智谱 GLM-4V-Flash 端点；与对话模型相互独立。</p>
+      </div>
+
+      <template v-if="visionEnabled">
+        <div class="form-group">
+          <label class="form-label" for="vision-base-url">转笔记 API 地址</label>
+          <input
+            id="vision-base-url"
+            v-model="visionBaseUrl"
+            type="text"
+            class="form-input"
+            placeholder="https://open.bigmodel.cn/api/paas"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="vision-api-key">转笔记 API Key</label>
+          <div class="form-input-wrapper">
+            <input
+              id="vision-api-key"
+              v-model="visionApiKey"
+              :type="showVisionKey ? 'text' : 'password'"
+              class="form-input"
+              placeholder="sk-..."
+            />
+            <button
+              type="button"
+              class="form-input-toggle"
+              @click="showVisionKey = !showVisionKey"
+              :title="showVisionKey ? '隐藏' : '显示'"
+            >
+              <Eye v-if="!showVisionKey" :size="18" />
+              <EyeOff v-else :size="18" />
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="vision-model">转笔记模型名称</label>
+          <input
+            id="vision-model"
+            v-model="visionModel"
+            type="text"
+            class="form-input"
+            placeholder="glm-4v-flash"
+          />
+          <p class="form-hint">支持多模态图片输入的模型，如 glm-4v-flash（免费）、qwen-vl-plus 等。</p>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-secondary" @click="handleVisionTest" :disabled="visionTesting">
+            {{ visionTesting ? '测试中...' : '转笔记模型连接测试' }}
+          </button>
+        </div>
+
+        <!-- 测试结果 -->
+        <div v-if="visionTestResult" class="test-result" :class="visionTestResult.type">
+          <span class="test-result__icon">
+            <CheckCircle v-if="visionTestResult.type === 'success'" :size="16" />
+            <AlertCircle v-else :size="16" />
+          </span>
+          <span class="test-result__text">{{ visionTestResult.message }}</span>
+        </div>
+      </template>
+
       <!-- 按钮组 -->
       <div class="form-actions">
         <button class="btn btn-primary" @click="handleSave">保存设置</button>
@@ -171,7 +245,7 @@ import { ref, onMounted } from 'vue'
 import { Eye, EyeOff, CheckCircle, AlertCircle } from '@lucide/vue'
 import { useSettingsStore } from '../stores/settings'
 import { PROVIDER_PRESETS } from '../api/openai-compat'
-import { createProvider } from '../api/provider-factory'
+import { createProvider, createVisionProvider } from '../api/provider-factory'
 import { getLogs, clearLogs, MAX_LOGS, type LogEntry } from '../utils/logger'
 import VaultSettings from '../components/vault/VaultSettings.vue'
 import AboutSection from '../components/shell/AboutSection.vue'
@@ -191,6 +265,14 @@ const showKey = ref(false)
 const testing = ref(false)
 const saved = ref(false)
 const testResult = ref<{ type: 'success' | 'error'; message: string } | null>(null)
+// 图片转笔记模型（独立配置）
+const visionEnabled = ref(false)
+const visionBaseUrl = ref('https://open.bigmodel.cn/api/paas')
+const visionApiKey = ref('')
+const visionModel = ref('glm-4v-flash')
+const showVisionKey = ref(false)
+const visionTesting = ref(false)
+const visionTestResult = ref<{ type: 'success' | 'error'; message: string } | null>(null)
 // 调试日志（设置页展示，便于排查运行时问题）
 const logs = ref<LogEntry[]>([])
 
@@ -243,6 +325,10 @@ function handleSave() {
   settingsStore.autoGenerateNoteTitle = autoGenerateNoteTitle.value
   settingsStore.autoGenerateNoteTags = autoGenerateNoteTags.value
   settingsStore.reviewAlgorithm = reviewAlgorithm.value
+  settingsStore.visionEnabled = visionEnabled.value
+  settingsStore.visionBaseUrl = visionBaseUrl.value
+  settingsStore.visionApiKey = visionApiKey.value
+  settingsStore.visionModel = visionModel.value
   settingsStore.saveSettings()
   saved.value = true
   testResult.value = null
@@ -285,6 +371,46 @@ async function handleTest() {
   }
 }
 
+async function handleVisionTest() {
+  visionTesting.value = true
+  visionTestResult.value = null
+
+  if (!visionApiKey.value.trim()) {
+    visionTestResult.value = { type: 'error', message: '请先填写转笔记 API Key' }
+    visionTesting.value = false
+    return
+  }
+
+  try {
+    const provider = createVisionProvider({
+      type: 'openai-compat',
+      apiKey: visionApiKey.value.trim(),
+      baseUrl: visionBaseUrl.value.trim() || 'https://open.bigmodel.cn/api/paas',
+      model: visionModel.value.trim() || 'glm-4v-flash',
+    })
+    const startTime = Date.now()
+    const messages = [{ role: 'user' as const, content: 'hi' }]
+
+    for await (const chunk of provider.chat(messages, { maxTokens: 10, busyMessage: 'AI 正在测试转笔记模型连接…' })) {
+      if (chunk.type === 'error') {
+        visionTestResult.value = { type: 'error', message: chunk.content }
+        return
+      }
+      if (chunk.type === 'stop') {
+        const latency = Date.now() - startTime
+        visionTestResult.value = { type: 'success', message: `连接成功！延迟: ${latency}ms` }
+        return
+      }
+    }
+    visionTestResult.value = { type: 'success', message: '连接成功' }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    visionTestResult.value = { type: 'error', message: `连接失败: ${message}` }
+  } finally {
+    visionTesting.value = false
+  }
+}
+
 onMounted(() => {
   // 从 store 恢复设置
   apiKey.value = settingsStore.apiKey
@@ -294,6 +420,10 @@ onMounted(() => {
   autoGenerateNoteTitle.value = settingsStore.autoGenerateNoteTitle
   autoGenerateNoteTags.value = settingsStore.autoGenerateNoteTags
   reviewAlgorithm.value = settingsStore.reviewAlgorithm
+  visionEnabled.value = settingsStore.visionEnabled
+  visionBaseUrl.value = settingsStore.visionBaseUrl
+  visionApiKey.value = settingsStore.visionApiKey
+  visionModel.value = settingsStore.visionModel
 
   // 根据当前配置推断选中服务商
   if (settingsStore.activeProvider === 'anthropic') {

@@ -26,6 +26,16 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   return provider
 }
 
+/**
+ * 创建图片转笔记专用模型 Provider（OpenAI 兼容格式）。
+ * 不套 DeepSeek 特判：转笔记模型不支持联网搜索，统一走 OpenAI Chat Completions。
+ */
+export function createVisionProvider(config: ProviderConfig): LLMProvider {
+  const provider = new OpenAICompatProvider(config.apiKey, config.baseUrl, config.model)
+  provider.chat = withBusyOverlay(provider.chat.bind(provider))
+  return provider
+}
+
 /** 未包装的原始提供商创建逻辑 */
 function createRawProvider(config: ProviderConfig): LLMProvider {
   switch (config.type) {
