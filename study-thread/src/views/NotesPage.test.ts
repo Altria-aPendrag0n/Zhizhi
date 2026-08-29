@@ -372,6 +372,22 @@ describe('NotesPage', () => {
     wrapper.unmount()
   })
 
+  it('「新建笔记 → 从图片导入」打开 note 模式弹窗', async () => {
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'NoteList' }).vm.$emit('create-from-image')
+    await flushPromises()
+
+    const dialog = wrapper.findComponent({ name: 'ImageToMarkdownDialog' })
+    expect(dialog.props('visible')).toBe(true)
+    expect(dialog.props('mode')).toBe('note')
+    expect(dialog.props('reference')).toBeNull()
+    wrapper.unmount()
+  })
+
   it('点击 ReferenceList select 事件后弹出编辑弹窗', async () => {
     testGlobals().__notesPageRoute!.query = { tab: 'references' }
     testGlobals().__notesPageVaultPath!.value = '/vault'

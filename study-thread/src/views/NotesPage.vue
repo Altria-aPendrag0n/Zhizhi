@@ -60,6 +60,7 @@
               @select="handleSelectNote"
               @open-source="handleOpenSource"
               @delete="handleDeleteNote"
+              @create-from-image="openImageDialog('note')"
             />
           </template>
 

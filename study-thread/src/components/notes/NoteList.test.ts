@@ -140,4 +140,37 @@ describe('NoteList', () => {
     expect(cards).toHaveLength(1)
     expect(cards[0].text()).toContain('另一篇')
   })
+
+  it('新建笔记菜单：点击「从图片导入」emit create-from-image', async () => {
+    const wrapper = mount(NoteList, {
+      props: { notes: [note] },
+      attachTo: document.body,
+    })
+
+    await wrapper.find('.new-note-btn').trigger('click')
+    await nextTick()
+    expect(document.querySelector('.new-note-menu')?.textContent).toContain('从图片导入')
+
+    await document.querySelector<HTMLButtonElement>('.new-note-menu button')?.click()
+    await nextTick()
+    expect(wrapper.emitted('create-from-image')).toBeTruthy()
+    expect(document.querySelector('.new-note-menu')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('点击外部关闭新建笔记菜单', async () => {
+    const wrapper = mount(NoteList, {
+      props: { notes: [note] },
+      attachTo: document.body,
+    })
+
+    await wrapper.find('.new-note-btn').trigger('click')
+    await nextTick()
+    expect(document.querySelector('.new-note-menu')).not.toBeNull()
+
+    document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    await nextTick()
+    expect(document.querySelector('.new-note-menu')).toBeNull()
+    wrapper.unmount()
+  })
 })

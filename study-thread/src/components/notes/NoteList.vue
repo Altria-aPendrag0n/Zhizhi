@@ -1,7 +1,28 @@
 <template>
   <div class="note-list-container">
     <div class="notes-toolbar">
-      <span>{{ filteredNotes.length }} 张笔记</span>
+      <div class="toolbar-left">
+        <div class="new-note-wrap">
+          <button class="new-note-btn" type="button" @click.stop="toggleCreateMenu">
+            <Plus :size="14" />
+            <span>新建笔记</span>
+          </button>
+          <Teleport to="body">
+            <div
+              v-if="createMenuVisible"
+              ref="createMenuElement"
+              class="new-note-menu"
+              role="menu"
+              @click.stop
+            >
+              <button type="button" role="menuitem" @click="requestCreateFromImage">
+                从图片导入
+              </button>
+            </div>
+          </Teleport>
+        </div>
+        <span>{{ filteredNotes.length }} 张笔记</span>
+      </div>
       <div class="toolbar-actions">
         <select v-model="sortBy" class="filter-select">
           <option value="updated">按最近更新</option>
@@ -74,6 +95,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { Plus } from '@lucide/vue'
 import type { NoteMeta } from '../../types'
 import NoteCard from './NoteCard.vue'
 import { tagMatchesQuery } from '../../utils/pinyin-match'
@@ -89,6 +111,7 @@ const emit = defineEmits<{
   select: [path: string]
   openSource: [source: NonNullable<NoteMeta['source']>]
   delete: [path: string]
+  'create-from-image': []
 }>()
 
 const sortBy = ref<'updated' | 'created' | 'title'>('updated')
@@ -96,6 +119,8 @@ const filterTag = ref('')
 const searchQuery = ref('')
 const contextMenu = ref<{ path: string; x: number; y: number } | null>(null)
 const contextMenuElement = ref<HTMLElement>()
+const createMenuVisible = ref(false)
+const createMenuElement = ref<HTMLElement>()
 
 // 汇总所有笔记标签（去重排序），用于筛选输入框的提示
 const allTags = computed(() => {
@@ -163,15 +188,32 @@ function requestDelete() {
   closeContextMenu()
 }
 
+function toggleCreateMenu() {
+  createMenuVisible.value = !createMenuVisible.value
+}
+
+function closeCreateMenu() {
+  createMenuVisible.value = false
+}
+
+function requestCreateFromImage() {
+  closeCreateMenu()
+  emit('create-from-image')
+}
+
 function handleDocumentPointerDown(event: PointerEvent) {
   const target = event.target
-  if (target instanceof Node && !contextMenuElement.value?.contains(target)) {
+  if (target instanceof Node && !contextMenuElement.value?.contains(target) && !createMenuElement.value?.contains(target)) {
     closeContextMenu()
+    closeCreateMenu()
   }
 }
 
 function handleDocumentKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') closeContextMenu()
+  if (event.key === 'Escape') {
+    closeContextMenu()
+    closeCreateMenu()
+  }
 }
 
 onMounted(() => {
@@ -198,6 +240,63 @@ onUnmounted(() => {
   margin-bottom: 12px;
   color: var(--ink-2, #52635d);
   font-size: 12px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.new-note-wrap {
+  position: relative;
+}
+
+.new-note-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--brand);
+  border-radius: 7px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 590;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.new-note-btn:hover {
+  background: var(--brand-strong);
+}
+
+.new-note-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 128px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, #fffefa);
+  box-shadow: 0 8px 24px rgba(20, 39, 33, 0.14);
+}
+
+.new-note-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.new-note-menu button:hover {
+  background: var(--surface-2, #f0eee7);
 }
 
 .toolbar-actions {
