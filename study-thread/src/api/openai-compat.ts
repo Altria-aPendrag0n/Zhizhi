@@ -46,6 +46,18 @@ function toApiMessages(
           function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
         })),
       })
+    } else if (msg.images && msg.images.length > 0) {
+      // 多模态：content 转为 text + image_url 内容数组（图片以 data URL 内联）
+      list.push({
+        role: msg.role,
+        content: [
+          { type: 'text', text: msg.content },
+          ...msg.images.map((img) => ({
+            type: 'image_url',
+            image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+          })),
+        ],
+      })
     } else {
       list.push({ role: msg.role, content: msg.content })
     }

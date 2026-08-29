@@ -242,4 +242,32 @@ describe('AnthropicProvider', () => {
       content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '工具结果' }],
     })
   })
+
+  it('带 images 的 user 消息转换为 image content block', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, sseBody([
+        JSON.stringify({ type: 'message_start', message: { id: 'm1' } }),
+        JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }),
+        JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '识别结果' } }),
+        JSON.stringify({ type: 'content_block_stop', index: 0 }),
+        JSON.stringify({ type: 'message_stop' }),
+      ])),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new AnthropicProvider('key', 'https://api.anthropic.com')
+    const imageMessages: Message[] = [
+      { role: 'user', content: '识别这张图', images: [{ mimeType: 'image/png', base64: 'QQ==' }] },
+    ]
+    await collect(provider, imageMessages)
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.messages[0]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: '识别这张图' },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'QQ==' } },
+      ],
+    })
+  })
 })

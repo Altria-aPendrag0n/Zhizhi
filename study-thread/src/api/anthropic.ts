@@ -31,6 +31,18 @@ function toAnthropicMessages(messages: Message[]): Array<Record<string, unknown>
         content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments })
       }
       list.push({ role: 'assistant', content })
+    } else if (msg.images && msg.images.length > 0) {
+      // 多模态：content 转为 text + image 内容块（base64 内联）
+      list.push({
+        role: msg.role,
+        content: [
+          { type: 'text', text: msg.content },
+          ...msg.images.map((img) => ({
+            type: 'image',
+            source: { type: 'base64', media_type: img.mimeType, data: img.base64 },
+          })),
+        ],
+      })
     } else {
       list.push({ role: msg.role, content: msg.content })
     }

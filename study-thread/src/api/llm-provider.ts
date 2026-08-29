@@ -13,10 +13,19 @@ export interface ToolCall {
   arguments: Record<string, unknown>
 }
 
+// 图片内容块（多模态：图片转笔记等场景使用）
+export interface ImageContent {
+  mimeType: string
+  /** base64 编码的图片数据（不含 data: 前缀） */
+  base64: string
+}
+
 // 单条消息
 export interface Message {
   role: MessageRole
   content: string
+  /** 附带图片（多模态输入）。适配器分别转换为 OpenAI image_url / Anthropic image content block */
+  images?: ImageContent[]
   /** assistant 消息附带：本轮发起的工具调用（用于多轮工具循环） */
   toolCalls?: ToolCall[]
   /** tool 角色消息附带：所响应的工具调用 id */

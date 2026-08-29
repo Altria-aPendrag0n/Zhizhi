@@ -251,4 +251,45 @@ describe('OpenAICompatProvider', () => {
     })
     expect(body.messages[1]).toEqual({ role: 'tool', tool_call_id: 'call_1', content: '工具结果' })
   })
+
+  it('带 images 的 user 消息转换为 content 数组（text + image_url data URL）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, sseBody([
+        JSON.stringify({ choices: [{ delta: { content: '识别结果' } }] }),
+        '[DONE]',
+      ])),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new OpenAICompatProvider('key', 'https://open.bigmodel.cn/api/paas', 'glm-4v-flash')
+    const imageMessages: Message[] = [
+      { role: 'user', content: '识别这张图', images: [{ mimeType: 'image/jpeg', base64: 'AAA' }] },
+    ]
+    await collect(provider, imageMessages)
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.messages[0]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: '识别这张图' },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AAA' } },
+      ],
+    })
+  })
+
+  it('无 images 的消息 content 保持字符串（多模态分支不影响原有行为）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, sseBody([
+        JSON.stringify({ choices: [{ delta: { content: '你好' } }] }),
+        '[DONE]',
+      ])),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new OpenAICompatProvider('key', 'https://api.openai.com', 'gpt-4o')
+    await collect(provider, [{ role: 'user', content: '你好' }])
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.messages[0]).toEqual({ role: 'user', content: '你好' })
+  })
 })
