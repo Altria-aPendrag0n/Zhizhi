@@ -171,6 +171,7 @@ d:\work\Zhizhi\
 | 19 | 图片转笔记模块 | [19-image-to-note.md](./19-image-to-note.md) | `src/api/skills/image-to-note.ts`、`src/utils/image-compress.ts`、`src/components/notes/ImageToMarkdownDialog.vue` | 多模态图片识别为 Markdown（含表格还原）：三入口（新建笔记/编辑器导入/参考资料识别）+ 独立转笔记模型配置 |
 | 20 | 设置模块 | [20-settings-module.md](./20-settings-module.md) | `src/views/SettingsPage.vue`、`src/views/ModelConfigPage.vue`、`src/views/OfficialModelPage.vue`、`src/views/CustomModelPage.vue` | 设置拆分：模型配置独立页面（知枝官方 API 骨架 / 自定义模型），总览页保留偏好/日志/关于 |
 | 21 | 登录系统服务端 | [21-auth-server.md](./21-auth-server.md) | `server/`（独立 Node 包：`src/db/`、`src/services/`、`src/middleware/`、`src/routes/`） | 官方 API 服务端 Phase 1：全量数据库 schema + 验证码登录/刷新/登出/me 接口（Hono + Drizzle + SQLite） |
+| 22 | 客户端登录接入 | [22-auth-client.md](./22-auth-client.md) | `src/utils/secure-store.ts`、`src/api/zhizhi-api.ts`、`src/stores/auth.ts`、`src/views/OfficialModelPage.vue`、`src-tauri/`（keyring） | 知枝官方账号客户端：OS 钥匙串凭据边界、401 single-flight 续期、登录状态机、官方地址与 CSP 配置 |
 
 ---
 
