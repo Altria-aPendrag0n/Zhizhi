@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+﻿import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import * as authModule from '../stores/auth'
 import SettingsPage from './SettingsPage.vue'
@@ -159,7 +159,8 @@ describe('SettingsPage 设置页（侧边栏布局）', () => {
     await navItems[2].trigger('click')
 
     expect(wrapper.find('.settings-content__title').text()).toBe('用户')
-    expect(wrapper.text()).toContain('获取验证码')
+    expect(wrapper.text()).toContain('用户名')
+    expect(wrapper.text()).toContain('密码')
     expect(wrapper.text()).toContain('注册')
   })
 
@@ -174,12 +175,12 @@ describe('SettingsPage 设置页（侧边栏布局）', () => {
     const navItems = wrapper.findAll('.settings-nav__item')
     await navItems[2].trigger('click')
 
-    await wrapper.find('#user-account').setValue('user@example.com')
-    await wrapper.find('#user-code').setValue('123456')
-    await wrapper.find('.btn-primary').trigger('click')
+    await wrapper.find('#user-username').setValue('Alice2026')
+    await wrapper.find('#user-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
 
-    expect(state.login).toHaveBeenCalledWith('user@example.com', '123456')
-    expect(wrapper.text()).toContain('user@example.com')
+    expect(state.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd')
+    expect(wrapper.text()).toContain('Alice2026')
     expect(wrapper.text()).toContain('退出登录')
   })
 })

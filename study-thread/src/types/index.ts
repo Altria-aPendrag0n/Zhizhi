@@ -172,6 +172,7 @@ export interface OfficialPlan {
 export interface OfficialUser {
   id: string
   identifier: string
+  username: string
   plan_id: string | null
   plan_expires_at: number | null
   quota_tokens: number

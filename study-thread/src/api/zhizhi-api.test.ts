@@ -29,6 +29,7 @@ function jsonResponse(status: number, body: unknown): Response {
 const ME_BODY = {
   id: 'u1',
   identifier: 'a@b.com',
+  username: 'Alice2026',
   plan_id: null,
   plan_expires_at: null,
   quota_tokens: 1000,
@@ -52,17 +53,34 @@ describe('zhizhi-api', () => {
     vi.stubGlobal('fetch', state.fetchMock)
   })
 
-  it('login 发送正确请求并解析响应', async () => {
+  it('login（用户名+密码）发送正确请求并解析响应', async () => {
     state.fetchMock.mockResolvedValue(
-      jsonResponse(200, { access_token: 'at1', refresh_token: 'rt1', user: ME_BODY, api_key: 'sk-zhizhi-abc' }),
+      jsonResponse(200, { access_token: 'at1', refresh_token: 'rt1', user: ME_BODY }),
     )
-    const result = await api.login('a@b.com', '123456')
+    const result = await api.login('Alice2026', 'Passw0rd')
     expect(result.access_token).toBe('at1')
-    expect(result.api_key).toBe('sk-zhizhi-abc')
+    expect(result.api_key).toBeUndefined()
 
     const [url, init] = state.fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe(`${BASE}/api/auth/login`)
-    expect(JSON.parse(String(init.body))).toEqual({ identifier: 'a@b.com', code: '123456' })
+    expect(JSON.parse(String(init.body))).toEqual({ username: 'Alice2026', password: 'Passw0rd' })
+  })
+
+  it('register 发送邮箱/验证码/用户名/密码并解析 api_key', async () => {
+    state.fetchMock.mockResolvedValue(
+      jsonResponse(200, { access_token: 'at1', refresh_token: 'rt1', user: ME_BODY, api_key: 'sk-zhizhi-abc' }),
+    )
+    const result = await api.register({ email: 'a@b.com', code: '123456', username: 'Alice2026', password: 'Passw0rd' })
+    expect(result.api_key).toBe('sk-zhizhi-abc')
+
+    const [url, init] = state.fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE}/api/auth/register`)
+    expect(JSON.parse(String(init.body))).toEqual({
+      email: 'a@b.com',
+      code: '123456',
+      username: 'Alice2026',
+      password: 'Passw0rd',
+    })
   })
 
   it('不安全 baseUrl 拒绝注入令牌（不发请求）', async () => {

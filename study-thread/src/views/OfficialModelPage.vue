@@ -7,41 +7,90 @@
       </button>
       <div class="eyebrow">Official API</div>
       <h1 class="settings-page__title">知枝官方 API</h1>
-      <p class="settings-page__subtitle">开箱即用的云服务：登录账号购买套餐后自动启用，API Key 对用户不可见</p>
+      <p class="settings-page__subtitle">开箱即用的云服务：注册/登录账号后自动启用，API Key 对用户不可见</p>
     </div>
 
     <!-- 登录引导 / 已登录态 -->
     <section class="card-block">
-      <h3 class="card-block__title">登录知枝账号</h3>
+      <h3 class="card-block__title">知枝账号</h3>
 
-      <!-- 未登录：登录表单 -->
+      <!-- 未登录：登录 / 注册 -->
       <template v-if="!authStore.isOfficialActive">
-        <p class="form-hint">
-          登录后即可购买套餐并自动启用官方 API。无需手动配置任何 Key：官方密钥由服务端下发并安全存储在系统钥匙串中，应用自动使用。
-        </p>
+        <div class="mode-switch" role="tablist">
+          <button
+            type="button"
+            class="mode-switch__item"
+            :class="{ 'mode-switch__item--active': mode === 'login' }"
+            role="tab"
+            :aria-selected="mode === 'login'"
+            @click="switchMode('login')"
+          >
+            登录
+          </button>
+          <button
+            type="button"
+            class="mode-switch__item"
+            :class="{ 'mode-switch__item--active': mode === 'register' }"
+            role="tab"
+            :aria-selected="mode === 'register'"
+            @click="switchMode('register')"
+          >
+            注册
+          </button>
+        </div>
 
-        <div class="login-form">
+        <!-- 登录：用户名 + 密码 -->
+        <form v-if="mode === 'login'" class="login-form" @submit.prevent="handleLogin">
+          <p class="form-hint">使用用户名与密码登录。登录后自动启用官方 API，官方密钥由服务端下发并安全存储在系统钥匙串中。</p>
           <div class="form-group">
-            <label class="form-label" for="account">账号（邮箱 / 手机号）</label>
-            <input id="account" v-model="account" type="text" class="form-input" placeholder="you@example.com" :disabled="isBusy" />
+            <label class="form-label" for="account-username">用户名</label>
+            <input id="account-username" v-model="username" type="text" class="form-input" placeholder="仅数字与大小写字母，3-32 位" autocomplete="username" :disabled="isBusy" />
           </div>
-
           <div class="form-group">
-            <label class="form-label" for="verify-code">验证码</label>
+            <label class="form-label" for="account-password">密码</label>
+            <input id="account-password" v-model="password" type="password" class="form-input" placeholder="仅数字与大小写字母，6-64 位" autocomplete="current-password" :disabled="isBusy" />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" :disabled="isBusy">
+              {{ isBusy ? '登录中…' : '登录' }}
+            </button>
+          </div>
+        </form>
+
+        <!-- 注册：邮箱验证码 + 设置用户名密码 -->
+        <form v-else class="login-form" @submit.prevent="handleRegister">
+          <p class="form-hint">注册流程：先用邮箱接收验证码完成验证，再设置用户名与密码（仅数字与大小写字母）。注册成功即自动登录。</p>
+          <div class="form-group">
+            <label class="form-label" for="account-email">邮箱</label>
+            <input id="account-email" v-model="email" type="email" class="form-input" placeholder="you@example.com" autocomplete="email" :disabled="isBusy" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="account-code">邮箱验证码</label>
             <div class="verify-row">
-              <input id="verify-code" v-model="verifyCode" type="text" class="form-input" placeholder="6 位验证码" :disabled="isBusy" />
-              <button class="btn btn-secondary" :disabled="countdown > 0 || isBusy" @click="handleSendCode">
+              <input id="account-code" v-model="verifyCode" type="text" class="form-input" placeholder="6 位验证码" inputmode="numeric" :disabled="isBusy" />
+              <button type="button" class="btn btn-secondary" :disabled="countdown > 0 || isBusy" @click="handleSendCode">
                 {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
               </button>
             </div>
           </div>
-
+          <div class="form-group">
+            <label class="form-label" for="account-reg-username">用户名</label>
+            <input id="account-reg-username" v-model="regUsername" type="text" class="form-input" placeholder="仅数字与大小写字母，3-32 位" autocomplete="username" :disabled="isBusy" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="account-reg-password">密码</label>
+            <input id="account-reg-password" v-model="regPassword" type="password" class="form-input" placeholder="仅数字与大小写字母，6-64 位" autocomplete="new-password" :disabled="isBusy" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="account-reg-password2">确认密码</label>
+            <input id="account-reg-password2" v-model="regPassword2" type="password" class="form-input" placeholder="再次输入密码" autocomplete="new-password" :disabled="isBusy" />
+          </div>
           <div class="form-actions">
-            <button class="btn btn-primary" :disabled="isBusy" @click="handleLogin">
-              {{ isBusy ? '登录中…' : '登录' }}
+            <button type="submit" class="btn btn-primary" :disabled="isBusy">
+              {{ isBusy ? '注册中…' : '注册' }}
             </button>
           </div>
-        </div>
+        </form>
       </template>
 
       <!-- 已登录：账号与套餐状态 -->
@@ -49,6 +98,10 @@
         <div class="account-card">
           <div class="account-card__row">
             <span class="account-card__label">已登录账号</span>
+            <span class="account-card__value">{{ authStore.user?.username ?? '—' }}</span>
+          </div>
+          <div class="account-card__row">
+            <span class="account-card__label">绑定邮箱</span>
             <span class="account-card__value">{{ authStore.user?.identifier ?? '—' }}</span>
           </div>
           <div class="account-card__row">
@@ -63,7 +116,7 @@
             官方 API 已自动启用：Key 安全存储于系统钥匙串，对用户不可见。用量实时扣减。
           </p>
           <div class="form-actions">
-            <button class="btn btn-secondary" @click="handleLogout">退出登录</button>
+            <button class="btn btn-secondary" :disabled="isBusy" @click="handleLogout">退出登录</button>
             <button class="btn btn-secondary" @click="goBack">完成</button>
           </div>
         </div>
@@ -90,7 +143,7 @@
     <section class="card-block">
       <h3 class="card-block__title">如何工作</h3>
       <ol class="how-list">
-        <li>登录知枝账号，在应用内选择套餐并完成支付；</li>
+        <li>注册知枝账号（邮箱验证 + 设置用户名密码），或使用用户名密码登录；</li>
         <li>官方 API Key 由服务端生成并自动下发，存储在系统钥匙串中（Key 对用户不可见，不可导出）；</li>
         <li>应用的所有 AI 能力（对话 / 复习出题 / 笔记摘录 / 图片转笔记）自动走官方 API；</li>
         <li>用量实时扣减，可在设置中查看剩余额度。</li>
@@ -111,8 +164,23 @@ const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
 
-const account = ref('')
+type AuthMode = 'login' | 'register'
+
+/** 与服务端一致：仅数字与大小写字母 */
+const USERNAME_RE = /^[A-Za-z0-9]{3,32}$/
+const PASSWORD_RE = /^[A-Za-z0-9]{6,64}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const mode = ref<AuthMode>('login')
+// 登录
+const username = ref('')
+const password = ref('')
+// 注册
+const email = ref('')
 const verifyCode = ref('')
+const regUsername = ref('')
+const regPassword = ref('')
+const regPassword2 = ref('')
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
@@ -120,6 +188,17 @@ const isBusy = computed(() => authStore.status === 'authenticating')
 
 function goBack() {
   router.push({ name: 'settings-models' })
+}
+
+function switchMode(next: AuthMode) {
+  if (mode.value === next || isBusy.value) return
+  mode.value = next
+  verifyCode.value = ''
+  countdown.value = 0
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
 }
 
 function formatTokens(tokens: number): string {
@@ -146,9 +225,9 @@ function startCountdown(seconds: number) {
 }
 
 async function handleSendCode() {
-  const identifier = account.value.trim()
-  if (!identifier) {
-    toast.error('请先输入账号（邮箱或手机号）')
+  const identifier = email.value.trim()
+  if (!EMAIL_RE.test(identifier)) {
+    toast.error('请输入有效的邮箱地址')
     return
   }
   if (countdown.value > 0 || isBusy.value) return
@@ -162,15 +241,48 @@ async function handleSendCode() {
 }
 
 async function handleLogin() {
-  const identifier = account.value.trim()
-  const code = verifyCode.value.trim()
-  if (!identifier || !code) {
-    toast.error('请输入账号与验证码')
+  const name = username.value.trim()
+  const pwd = password.value
+  if (!name || !pwd) {
+    toast.error('请输入用户名与密码')
     return
   }
   try {
-    await authStore.login(identifier, code)
+    await authStore.login(name, pwd)
     toast.success('登录成功，官方 API 已启用')
+  } catch (err) {
+    toast.error(messageOf(err))
+  }
+}
+
+async function handleRegister() {
+  const mail = email.value.trim()
+  const code = verifyCode.value.trim()
+  const name = regUsername.value.trim()
+  const pwd = regPassword.value
+  if (!EMAIL_RE.test(mail)) {
+    toast.error('请输入有效的邮箱地址')
+    return
+  }
+  if (!/^\d{6}$/.test(code)) {
+    toast.error('请输入 6 位验证码')
+    return
+  }
+  if (!USERNAME_RE.test(name)) {
+    toast.error('用户名仅允许 3-32 位数字与大小写字母')
+    return
+  }
+  if (!PASSWORD_RE.test(pwd)) {
+    toast.error('密码仅允许 6-64 位数字与大小写字母')
+    return
+  }
+  if (pwd !== regPassword2.value) {
+    toast.error('两次输入的密码不一致')
+    return
+  }
+  try {
+    await authStore.register(mail, code, name, pwd)
+    toast.success('注册成功，已自动登录')
   } catch (err) {
     toast.error(messageOf(err))
   }
@@ -179,8 +291,13 @@ async function handleLogin() {
 async function handleLogout() {
   await authStore.logout()
   toast.success('已退出登录')
-  account.value = ''
+  username.value = ''
+  password.value = ''
+  email.value = ''
   verifyCode.value = ''
+  regUsername.value = ''
+  regPassword.value = ''
+  regPassword2.value = ''
 }
 
 /** 套餐购买（Phase 2 接入）：当前提示未上线 */
@@ -288,6 +405,34 @@ const plans = [
   font-size: 16px;
   font-weight: 600;
   color: var(--ink);
+}
+
+.mode-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.mode-switch__item {
+  padding: 6px 22px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 590;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode-switch__item--active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .form-hint {

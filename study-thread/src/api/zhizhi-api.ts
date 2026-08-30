@@ -26,6 +26,14 @@ export interface LoginResult {
   api_key?: string
 }
 
+export interface RegisterInput {
+  email: string
+  code: string
+  username: string
+  password: string
+  deviceId?: string
+}
+
 interface RefreshResult {
   access_token: string
   refresh_token: string
@@ -148,12 +156,33 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return data as T
 }
 
-export async function sendCode(identifier: string, channel?: 'email' | 'sms'): Promise<{ success: boolean; cooldown_seconds: number }> {
-  return request('/api/auth/send-code', { method: 'POST', body: { identifier, ...(channel ? { channel } : {}) }, auth: false })
+/** 发送邮箱验证码（注册用；仅邮箱，取消手机号通道） */
+export async function sendCode(identifier: string): Promise<{ success: boolean; cooldown_seconds: number }> {
+  return request('/api/auth/send-code', { method: 'POST', body: { identifier }, auth: false })
 }
 
-export async function login(identifier: string, code: string, deviceId?: string): Promise<LoginResult> {
-  return request('/api/auth/login', { method: 'POST', body: { identifier, code, ...(deviceId ? { device_id: deviceId } : {}) }, auth: false })
+/** 用户名 + 密码登录 */
+export async function login(username: string, password: string, deviceId?: string): Promise<LoginResult> {
+  return request('/api/auth/login', {
+    method: 'POST',
+    body: { username, password, ...(deviceId ? { device_id: deviceId } : {}) },
+    auth: false,
+  })
+}
+
+/** 邮箱注册：验证码验证 + 设置用户名/密码（首次登录即自动注册的替代入口），签发官方 Key 与令牌 */
+export async function register(input: RegisterInput): Promise<LoginResult> {
+  return request('/api/auth/register', {
+    method: 'POST',
+    body: {
+      email: input.email,
+      code: input.code,
+      username: input.username,
+      password: input.password,
+      ...(input.deviceId ? { device_id: input.deviceId } : {}),
+    },
+    auth: false,
+  })
 }
 
 export async function logout(refreshToken: string): Promise<void> {

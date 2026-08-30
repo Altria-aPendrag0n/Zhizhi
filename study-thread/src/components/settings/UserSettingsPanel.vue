@@ -1,6 +1,6 @@
 <template>
   <div class="user-panel">
-    <!-- 未登录：登录 / 注册表单 -->
+    <!-- 未登录：登录 / 注册 -->
     <template v-if="!authStore.isOfficialActive">
       <div class="mode-switch" role="tablist">
         <button
@@ -25,29 +25,49 @@
         </button>
       </div>
 
-      <p class="form-hint">
-        {{
-          mode === 'login'
-            ? '登录知枝账号后自动启用官方 API，官方 Key 由服务端下发并安全存储在系统钥匙串中。'
-            : '注册新账号：填写账号并通过验证码验证后即自动创建（首次登录即注册），无需单独设置密码。'
-        }}
-      </p>
-
-      <div class="login-form">
+      <!-- 登录：用户名 + 密码 -->
+      <form v-if="mode === 'login'" class="login-form" @submit.prevent="handleLogin">
         <div class="form-group">
-          <label class="form-label" for="user-account">账号（邮箱 / 手机号）</label>
+          <label class="form-label" for="user-username">用户名</label>
           <input
-            id="user-account"
-            v-model="account"
+            id="user-username"
+            v-model="username"
             type="text"
             class="form-input"
-            placeholder="you@example.com"
+            placeholder="仅数字与大小写字母，3-32 位"
+            autocomplete="username"
             :disabled="isBusy"
           />
         </div>
+        <div class="form-group">
+          <label class="form-label" for="user-password">密码</label>
+          <input
+            id="user-password"
+            v-model="password"
+            type="password"
+            class="form-input"
+            placeholder="仅数字与大小写字母，6-64 位"
+            autocomplete="current-password"
+            :disabled="isBusy"
+          />
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" :disabled="isBusy">
+            {{ isBusy ? '登录中…' : '登录' }}
+          </button>
+        </div>
+      </form>
+
+      <!-- 注册：邮箱验证码（第一步）+ 设置用户名密码（第二步） -->
+      <form v-else class="login-form" @submit.prevent="handleRegister">
+        <p class="form-hint">注册流程：先用邮箱接收验证码完成验证，再设置用户名与密码（仅数字与大小写字母）。</p>
 
         <div class="form-group">
-          <label class="form-label" for="user-code">验证码</label>
+          <label class="form-label" for="user-email">邮箱</label>
+          <input id="user-email" v-model="email" type="email" class="form-input" placeholder="you@example.com" autocomplete="email" :disabled="isBusy" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="user-code">邮箱验证码</label>
           <div class="verify-row">
             <input
               id="user-code"
@@ -55,20 +75,57 @@
               type="text"
               class="form-input"
               placeholder="6 位验证码"
+              inputmode="numeric"
               :disabled="isBusy"
             />
-            <button class="btn btn-secondary" :disabled="countdown > 0 || isBusy" @click="handleSendCode">
+            <button type="button" class="btn btn-secondary" :disabled="countdown > 0 || isBusy" @click="handleSendCode">
               {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
             </button>
           </div>
         </div>
 
+        <div class="form-group">
+          <label class="form-label" for="user-reg-username">用户名</label>
+          <input
+            id="user-reg-username"
+            v-model="regUsername"
+            type="text"
+            class="form-input"
+            placeholder="仅数字与大小写字母，3-32 位"
+            autocomplete="username"
+            :disabled="isBusy"
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="user-reg-password">密码</label>
+          <input
+            id="user-reg-password"
+            v-model="regPassword"
+            type="password"
+            class="form-input"
+            placeholder="仅数字与大小写字母，6-64 位"
+            autocomplete="new-password"
+            :disabled="isBusy"
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="user-reg-password2">确认密码</label>
+          <input
+            id="user-reg-password2"
+            v-model="regPassword2"
+            type="password"
+            class="form-input"
+            placeholder="再次输入密码"
+            autocomplete="new-password"
+            :disabled="isBusy"
+          />
+        </div>
         <div class="form-actions">
-          <button class="btn btn-primary" :disabled="isBusy" @click="handleSubmit">
-            {{ submitLabel }}
+          <button type="submit" class="btn btn-primary" :disabled="isBusy">
+            {{ isBusy ? '注册中…' : '注册' }}
           </button>
         </div>
-      </div>
+      </form>
     </template>
 
     <!-- 已登录：账号与套餐状态 -->
@@ -76,6 +133,10 @@
       <div class="account-card">
         <div class="account-card__row">
           <span class="account-card__label">已登录账号</span>
+          <span class="account-card__value">{{ authStore.user?.username ?? '—' }}</span>
+        </div>
+        <div class="account-card__row">
+          <span class="account-card__label">绑定邮箱</span>
           <span class="account-card__value">{{ authStore.user?.identifier ?? '—' }}</span>
         </div>
         <div class="account-card__row">
@@ -108,18 +169,25 @@ const authStore = useAuthStore()
 
 type AuthMode = 'login' | 'register'
 
+/** 与服务端一致：仅数字与大小写字母 */
+const USERNAME_RE = /^[A-Za-z0-9]{3,32}$/
+const PASSWORD_RE = /^[A-Za-z0-9]{6,64}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const mode = ref<AuthMode>('login')
-const account = ref('')
+// 登录
+const username = ref('')
+const password = ref('')
+// 注册
+const email = ref('')
 const verifyCode = ref('')
+const regUsername = ref('')
+const regPassword = ref('')
+const regPassword2 = ref('')
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const isBusy = computed(() => authStore.status === 'authenticating')
-
-const submitLabel = computed(() => {
-  if (isBusy.value) return mode.value === 'register' ? '注册中…' : '登录中…'
-  return mode.value === 'register' ? '注册' : '登录'
-})
 
 function switchMode(next: AuthMode) {
   if (mode.value === next || isBusy.value) return
@@ -156,9 +224,9 @@ function startCountdown(seconds: number) {
 }
 
 async function handleSendCode() {
-  const identifier = account.value.trim()
-  if (!identifier) {
-    toast.error('请先输入账号（邮箱或手机号）')
+  const identifier = email.value.trim()
+  if (!EMAIL_RE.test(identifier)) {
+    toast.error('请输入有效的邮箱地址')
     return
   }
   if (countdown.value > 0 || isBusy.value) return
@@ -171,16 +239,49 @@ async function handleSendCode() {
   }
 }
 
-async function handleSubmit() {
-  const identifier = account.value.trim()
-  const code = verifyCode.value.trim()
-  if (!identifier || !code) {
-    toast.error('请输入账号与验证码')
+async function handleLogin() {
+  const name = username.value.trim()
+  const pwd = password.value
+  if (!name || !pwd) {
+    toast.error('请输入用户名与密码')
     return
   }
   try {
-    await authStore.login(identifier, code)
-    toast.success(mode.value === 'register' ? '注册成功，已自动登录' : '登录成功，官方 API 已启用')
+    await authStore.login(name, pwd)
+    toast.success('登录成功，官方 API 已启用')
+  } catch (err) {
+    toast.error(messageOf(err))
+  }
+}
+
+async function handleRegister() {
+  const mail = email.value.trim()
+  const code = verifyCode.value.trim()
+  const name = regUsername.value.trim()
+  const pwd = regPassword.value
+  if (!EMAIL_RE.test(mail)) {
+    toast.error('请输入有效的邮箱地址')
+    return
+  }
+  if (!/^\d{6}$/.test(code)) {
+    toast.error('请输入 6 位验证码')
+    return
+  }
+  if (!USERNAME_RE.test(name)) {
+    toast.error('用户名仅允许 3-32 位数字与大小写字母')
+    return
+  }
+  if (!PASSWORD_RE.test(pwd)) {
+    toast.error('密码仅允许 6-64 位数字与大小写字母')
+    return
+  }
+  if (pwd !== regPassword2.value) {
+    toast.error('两次输入的密码不一致')
+    return
+  }
+  try {
+    await authStore.register(mail, code, name, pwd)
+    toast.success('注册成功，已自动登录')
   } catch (err) {
     toast.error(messageOf(err))
   }
@@ -189,8 +290,13 @@ async function handleSubmit() {
 async function handleLogout() {
   await authStore.logout()
   toast.success('已退出登录')
-  account.value = ''
+  username.value = ''
+  password.value = ''
+  email.value = ''
   verifyCode.value = ''
+  regUsername.value = ''
+  regPassword.value = ''
+  regPassword2.value = ''
 }
 
 onUnmounted(() => {

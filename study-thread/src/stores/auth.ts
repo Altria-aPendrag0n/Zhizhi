@@ -43,20 +43,39 @@ export const useAuthStore = defineStore('auth', () => {
     return result.cooldown_seconds
   }
 
-  async function login(identifier: string, code: string): Promise<void> {
+  /** 登录成功后的公共落地逻辑：写钥匙串 + 内存 token + 启用官方 API + 拉取 /me */
+  async function settleAuth(result: { access_token: string; refresh_token: string; user: OfficialUser; api_key?: string }): Promise<void> {
+    await setRefreshToken(result.refresh_token)
+    if (result.api_key) await setApiKey(result.api_key)
+    accessToken.value = result.access_token
+    zhizhiApi.setApiAccessToken(result.access_token)
+    apiKey.value = result.api_key ?? (await getApiKey()) ?? ''
+    user.value = result.user
+    useSettingsStore().officialApiEnabled = true
+    status.value = 'authenticated'
+    await fetchMe().catch(() => {})
+  }
+
+  /** 用户名 + 密码登录 */
+  async function login(username: string, password: string): Promise<void> {
     status.value = 'authenticating'
     try {
       syncBaseUrl()
-      const result = await zhizhiApi.login(identifier, code)
-      await setRefreshToken(result.refresh_token)
-      if (result.api_key) await setApiKey(result.api_key)
-      accessToken.value = result.access_token
-      zhizhiApi.setApiAccessToken(result.access_token)
-      apiKey.value = result.api_key ?? (await getApiKey()) ?? ''
-      user.value = result.user
-      useSettingsStore().officialApiEnabled = true
-      status.value = 'authenticated'
-      await fetchMe().catch(() => {})
+      const result = await zhizhiApi.login(username, password)
+      await settleAuth(result)
+    } catch (err) {
+      reset()
+      throw err
+    }
+  }
+
+  /** 邮箱注册（验证码 + 设置用户名/密码），成功后自动登录 */
+  async function register(email: string, code: string, username: string, password: string): Promise<void> {
+    status.value = 'authenticating'
+    try {
+      syncBaseUrl()
+      const result = await zhizhiApi.register({ email, code, username, password })
+      await settleAuth(result)
     } catch (err) {
       reset()
       throw err
@@ -118,6 +137,7 @@ export const useAuthStore = defineStore('auth', () => {
     isOfficialActive,
     sendCode,
     login,
+    register,
     restore,
     silentRefresh,
     fetchMe,

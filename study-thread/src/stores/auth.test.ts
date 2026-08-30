@@ -6,6 +6,7 @@ import { useSettingsStore } from './settings'
 const zhizhi = vi.hoisted(() => ({
   sendCode: vi.fn(),
   login: vi.fn(),
+  register: vi.fn(),
   logout: vi.fn(),
   fetchMe: vi.fn(),
   refreshSession: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../utils/secure-store', () => secure)
 const USER = {
   id: 'u1',
   identifier: 'a@b.com',
+  username: 'Alice2026',
   plan_id: null,
   plan_expires_at: null,
   quota_tokens: 500,
@@ -53,29 +55,53 @@ describe('auth store', () => {
     expect(zhizhi.sendCode).toHaveBeenCalledWith('a@b.com')
   })
 
-  it('login 成功：写钥匙串、内存 token、启用官方 API', async () => {
-    zhizhi.login.mockResolvedValue({ access_token: 'at', refresh_token: 'rt', user: USER, api_key: 'sk-zhizhi-x' })
+  it('login（用户名+密码）成功：写钥匙串、内存 token、启用官方 API', async () => {
+    zhizhi.login.mockResolvedValue({ access_token: 'at', refresh_token: 'rt', user: USER })
+    secure.getApiKey.mockResolvedValue('sk-zhizhi-x')
     zhizhi.fetchMe.mockResolvedValue(USER)
 
     const store = useAuthStore()
-    await store.login('a@b.com', '123456')
+    await store.login('Alice2026', 'Passw0rd')
 
+    expect(zhizhi.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd')
     expect(secure.setRefreshToken).toHaveBeenCalledWith('rt')
-    expect(secure.setApiKey).toHaveBeenCalledWith('sk-zhizhi-x')
+    expect(secure.setApiKey).not.toHaveBeenCalled()
     expect(store.status).toBe('authenticated')
     expect(store.isOfficialActive).toBe(true)
-    expect(store.user?.identifier).toBe('a@b.com')
+    expect(store.user?.username).toBe('Alice2026')
     expect(store.apiKey).toBe('sk-zhizhi-x')
     expect(useSettingsStore().officialApiEnabled).toBe(true)
     expect(zhizhi.fetchMe).toHaveBeenCalled()
   })
 
   it('login 失败：回匿名并抛出错误', async () => {
-    zhizhi.login.mockRejectedValue(new Error('验证码错误'))
+    zhizhi.login.mockRejectedValue(new Error('用户名或密码错误'))
     const store = useAuthStore()
-    await expect(store.login('a@b.com', '000000')).rejects.toThrow('验证码错误')
+    await expect(store.login('Alice2026', 'WrongPass')).rejects.toThrow('用户名或密码错误')
     expect(store.status).toBe('anonymous')
     expect(store.isOfficialActive).toBe(false)
+  })
+
+  it('register 成功：注册自动登录，api_key 写入钥匙串', async () => {
+    zhizhi.register.mockResolvedValue({ access_token: 'at', refresh_token: 'rt', user: USER, api_key: 'sk-zhizhi-x' })
+    zhizhi.fetchMe.mockResolvedValue(USER)
+
+    const store = useAuthStore()
+    await store.register('a@b.com', '123456', 'Alice2026', 'Passw0rd')
+
+    expect(zhizhi.register).toHaveBeenCalledWith({ email: 'a@b.com', code: '123456', username: 'Alice2026', password: 'Passw0rd' })
+    expect(secure.setRefreshToken).toHaveBeenCalledWith('rt')
+    expect(secure.setApiKey).toHaveBeenCalledWith('sk-zhizhi-x')
+    expect(store.status).toBe('authenticated')
+    expect(store.apiKey).toBe('sk-zhizhi-x')
+    expect(useSettingsStore().officialApiEnabled).toBe(true)
+  })
+
+  it('register 失败：回匿名并抛出错误', async () => {
+    zhizhi.register.mockRejectedValue(new Error('username already taken'))
+    const store = useAuthStore()
+    await expect(store.register('a@b.com', '123456', 'Alice2026', 'Passw0rd')).rejects.toThrow('username already taken')
+    expect(store.status).toBe('anonymous')
   })
 
   it('restore 无钥匙串凭据：保持匿名', async () => {
