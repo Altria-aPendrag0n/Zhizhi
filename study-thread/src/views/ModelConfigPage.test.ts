@@ -10,6 +10,12 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: state.push }),
 }))
 
+vi.mock('../stores/auth', () => ({
+  useAuthStore: () => ({
+    isOfficialActive: false,
+  }),
+}))
+
 describe('ModelConfigPage 模型配置入口页', () => {
   it('渲染「知枝官方 API」与「自定义模型」两个入口', () => {
     const wrapper = mount(ModelConfigPage)
