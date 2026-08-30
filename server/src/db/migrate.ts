@@ -9,6 +9,18 @@ for (const stmt of CREATE_TABLES) {
   db.run(sql.raw(stmt));
 }
 
+/** 旧库增量迁移：users 表补充 username / password_hash 列（新库建表已含，幂等跳过） */
+function ensureUserColumns() {
+  const columns = db.all<{ name: string }>(sql`PRAGMA table_info(users)`).map((c) => c.name);
+  if (!columns.includes('username')) {
+    db.run(sql.raw('ALTER TABLE users ADD COLUMN username TEXT'));
+  }
+  if (!columns.includes('password_hash')) {
+    db.run(sql.raw('ALTER TABLE users ADD COLUMN password_hash TEXT'));
+  }
+}
+ensureUserColumns();
+
 for (const plan of SEED_PLANS) {
   db.run(
     sql`INSERT OR IGNORE INTO plans (id, name, price_cents, token_quota, model_group)

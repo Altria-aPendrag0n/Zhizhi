@@ -2,29 +2,30 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { createRateLimiter, ipKeyOf, rateLimit } from '../middleware/rate-limit.js';
-import { login, logout, refresh } from '../services/auth.js';
+import { login, logout, refresh, register } from '../services/auth.js';
 import type { Notifier } from '../services/notifier.js';
 import { canSend, create } from '../services/verify-code.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_RE = /^1[3-9]\d{9}$/;
-
-function isValidIdentifier(identifier: string): boolean {
-  return EMAIL_RE.test(identifier) || PHONE_RE.test(identifier);
-}
-
-function channelOf(identifier: string): 'email' | 'sms' {
-  return EMAIL_RE.test(identifier) ? 'email' : 'sms';
-}
+/** 用户名/密码仅允许数字与大小写字母（需求限定） */
+export const USERNAME_RE = /^[A-Za-z0-9]{3,32}$/;
+export const PASSWORD_RE = /^[A-Za-z0-9]{6,64}$/;
 
 const sendCodeSchema = z.object({
   identifier: z.string().min(3).max(255),
-  channel: z.enum(['email', 'sms']).optional(),
+});
+
+const registerSchema = z.object({
+  email: z.string().min(3).max(255),
+  code: z.string().regex(/^\d{6}$/, 'code must be 6 digits'),
+  username: z.string().regex(USERNAME_RE, 'username must be 3-32 chars of letters/digits'),
+  password: z.string().regex(PASSWORD_RE, 'password must be 6-64 chars of letters/digits'),
+  device_id: z.string().max(255).optional(),
 });
 
 const loginSchema = z.object({
-  identifier: z.string().min(3).max(255),
-  code: z.string().regex(/^\d{6}$/, 'code must be 6 digits'),
+  username: z.string().min(3).max(32),
+  password: z.string().min(6).max(64),
   device_id: z.string().max(255).optional(),
 });
 
@@ -37,6 +38,7 @@ export function createAuthRouter(deps: { notifier: Notifier }): Hono {
 
   const sendCodePerIdentifier = createRateLimiter({ windowMs: 60_000, max: 1 });
   const sendCodePerIp = createRateLimiter({ windowMs: 600_000, max: 5 });
+  const registerPerIp = createRateLimiter({ windowMs: 600_000, max: 10 });
   const loginPerIp = createRateLimiter({ windowMs: 600_000, max: 10 });
 
   router.post(
@@ -48,9 +50,9 @@ export function createAuthRouter(deps: { notifier: Notifier }): Hono {
     rateLimit(sendCodePerIp, ipKeyOf),
     zValidator('json', sendCodeSchema),
     async (c) => {
-      const { identifier, channel } = c.req.valid('json');
-      if (!isValidIdentifier(identifier)) {
-        return c.json({ error: 'invalid identifier: must be an email or phone number' }, 400);
+      const { identifier } = c.req.valid('json');
+      if (!EMAIL_RE.test(identifier)) {
+        return c.json({ error: 'invalid identifier: must be an email' }, 400);
       }
       const check = await canSend(identifier);
       if (!check.ok) {
@@ -62,8 +64,39 @@ export function createAuthRouter(deps: { notifier: Notifier }): Hono {
           429
         );
       }
-      await create(identifier, deps.notifier, channel ?? channelOf(identifier));
+      await create(identifier, deps.notifier, 'email');
       return c.json({ success: true, cooldown_seconds: 60 });
+    }
+  );
+
+  router.post(
+    '/register',
+    rateLimit(registerPerIp, ipKeyOf),
+    zValidator('json', registerSchema),
+    async (c) => {
+      const { email, code, username, password, device_id } = c.req.valid('json');
+      if (!EMAIL_RE.test(email)) {
+        return c.json({ error: 'invalid email' }, 400);
+      }
+      const result = await register({ email, code, username, password, deviceId: device_id });
+      if (!result.ok) {
+        if (result.reason === 'bad-code') {
+          return c.json({ error: 'invalid verification code' }, 401);
+        }
+        if (result.reason === 'username-taken') {
+          return c.json({ error: 'username already taken' }, 409);
+        }
+        if (result.reason === 'email-taken') {
+          return c.json({ error: 'email already registered' }, 409);
+        }
+        return c.json({ error: 'registration failed' }, 400);
+      }
+      return c.json({
+        access_token: result.access_token,
+        refresh_token: result.refresh_token,
+        user: result.user,
+        api_key: result.api_key,
+      });
     }
   );
 
@@ -72,13 +105,10 @@ export function createAuthRouter(deps: { notifier: Notifier }): Hono {
     rateLimit(loginPerIp, ipKeyOf),
     zValidator('json', loginSchema),
     async (c) => {
-      const { identifier, code, device_id } = c.req.valid('json');
-      if (!isValidIdentifier(identifier)) {
-        return c.json({ error: 'invalid identifier: must be an email or phone number' }, 400);
-      }
-      const result = await login(identifier, code, device_id);
+      const { username, password, device_id } = c.req.valid('json');
+      const result = await login({ username, password, deviceId: device_id });
       if (!result.ok) {
-        return c.json({ error: 'invalid verification code' }, 401);
+        return c.json({ error: 'invalid username or password' }, 401);
       }
       return c.json({
         access_token: result.access_token,

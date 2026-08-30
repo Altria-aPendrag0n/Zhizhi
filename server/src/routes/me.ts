@@ -24,6 +24,7 @@ meRouter.get('/me', requireAuth, async (c) => {
   return c.json({
     id: user.id,
     identifier: user.identifier,
+    username: user.username ?? '',
     plan_id: user.plan_id,
     plan_expires_at: user.plan_expires_at,
     quota_tokens: user.quota_tokens,

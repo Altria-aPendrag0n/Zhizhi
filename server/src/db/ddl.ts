@@ -2,6 +2,8 @@ export const CREATE_TABLES: string[] = [
   `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     identifier TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
     plan_id TEXT,
     plan_expires_at INTEGER,
     quota_tokens INTEGER NOT NULL DEFAULT 0,
