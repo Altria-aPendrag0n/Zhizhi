@@ -24,15 +24,16 @@ server/  （仓库根，独立 Node 包，ESM）
   │   │   ├─ notifier.ts   Notifier 接口 + LogNotifier（MVP）| email/sms 预留分支
   │   │   ├─ verify-code.ts 验证码生成/存储/校验（hash/TTL/一次性/尝试次数/重发冷却/日限额）
   │   │   ├─ jwt.ts        access_token 签发/校验（jose, HS256, 2h）
-  │   │   ├─ auth.ts       login/refresh/logout 业务编排（含 api_key 首次签发）
+  │   │   ├─ auth.ts       register/login/refresh/logout 业务编排（含 api_key 注册时签发）
+  │   │   ├─ password.ts   密码 scrypt 加盐哈希（crypto 内置，无新依赖）
   │   │   └─ api-key.ts    官方 Key 生成（明文一次返回，库存 sha256）
   │   ├─ middleware/
   │   │   ├─ auth.ts       Bearer access_token 校验（/api/me）
   │   │   └─ rate-limit.ts 内存滑动窗口限流（IP / identifier key）
   │   └─ routes/
-  │       ├─ auth.ts       POST /api/auth/send-code | login | refresh | logout
+  │       ├─ auth.ts       POST /api/auth/send-code | register | login | refresh | logout
   │       └─ me.ts         GET /api/me
-  └─ test/                 vitest：verify-code / jwt / rate-limit / auth 集成
+  └─ test/                 vitest：verify-code / jwt / rate-limit / password / auth 集成
 ```
 
 ## 技术栈与运行
@@ -61,9 +62,9 @@ server/  （仓库根，独立 Node 包，ESM）
 
 | 表 | 字段要点 | 说明 |
 |---|---|---|
-| `users` | id(PK), identifier(UNIQUE), plan_id, plan_expires_at, quota_tokens | identifier 为邮箱或手机号，首次登录即注册 |
+| `users` | id(PK), identifier(UNIQUE, 邮箱), username(UNIQUE), password_hash, plan_id, plan_expires_at, quota_tokens | 邮箱注册 + 用户名密码登录；旧库增量 ALTER 补列（migrate 幂等） |
 | `refresh_tokens` | id(PK), user_id, token_hash(UNIQUE), device_id, expires_at, revoked_at | 不透明 token 只存 sha256 |
-| `api_keys` | id(PK), user_id, key_hash(UNIQUE), enabled, last_used_at, revoked_at | 官方 Key 明文仅登录/签发时返回一次 |
+| `api_keys` | id(PK), user_id, key_hash(UNIQUE), enabled, last_used_at, revoked_at | 官方 Key 明文仅注册时返回一次 |
 | `verify_codes` | id(PK), identifier, code_hash, expires_at, attempts, last_sent_at | 不存明文验证码 |
 | `verify_send_logs` | id(PK), identifier, created_at | 发送流水，用于日限额统计（create 会删除旧 verify_codes 行，故不能靠 verify_codes 行数计数） |
 | `plans` | id(PK), name, price_cents, token_quota, model_group | 种子 3 条（轻量/标准/专业） |
@@ -76,11 +77,14 @@ server/  （仓库根，独立 Node 包，ESM）
 
 | 端点 | 请求体 | 响应 |
 |---|---|---|
-| `POST /api/auth/send-code` | `{ identifier, channel?: 'email'\|'sms' }` | 200 `{ success, cooldown_seconds: 60 }`；429 冷却/限频；400 非法邮箱/手机号 |
-| `POST /api/auth/login` | `{ identifier, code, device_id? }` | 200 `{ access_token, refresh_token, user, api_key? }`（首登含 api_key）；401 验证码错误/过期；400 code 非 6 位数字 |
+| `POST /api/auth/send-code` | `{ identifier }`（仅邮箱） | 200 `{ success, cooldown_seconds: 60 }`；429 冷却/限频；400 非邮箱（手机号/乱串） |
+| `POST /api/auth/register` | `{ email, code, username, password, device_id? }` | 200 `{ access_token, refresh_token, user, api_key }`（注册即签发 Key）；401 验证码错误；409 用户名/邮箱已占用；400 邮箱格式或用户名/密码字符集非法 |
+| `POST /api/auth/login` | `{ username, password, device_id? }` | 200 `{ access_token, refresh_token, user }`（无 api_key）；401 用户名或密码错误 |
 | `POST /api/auth/refresh` | `{ refresh_token }` | 200 新 tokens（**旧 token 立即作废，轮换**）；401 无效/已吊销/过期 |
 | `POST /api/auth/logout` | `{ refresh_token }` | 200 `{ success }` |
-| `GET /api/me` | Bearer access_token | 200 `{ id, identifier, plan_id, plan_expires_at, quota_tokens, api_key_created, plan }`；401 无/伪 token |
+| `GET /api/me` | Bearer access_token | 200 `{ id, identifier, username, plan_id, plan_expires_at, quota_tokens, api_key_created, plan }`；401 无/伪 token |
+
+> 注册/登录规则：**仅邮箱注册**（取消手机号通道）；用户名/密码仅允许**数字与大小写字母**（用户名 3-32 位、密码 6-64 位）；用户名全局唯一。注册时先做用户名/邮箱占用校验（快速失败 409），再校验验证码（一次性消费）。
 
 ## 安全设计要点
 
@@ -89,12 +93,13 @@ server/  （仓库根，独立 Node 包，ESM）
    - `create()`：删除旧记录 → 插入新记录（10min TTL）→ 写 `verify_send_logs` → 调 notifier。
    - `verify()`：不存在/过期/错满 5 次 → 失败（错满 5 次记录删除防爆破）；成功 → **立即删除记录（一次性消费，防重放）**；失败 → attempts+1。
    - `canSend()`：60s 重发冷却（读 `last_sent_at`）+ 当日发送 ≤ 5 条（数 `verify_send_logs`）。
-2. **限流**（`middleware/rate-limit.ts`）：内存滑动窗口；`send-code` 每 identifier 60s/1 次 + 每 IP 10min/5 次；`login` 每 IP 10min/10 次；超限 429（带 `retry_after`）。
-3. **JWT**（`services/jwt.ts`）：jose HS256，`{ sub, plan_id }`，2h；`JWT_SECRET` 启动时校验非空。
-4. **官方 Key**（`services/api-key.ts`）：`sk-zhizhi-` + 24 字节 base64url；明文**仅在登录/签发时返回一次**，库中只存 sha256。
-5. **Refresh 轮换**（`services/auth.ts`）：每次 refresh 先吊销旧记录再签发新 refresh（reuse 检测天然成立）；logout 吊销对应记录。
-6. **错误处理**（`app.ts`）：统一 `{ error }` JSON；`NODE_ENV=production` 时隐藏内部错误细节。
-7. **验证码通道抽象**（`services/notifier.ts`）：`Notifier.send(to, code, channel)`；MVP 为 `LogNotifier`（`[verify-code]` 日志，冒烟时从日志取码）；`VERIFY_CODE=email|sms` 预留（暂回退 LogNotifier 并告警，后续填 Resend/阿里云，调用方零改动）。
+2. **限流**（`middleware/rate-limit.ts`）：内存滑动窗口；`send-code` 每 identifier 60s/1 次 + 每 IP 10min/5 次；`register`/`login` 每 IP 10min/10 次；超限 429（带 `retry_after`）。
+3. **密码**（`services/password.ts`）：scrypt 加盐哈希（16 字节随机 salt，32 字节派生），存储格式 `scrypt:<salt>:<hash>`；比对 `timingSafeEqual`；**库中不存明文**。
+4. **JWT**（`services/jwt.ts`）：jose HS256，`{ sub, plan_id }`，2h；`JWT_SECRET` 启动时校验非空。
+5. **官方 Key**（`services/api-key.ts`）：`sk-zhizhi-` + 24 字节 base64url；明文**仅注册时返回一次**，库中只存 sha256。
+6. **Refresh 轮换**（`services/auth.ts`）：每次 refresh 先吊销旧记录再签发新 refresh（reuse 检测天然成立）；logout 吊销对应记录。
+7. **错误处理**（`app.ts`）：统一 `{ error }` JSON；`NODE_ENV=production` 时隐藏内部错误细节。
+8. **验证码通道抽象**（`services/notifier.ts`）：`Notifier.send(to, code, channel)`；MVP 为 `LogNotifier`（`[verify-code]` 日志，冒烟时从日志取码）；`VERIFY_CODE=email` 预留（暂回退 LogNotifier 并告警，后续填 Resend，调用方零改动）。
 
 ## 测试
 
@@ -102,13 +107,13 @@ server/  （仓库根，独立 Node 包，ESM）
 |---|---|
 | `verify-code.test.ts` | 6 位/随机性、hash 不含明文、60s 重发拦截、日限额 5 条、一次性消费（重放拒绝）、错 5 次作废、过期失效、成功后删记录 |
 | `jwt.test.ts` | 签发/校验、plan_id 往返、错误 secret 拒绝、过期 token 拒绝 |
+| `password.test.ts` | scrypt 哈希往返、错误密码拒绝、同密码不同 salt、畸形存储值拒绝 |
 | `rate-limit.test.ts` | 窗口内超限、窗口重置放行、key 独立、reset |
-| `auth.test.ts` | app 级集成（临时 DB + 注入 fake notifier 捕获验证码）：send-code → login 成功（首登返回 api_key）→ 库中仅存 hash → 错误码 401 → 重放 401 → refresh 轮换（旧 token 失效）→ `/api/me` 401/200 → logout 后 refresh 401 |
+| `auth.test.ts` | app 级集成（临时 DB + 注入 fake notifier 捕获验证码）：send-code（仅邮箱）→ register 成功（返回 api_key、库中仅存 hash/scrypt 密码）→ 用户名/邮箱占用 409 → 错误码 401 → 字符集 400 → login（用户名+密码）成功/错误密码 401/未知用户名 401 → refresh 轮换 → `/api/me` 401/200（含 username）→ logout 后 refresh 401 |
 
 运行：`cd server && npm test`。
 
 ## 后续任务（Phase 2+，本模块不做）
 
-- 客户端接入：Rust `tauri-plugin-keyring` + `stores/auth.ts` + `api/zhizhi-api.ts`（401 自动刷新）+ OfficialModelPage 真实登录流。
 - Phase 2：plans/orders/usage 接口 + 支付；LLM 网关（鉴权 → 额度 → 转发 → 扣费 → 审计）。
 - Phase 3：迁 PostgreSQL、Redis 限流。
