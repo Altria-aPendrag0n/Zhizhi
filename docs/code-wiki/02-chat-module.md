@@ -29,12 +29,12 @@
 
 | 函数 | 说明 |
 |------|------|
-| `handleSend(content)` | 校验 API Key（无则跳 `/settings`）→ 空白界面（`/chat` 无 thread）时自动创建新会话：以 `new_${Date.now()}` 占位 id 落盘，回答结束后 `router.replace` 把会话 id 写入 URL（侧边栏高亮、后续追问复用；用户中途切换会话则不跳转）→ `retrieveKnowledgeContext` 检索知识库 → 组装 system prompt → `chatWithTools` 流式消费 6 类 chunk（`text/thinking/tool_call/tool_result/stop/error`），`AbortController` 支持停止 |
+| `handleSend(content)` | 校验 API Key（无则跳 `/settings`）→ 空白界面（`/chat` 无 thread）时自动创建新会话：以 `new_${Date.now()}` 占位 id 落盘，并记录 `currentJobThreadId` 让组件立即感知该 job（回答结束后 `router.replace` 把会话 id 写入 URL，侧边栏高亮、后续追问复用；用户中途切换会话则不跳转）→ `retrieveKnowledgeContext` 检索知识库 → 组装 system prompt → **委托 `chatRunner.startChat` 后台运行**（见 2.3，回答进行中切换会话不受影响）→ 回答完成/中止/出错后由 onFinalize 统一落盘会话文件、触发学习者画像更新与（新会话场景的）路由跳转 |
 | `handleExtractNote(text, domMessageIndex)` | 调 `extractNote` skill 生成笔记草稿 → `noteStore.saveNote` 写入 vault → 记录 `NoteReference{path, title, messageIndex}` 并写回会话文件；`messageIndex` 优先用划线时 DOM 定位的索引 |
 | `handleAddToNote(text)` / `confirmAddToNote(target)` | 弹窗选笔记与标题位置，`insertHighlightAt(End)` 把划线原文插入指定小节末尾或文件末尾 |
 | `handleCreateBranch(text, domMessageIndex)` | 用 `resolveMessageIndex` 定位划线消息（DOM 索引优先、文本匹配兜底）→ `sessionStore.createBranchInVault` 创建分支（携带划线文本用于分叉点上下文）→ 跳转 `branch-chat` |
 | `handleRetry()` | 移除失败的 AI 消息后重发最后一条用户消息 |
-| `handleStop()` | 仅 abort 流式请求，不清空状态 |
+| `handleStop()` | `chatRunner.abort(activeThreadId)`：中止流式请求；已流式的内容保留并落盘（半截回答也保存） |
 
 **系统提示词（SYSTEM_PROMPT）**：硬编码于 `MainChatPage.vue`，定义学习伴读角色与回答要求，并含**流程图规范（分层）**——简单线性流程用 ASCII 字符画（盒子 `+ - |`、方向 `> < v ^`，中文 2 字符宽 / ASCII 1 字符宽对齐，禁用 `┌─┐` 等 Unicode 框线字符与 `① ② ✓ ← →` 等宽度不一致符号，配合渲染层 `wrapDiagramBlocks` 的 ASCII 盒子识别）；复杂流程（多分支 / 循环 / 菱形判断 / 嵌套）改用 Mermaid 代码块（`flowchart` 语法，渲染层 `renderMermaidBlocks` 转 SVG，见 3.2）。
 
@@ -87,6 +87,17 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 ```
 
 消息后方的 `> 已生成笔记/分支` 引用行持久化划线文本（`划线「…」`），加载时由 `extractNoteRefsFromSession` 解析（`NoteReference` 增加 `kind`/`highlight` 字段）；渲染时在原消息中把划线文本转为虚线链接，点击跳转对应笔记或分支会话。旧格式（无划线文本）仍兼容。删除笔记/分支时由 `removeSessionReferences` 扫描所有会话文件并移除对应引用行（**路径归一化匹配**：统一小写与正斜杠，兼容 Windows 反斜杠/大小写差异导致的正则匹配失败），避免虚线标记残留；同时 `notes` store 会更新 `lastDeletedNotePath` 删除信号，`MainChatPage`/`BranchChatPage` watch 该信号后从磁盘重新解析当前会话的引用（`refreshNoteRefs`），并进一步经 `filterExistingNoteRefs` **按文件存在性兜底过滤**（分支引用保留，笔记文件已不存在的引用剔除，兼容历史遗留悬空引用）——因为从聊天页跳转资料库删除笔记再返回时，`<router-view :key="$route.fullPath">` 的路由 key 相同会复用组件实例而不重新挂载，若只靠重新加载才会发现引用已被清理，会导致聊天页"已生成笔记"列表残留已删除笔记。
+
+### 2.3 全局聊天运行器 `stores/chat-runner.ts`（后台回答）
+
+> 背景：`App.vue` 的 `<router-view :key="$route.fullPath" />` 在切换会话（URL query 变化）时会**卸载并重挂载聊天页组件**。改造前流式回答状态全部绑定在组件局部变量，切换会话后 UI 与后台回答失联、切回时从磁盘加载看不到进行中的回答（表现为"回答丢失"）。改造后回答由全局运行器托管，脱离组件生命周期。
+
+- **`startChat({ threadId, messages, noteRefs, onFinalize, run })`**：按会话/分支 id 注册一个后台 job。`messages` 初始含空 assistant 占位；`run(signal, emit)` 由调用方提供各自的流来源（主会话 `chatWithTools` / 分支 `branchFollowupStream`），chunk 经 `emit` 统一更新 job 状态（`streamingText` / `streamingThinking` / `toolStatus` / `error`）。
+- **job 生命周期**：回答完成/中止/出错后统一 `finalize`——填充占位消息（出错则移除占位）、`onFinalize` 回调（落盘会话文件 + 学习者画像 + 新会话路由跳转），**job 保留在 map 中**（组件可继续读取内容与错误）；`cleanupIdleJob(threadId)` 在组件卸载时清理**已完成**的 job（进行中的 job 保留，回答继续后台跑完）。
+- **`getJob(threadId)` / `hasJob(threadId)` / `abort(threadId)`**：组件读取响应式 job 状态（`messages`/`isStreaming`/`streamingText`/`error` 等）；中止保留已流式内容并落盘。
+- **组件侧**：消息/流式状态改为 `activeJob?.xxx ?? 磁盘加载` 的 computed；`pushNoteRef` 在回答期间把笔记/分支引用写入 job（最终随 onFinalize 一起落盘）。`loadThreadMessages` 对存在 job 的会话跳过磁盘加载（回答未落盘，job 才是权威）。
+- **多会话并发**：不同 threadId 的 job 相互独立，用户可在会话 A 回答时切到会话 B 继续提问（后台可同时跑多个回答）。
+- 测试：`src/stores/chat-runner.test.ts`（流式累积/进行中可见/abort 保留/错误/cleanup/重复 startChat 中止旧 job）。
 
 ## 3. 组件层（`src/components/chat/`）
 
@@ -173,6 +184,7 @@ MainChatPage / BranchChatPage
 - `src/components/chat/ChatMessage.test.ts`、`ThinkingBlock.test.ts`
 - `src/utils/mermaid-render.test.ts`
 - `src/views/MainChatPage.test.ts`
+- `src/stores/chat-runner.test.ts`（全局后台回答运行器）
 - `src/api/chat-loop.test.ts`、`src/api/skills/branch-followup.test.ts`
 
 ---

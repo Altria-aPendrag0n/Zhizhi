@@ -18,7 +18,7 @@
         :is-streaming="isStreaming"
         :streaming-text="streamingText"
         :streaming-thinking="streamingThinking"
-        :error="error"
+        :error="displayedError"
         :note-refs="noteRefs"
         @retry="handleRetry"
         @extract-note="handleExtractNote"
@@ -68,13 +68,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, reactive, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, reactive, nextTick } from 'vue'
 import { marked } from 'marked'
 import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
 import { useSessionStore } from '../stores/session'
 import { useNoteStore } from '../stores/notes'
+import { useChatRunner } from '../stores/chat-runner'
 import { createProvider } from '../api/provider-factory'
 import { branchFollowupStream } from '../api/skills/branch-followup'
 import { extractNote } from '../api/skills/extract-note'
@@ -106,6 +107,7 @@ const settingsStore = useSettingsStore()
 const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
+const chatRunner = useChatRunner()
 const toast = useToast()
 const {
   diff: learnerDiff,
@@ -116,19 +118,36 @@ const {
   cancel: cancelLearnerUpdate,
 } = useLearnerUpdate()
 
-const messages = ref<Message[]>([])
-const forkMessages = ref<Message[]>([])
-const extractedNotes = ref<NoteReference[]>([])
-const isStreaming = ref(false)
-const streamingText = ref('')
-const streamingThinking = ref('')
+/**
+ * 消息/流式状态来源：
+ * - 有活跃 job（chat-runner，回答进行中或已完成保留）→ 从 job 读取（后台回答不受组件生命周期影响）；
+ * - 无 job → 从磁盘加载（loadedMessages / loadedNoteRefs）。
+ */
+const activeJob = computed(() => (branchId.value ? chatRunner.getJob(branchId.value) : null))
+const loadedMessages = ref<Message[]>([])
+const loadedNoteRefs = ref<NoteReference[]>([])
+const messages = computed(() => activeJob.value?.messages ?? loadedMessages.value)
+const extractedNotes = computed(() => activeJob.value?.noteRefs ?? loadedNoteRefs.value)
+const isStreaming = computed(() => activeJob.value?.isStreaming ?? false)
+const streamingText = computed(() => activeJob.value?.streamingText ?? '')
+const streamingThinking = computed(() => activeJob.value?.streamingThinking ?? '')
 const error = ref<string | null>(null)
+const displayedError = computed(() => activeJob.value?.error ?? error.value)
+/** 分叉点上下文（父会话中划线内容附近的原文），来自父会话文件解析 */
+const forkMessages = ref<Message[]>([])
 const forkContext = ref<string>('')
 const forkContextRef = ref<HTMLElement | null>(null)
 /** 划线文本（frontmatter fork_highlight），用于分叉点上下文渲染后 DOM 高亮定位 */
 const forkHighlight = ref<string>('')
 /** 划线文本在消息中的出现序号（frontmatter fork_highlight_occ），重复文本时按序号定位 */
 const forkHighlightOcc = ref(1)
+
+/** 追加笔记引用（有活跃 job 时写入 job，否则写入本地加载列表） */
+function pushNoteRef(noteRef: NoteReference) {
+  const job = activeJob.value
+  if (job) job.noteRefs.push(noteRef)
+  else loadedNoteRefs.value.push(noteRef)
+}
 
 /** 分叉点上下文用 markdown 渲染（划线内容本身可能含 markdown 标记） */
 const renderedForkContext = computed(() => {
@@ -235,14 +254,15 @@ async function loadContext() {
   forkContext.value = forkContextFromFile || buildForkContextPreview(context, forkIndex.value)
 
   // 剥离旧版本分支文件内嵌的继承上下文副本，只保留分支自身对话
-  messages.value = stripInheritedContext(savedMessages, forkMessages.value)
-  extractedNotes.value = currentRaw ? extractNoteRefsFromSession(currentRaw) : []
+  loadedMessages.value = stripInheritedContext(savedMessages, forkMessages.value)
+  loadedNoteRefs.value = currentRaw ? extractNoteRefsFromSession(currentRaw) : []
 }
 
 /** 从磁盘重新解析当前分支的笔记引用（删除笔记后同步刷新，避免残留已删除笔记） */
 async function refreshNoteRefs() {
+  if (chatRunner.hasJob(branchId.value)) return
   if (!vaultStore.vaultPath) {
-    extractedNotes.value = []
+    loadedNoteRefs.value = []
     return
   }
   try {
@@ -250,9 +270,9 @@ async function refreshNoteRefs() {
       ?? getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
     const currentRaw = await readFile(currentFile)
     // 过滤已删除笔记的悬空引用（会话文件引用行可能因旧版本/路径差异未被清理）
-    extractedNotes.value = await filterExistingNoteRefs(extractNoteRefsFromSession(currentRaw))
+    loadedNoteRefs.value = await filterExistingNoteRefs(extractNoteRefsFromSession(currentRaw))
   } catch {
-    extractedNotes.value = []
+    loadedNoteRefs.value = []
   }
 }
 
@@ -284,23 +304,41 @@ function getCurrentSession(): Session {
   }
 }
 
-async function saveCurrentSession(): Promise<string | null> {
-  if (!vaultStore.vaultPath || messages.value.length === 0) return null
-  return vaultStore.saveCurrentSession(getCurrentSession(), true, extractedNotes.value)
+async function saveCurrentSession(sessionMessages?: Message[], refs?: NoteReference[]): Promise<string | null> {
+  if (!vaultStore.vaultPath) return null
+  const msgs = sessionMessages ?? messages.value
+  const noteRefs = refs ?? extractedNotes.value
+  if (msgs.length === 0) return null
+  return vaultStore.saveCurrentSession(getCurrentSessionFor(msgs), true, noteRefs)
+}
+
+/** 基于指定消息构建分支 Session（保存/学习者画像共用） */
+function getCurrentSessionFor(msgs: Message[]): Session {
+  return {
+    id: branchId.value,
+    title: generateSessionTitle(msgs),
+    created: new Date().toISOString(),
+    parent_session: sessionId.value,
+    fork_point: String(forkIndex.value),
+    tags: [],
+    messages: msgs.map((message) => ({ ...message })),
+    fork_context: forkContext.value || undefined,
+    fork_highlight: forkHighlight.value || undefined,
+  }
 }
 
 /**
- * 会话回答结束后触发学习者画像更新建议（P3）
- * 由 finalizeResponse 调用；每会话最多触发一次（useLearnerUpdate 内部去重）
+ * 分支会话回答结束后触发学习者画像更新建议（P3）
+ * 由 chat-runner 的 onFinalize 调用；每会话最多触发一次（useLearnerUpdate 内部去重）
  */
-async function maybeTriggerLearnerUpdate() {
+async function maybeTriggerLearnerUpdate(sessionMessages: Message[], refs: NoteReference[]) {
   if (!vaultStore.vaultPath) return
   const config = settingsStore.getProviderConfig()
-  if (!config.apiKey || messages.value.length < 3) return
+  if (!config.apiKey || sessionMessages.length < 3) return
 
   // 本次会话生成的笔记
   const newNotes = []
-  for (const ref of extractedNotes.value) {
+  for (const ref of refs) {
     if (ref.kind === 'note') {
       const note = await noteStore.loadNote(ref.path)
       if (note) newNotes.push(note)
@@ -308,7 +346,7 @@ async function maybeTriggerLearnerUpdate() {
   }
 
   await triggerLearnerUpdate(
-    getCurrentSession(),
+    getCurrentSessionFor(sessionMessages),
     newNotes,
     createProvider(config),
     vaultStore.vaultPath,
@@ -328,76 +366,54 @@ async function handleSend(content: string) {
 
   error.value = null
   // 用户消息携带时间戳：serializer 持久化为「## 用户 · <timestamp>」，供主界面按天统计问答
-  messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() })
-  await saveCurrentSession()
+  const baseMessages: Message[] = [...messages.value]
+  baseMessages.push({ role: 'user', content, timestamp: new Date().toISOString() })
+  await saveCurrentSession(baseMessages, extractedNotes.value)
 
+  // 空 assistant 占位交给 chat-runner：回答完成后填充内容并落盘
   const aiMessage: Message = { role: 'assistant', content: '' }
-  let responseFinalized = false
-  isStreaming.value = true
-  streamingText.value = ''
-  streamingThinking.value = ''
+  baseMessages.push(aiMessage)
 
-  const finalizeResponse = async () => {
-    if (responseFinalized) return
-    responseFinalized = true
-    isStreaming.value = false
-
-    if (streamingText.value) {
-      aiMessage.content = streamingText.value
-      aiMessage.thinking = streamingThinking.value || undefined
-      messages.value.push(aiMessage)
-    }
-
-    streamingText.value = ''
-    streamingThinking.value = ''
-    await saveCurrentSession()
-    void maybeTriggerLearnerUpdate()
-  }
-
+  // 检索知识库内容注入分支追问（失败不影响聊天）
+  let knowledgeContext = ''
   try {
-    const provider = createProvider(providerConfig)
-    // 检索知识库内容注入分支追问（失败不影响聊天）
-    let knowledgeContext = ''
-    try {
-      knowledgeContext = await retrieveKnowledgeContext(content)
-    } catch {
-      knowledgeContext = ''
-    }
-    // 分支会话自身的对话历史（不含当前问题）：messages 只含分支自身多轮对话
-    const branchHistory = messages.value.slice(0, -1)
-    for await (const chunk of branchFollowupStream(
-      content,
-      forkMessages.value,
-      branchHistory,
-      [],
-      provider,
-      knowledgeContext,
-      { vaultPath: vaultStore.vaultPath || '' },
-    )) {
-      if (chunk.type === 'text') {
-        streamingText.value += chunk.content
-      } else if (chunk.type === 'thinking') {
-        streamingThinking.value += chunk.content
-      } else if (chunk.type === 'stop') {
-        await finalizeResponse()
-      } else if (chunk.type === 'error') {
-        error.value = chunk.content
-        isStreaming.value = false
-        streamingText.value = ''
-        streamingThinking.value = ''
-      }
-    }
-    await finalizeResponse()
-  } catch (e) {
-    error.value = `发送失败: ${e instanceof Error ? e.message : String(e)}`
-    isStreaming.value = false
-    streamingText.value = ''
-    streamingThinking.value = ''
+    knowledgeContext = await retrieveKnowledgeContext(content)
+  } catch {
+    knowledgeContext = ''
   }
+  // 分支会话自身的对话历史（不含当前问题）：baseMessages 只含分支自身多轮对话
+  const branchHistory = baseMessages.slice(0, -1)
+
+  const provider = createProvider(providerConfig)
+  chatRunner.startChat({
+    threadId: branchId.value,
+    messages: baseMessages,
+    noteRefs: [...extractedNotes.value],
+    onFinalize: async ({ messages: finalMessages, noteRefs: finalRefs }) => {
+      // 回答完成（含中止保留的半截内容）落盘到分支会话文件（仓库即真相）
+      await saveCurrentSession(finalMessages, finalRefs)
+      void maybeTriggerLearnerUpdate(finalMessages, finalRefs)
+    },
+    run: async (signal, emit) => {
+      for await (const chunk of branchFollowupStream(
+        content,
+        forkMessages.value,
+        branchHistory,
+        [],
+        provider,
+        knowledgeContext,
+        { vaultPath: vaultStore.vaultPath || '' },
+        signal,
+      )) {
+        emit(chunk)
+      }
+    },
+  })
 }
 
 function handleStop() {
-  isStreaming.value = false
+  // 交给 chat-runner 中止（已流式的内容保留并落盘；runner 不受组件卸载影响）
+  chatRunner.abort(branchId.value)
 }
 
 async function handleAddToNote(highlightedText: string) {
@@ -445,7 +461,14 @@ async function confirmAddToNote(target: AddToNoteTarget) {
 function handleRetry() {
   error.value = null
   const lastUserMessage = [...messages.value].reverse().find((message) => message.role === 'user')
-  if (lastUserMessage) void handleSend(lastUserMessage.content)
+  if (lastUserMessage) {
+    // 移除最后一条失败消息（assistant 半截或已发出的 user），再重发，避免消息重复
+    const last = messages.value[messages.value.length - 1]
+    if (last?.role === 'assistant' || last?.role === 'user') {
+      messages.value.pop()
+    }
+    void handleSend(lastUserMessage.content)
+  }
 }
 
 async function handleExtractNote(highlightedText: string, domMessageIndex: number | null = null) {
@@ -500,7 +523,6 @@ async function confirmExtract(title: string) {
     const highlightedText = extractDialog.highlightedText
     const sourceSession = await saveCurrentSession()
     if (!sourceSession) throw new Error('请先在设置中选择本地 Vault')
-
     let note = extractDialog.draft
     if (title.trim() !== extractDialog.draft.title.trim()) {
       // 用户修改了标题：用用户标题重新生成，确保描述等内容与标题一致
@@ -524,8 +546,8 @@ async function confirmExtract(title: string) {
     // 优先用划线时 DOM 定位的消息索引；文本匹配仅作回退
     const messageIndex = resolveMessageIndex(highlightedText, messages.value, extractDialog.messageIndex, 'assistant')
     // 记录划线文本，供分支会话消息中以虚线标记并跳转笔记
-    extractedNotes.value.push({ path, title: note.title, messageIndex, kind: 'note', highlight: highlightedText })
-    await saveCurrentSession()
+    pushNoteRef({ path, title: note.title, messageIndex, kind: 'note', highlight: highlightedText })
+    await saveCurrentSession(messages.value, extractedNotes.value)
     extractDialog.visible = false
     extractDialog.draft = null
     toast.success('已提炼并保存为原子笔记')
@@ -575,14 +597,14 @@ async function handleCreateBranch(highlightedText: string, domMessageIndex: numb
   }
 
   // 记录划线文本与分支引用，供分支会话消息中以虚线标记并跳转嵌套分支
-  extractedNotes.value.push({
+  pushNoteRef({
     path: nestedBranchId,
     title: branchTitle,
     messageIndex: forkMessageIndex,
     kind: 'branch',
     highlight: highlightedText,
   })
-  await saveCurrentSession()
+  await saveCurrentSession(messages.value, extractedNotes.value)
 
   await vaultStore.refreshFileTree()
   router.push({
@@ -608,6 +630,11 @@ function handleNavigate(target: string) {
     router.push({ name: 'chat', query: { thread: sessionId.value } })
   }
 }
+
+onUnmounted(() => {
+  // 组件卸载（切换会话/页面）时清理已完成的后台回答 job；进行中的 job 保留，回答继续
+  chatRunner.cleanupIdleJob(branchId.value)
+})
 </script>
 
 <style scoped>

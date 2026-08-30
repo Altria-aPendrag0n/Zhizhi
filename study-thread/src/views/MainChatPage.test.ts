@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
 import MainChatPage from './MainChatPage.vue'
 
 const { route, saveCurrentSession, chat, retrieveKnowledgeContext, routerReplace } = vi.hoisted(() => ({
@@ -71,6 +72,8 @@ async function sendMessage(wrapper: ReturnType<typeof createWrapper>) {
 
 describe('MainChatPage', () => {
   beforeEach(() => {
+    // chat-runner 为真实 Pinia store（后台回答状态全局管理），需激活 Pinia
+    setActivePinia(createPinia())
     route.query.thread = 'new_test'
     chat.mockReset()
     retrieveKnowledgeContext.mockReset()

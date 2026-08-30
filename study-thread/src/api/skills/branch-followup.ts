@@ -62,6 +62,7 @@ function serializeNotes(notes: Note[]): string {
  * @param provider - LLM 提供商
  * @param knowledgeContext - 可选的知识检索上下文（非空时拼接到 systemPrompt 之后）
  * @param toolContext - 工具执行上下文（vault 路径），支持 AI 按需读取参考资料全文
+ * @param signal - 可选的中止信号（停止按钮/切换会话时后台中止由 chat-runner 管理）
  * @returns 流式响应迭代器
  */
 export async function* branchFollowupStream(
@@ -72,6 +73,7 @@ export async function* branchFollowupStream(
   provider: LLMProvider,
   knowledgeContext?: string,
   toolContext?: ToolContext,
+  signal?: AbortSignal,
 ): AsyncIterable<StreamChunk> {
   const skill = getSkill()
   let systemPrompt = buildPrompt(skill, {
@@ -97,6 +99,7 @@ export async function* branchFollowupStream(
       toolContext: toolContext || { vaultPath: '' },
       temperature: 0.7,
       maxTokens: 4096,
+      signal,
     })) {
       yield chunk
     }
