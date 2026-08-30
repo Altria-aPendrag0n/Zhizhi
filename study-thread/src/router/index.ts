@@ -47,6 +47,21 @@ const router = createRouter({
       name: 'settings',
       component: () => import('../views/SettingsPage.vue'),
     },
+    {
+      path: '/settings/models',
+      name: 'settings-models',
+      component: () => import('../views/ModelConfigPage.vue'),
+    },
+    {
+      path: '/settings/models/official',
+      name: 'settings-models-official',
+      component: () => import('../views/OfficialModelPage.vue'),
+    },
+    {
+      path: '/settings/models/custom',
+      name: 'settings-models-custom',
+      component: () => import('../views/CustomModelPage.vue'),
+    },
   ],
 })
 

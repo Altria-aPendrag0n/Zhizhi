@@ -23,6 +23,10 @@ vi.mock('@tauri-apps/plugin-process', () => ({
   relaunch: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
+
 vi.mock('../stores/settings', () => ({
   useSettingsStore: () => ({
     activeProvider: 'openai-compat',
