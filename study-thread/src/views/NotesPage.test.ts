@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   updateReference: vi.fn().mockImplementation((meta: unknown) => Promise.resolve(meta)),
   loadReferencePreview: vi.fn().mockResolvedValue(''),
   listReviewSessions: vi.fn().mockResolvedValue([]),
+  saveNote: vi.fn().mockResolvedValue('/vault/notes/无标题笔记.md'),
 }))
 
 interface NotesPageTestGlobals {
@@ -50,6 +51,7 @@ vi.mock('../stores/notes', async () => {
       },
       loadAllNotes: state.loadAllNotes,
       deleteNote: vi.fn().mockResolvedValue(true),
+      saveNote: state.saveNote,
     }),
   }
 })
@@ -143,6 +145,8 @@ describe('NotesPage', () => {
     state.loadReferencePreview.mockClear()
     state.listReviewSessions.mockClear()
     state.listReviewSessions.mockResolvedValue([])
+    state.saveNote.mockClear()
+    state.saveNote.mockResolvedValue('/vault/notes/无标题笔记.md')
     const globals = testGlobals()
     if (globals.__notesPageRoute) globals.__notesPageRoute.query = {}
     if (globals.__notesPageVaultPath) globals.__notesPageVaultPath.value = null
@@ -384,6 +388,62 @@ describe('NotesPage', () => {
     await vi.waitFor(() => {
       expect(document.querySelector('.imd')?.textContent).toContain('从图片导入笔记')
     })
+    wrapper.unmount()
+  })
+
+  it('「新建笔记 → 空白笔记」创建空白笔记并跳转编辑', async () => {
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    state.saveNote.mockResolvedValue('/vault/notes/无标题笔记.md')
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'NoteList' }).vm.$emit('create-blank')
+    await flushPromises()
+
+    expect(state.saveNote).toHaveBeenCalledWith(
+      '/vault',
+      expect.objectContaining({ title: '无标题笔记', type: 'concept', tags: [] }),
+      '',
+      '',
+      '',
+    )
+    expect(state.routerPush).toHaveBeenCalledWith('/notes/' + encodeURIComponent('/vault/notes/无标题笔记.md'))
+    wrapper.unmount()
+  })
+
+  it('空白笔记与已有笔记重名时自动追加序号', async () => {
+    testGlobals().__notesPageVaultPath!.value = '/vault'
+    testGlobals().__notesPageVaultReady!.value = true
+    testGlobals().__notesPageNotes!.value = [{ title: '无标题笔记' }]
+    state.saveNote.mockResolvedValue('/vault/notes/无标题笔记 2.md')
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'NoteList' }).vm.$emit('create-blank')
+    await flushPromises()
+
+    expect(state.saveNote).toHaveBeenCalledWith(
+      '/vault',
+      expect.objectContaining({ title: '无标题笔记 2' }),
+      '',
+      '',
+      '',
+    )
+    wrapper.unmount()
+  })
+
+  it('未打开 Vault 时新建空白笔记给出提示', async () => {
+    testGlobals().__notesPageVaultPath!.value = null
+    testGlobals().__notesPageVaultReady!.value = true
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'NoteList' }).vm.$emit('create-blank')
+    await flushPromises()
+
+    expect(state.saveNote).not.toHaveBeenCalled()
+    expect(state.routerPush).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

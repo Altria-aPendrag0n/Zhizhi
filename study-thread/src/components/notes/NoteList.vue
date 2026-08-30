@@ -3,7 +3,12 @@
     <div class="notes-toolbar">
       <div class="toolbar-left">
         <div class="new-note-wrap">
-          <button class="new-note-btn" type="button" @click.stop="toggleCreateMenu">
+          <button
+            class="new-note-btn"
+            type="button"
+            @click.stop="toggleCreateMenu($event)"
+            :aria-expanded="createMenuVisible"
+          >
             <Plus :size="14" />
             <span>新建笔记</span>
           </button>
@@ -12,11 +17,17 @@
               v-if="createMenuVisible"
               ref="createMenuElement"
               class="new-note-menu"
+              :style="{ left: `${createMenu.x}px`, top: `${createMenu.y}px` }"
               role="menu"
               @click.stop
             >
+              <button type="button" role="menuitem" @click="requestCreateBlank">
+                <FilePlus :size="14" />
+                <span>空白笔记</span>
+              </button>
               <button type="button" role="menuitem" @click="requestCreateFromImage">
-                从图片导入
+                <Image :size="14" />
+                <span>从图片导入</span>
               </button>
             </div>
           </Teleport>
@@ -95,7 +106,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Plus } from '@lucide/vue'
+import { Plus, FilePlus, Image } from '@lucide/vue'
 import type { NoteMeta } from '../../types'
 import NoteCard from './NoteCard.vue'
 import { tagMatchesQuery } from '../../utils/pinyin-match'
@@ -111,6 +122,7 @@ const emit = defineEmits<{
   select: [path: string]
   openSource: [source: NonNullable<NoteMeta['source']>]
   delete: [path: string]
+  'create-blank': []
   'create-from-image': []
 }>()
 
@@ -120,6 +132,7 @@ const searchQuery = ref('')
 const contextMenu = ref<{ path: string; x: number; y: number } | null>(null)
 const contextMenuElement = ref<HTMLElement>()
 const createMenuVisible = ref(false)
+const createMenu = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const createMenuElement = ref<HTMLElement>()
 
 // 汇总所有笔记标签（去重排序），用于筛选输入框的提示
@@ -188,12 +201,29 @@ function requestDelete() {
   closeContextMenu()
 }
 
-function toggleCreateMenu() {
-  createMenuVisible.value = !createMenuVisible.value
+/** 打开/关闭新建笔记菜单，菜单位置跟随按钮（右下对齐），避免 fixed 元素无定位落在视口外 */
+function toggleCreateMenu(event: MouseEvent) {
+  if (createMenuVisible.value) {
+    closeCreateMenu()
+    return
+  }
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const menuWidth = 168
+  const menuHeight = 92
+  createMenu.value = {
+    x: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
+    y: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - menuHeight - 8)),
+  }
+  createMenuVisible.value = true
 }
 
 function closeCreateMenu() {
   createMenuVisible.value = false
+}
+
+function requestCreateBlank() {
+  closeCreateMenu()
+  emit('create-blank')
 }
 
 function requestCreateFromImage() {
@@ -284,6 +314,9 @@ onUnmounted(() => {
 }
 
 .new-note-menu button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
   padding: 8px 10px;
   border: 0;
@@ -293,6 +326,12 @@ onUnmounted(() => {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  color: var(--ink, #24332d);
+}
+
+.new-note-menu button svg {
+  flex-shrink: 0;
+  color: var(--ink-2, #52635d);
 }
 
 .new-note-menu button:hover {

@@ -141,7 +141,7 @@ describe('NoteList', () => {
     expect(cards[0].text()).toContain('另一篇')
   })
 
-  it('新建笔记菜单：点击「从图片导入」emit create-from-image', async () => {
+  it('新建笔记菜单：展示「空白笔记 / 从图片导入」，点击从图片导入 emit create-from-image', async () => {
     const wrapper = mount(NoteList, {
       props: { notes: [note] },
       attachTo: document.body,
@@ -149,11 +149,32 @@ describe('NoteList', () => {
 
     await wrapper.find('.new-note-btn').trigger('click')
     await nextTick()
-    expect(document.querySelector('.new-note-menu')?.textContent).toContain('从图片导入')
+    const menu = document.querySelector<HTMLElement>('.new-note-menu')
+    expect(menu?.textContent).toContain('空白笔记')
+    expect(menu?.textContent).toContain('从图片导入')
 
-    await document.querySelector<HTMLButtonElement>('.new-note-menu button')?.click()
+    const items = menu?.querySelectorAll('button') ?? []
+    const imageItem = Array.from(items).find((b) => b.textContent?.includes('从图片导入'))
+    await imageItem?.click()
     await nextTick()
     expect(wrapper.emitted('create-from-image')).toBeTruthy()
+    expect(document.querySelector('.new-note-menu')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('新建笔记菜单：点击「空白笔记」emit create-blank', async () => {
+    const wrapper = mount(NoteList, {
+      props: { notes: [note] },
+      attachTo: document.body,
+    })
+
+    await wrapper.find('.new-note-btn').trigger('click')
+    await nextTick()
+    const items = document.querySelectorAll<HTMLButtonElement>('.new-note-menu button')
+    const blankItem = Array.from(items).find((b) => b.textContent?.includes('空白笔记'))
+    await blankItem?.click()
+    await nextTick()
+    expect(wrapper.emitted('create-blank')).toBeTruthy()
     expect(document.querySelector('.new-note-menu')).toBeNull()
     wrapper.unmount()
   })

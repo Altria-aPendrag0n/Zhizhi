@@ -61,7 +61,10 @@ interface Note {
 
 - props：`notes: NoteMeta[]`、`selectedPath?`、`loading?`；emits：`select(path)`、`openSource(source)`、`delete(path)`。
 - 链式过滤：排序（updated/created/title）+ 标签筛选（逗号/空格分隔多条件，需同时满足，AND 匹配，输入框带 `datalist` 汇总所有已有标签提示）+ 关键词搜索（标题/标签）→ `filteredNotes`。
-- **新建笔记入口**：工具栏「新建笔记」按钮 → 下拉菜单「从图片导入」→ emit `create-from-image`（由 NotesPage 打开 [19 图片转笔记](./19-image-to-note.md) 的 note 模式弹窗）。
+- **新建笔记入口**：工具栏「新建笔记」按钮 → 下拉菜单（**空白笔记** / 从图片导入）：
+  - 「空白笔记」→ emit `create-blank` → NotesPage 创建默认标题「无标题笔记」（与已有笔记重名自动追加序号）并跳转详情编辑；
+  - 「从图片导入」→ emit `create-from-image` → NotesPage 打开 [19 图片转笔记](./19-image-to-note.md) 的 note 模式弹窗。
+  - 菜单为 `position: fixed` 且**按按钮位置动态定位**（跟随按钮右下对齐，视口边界自动收缩），避免 Teleport 到 body 后无定位落在视口外。
 - **单字/拼音匹配**：筛选与搜索统一走 `utils/pinyin-match.ts` 的 `tagMatchesQuery`——中文按子串匹配（输入 `虾` 命中所有含"虾"字的标签），纯字母输入按拼音匹配（全拼 `xia` / 首字母 `dsx`，经 `pinyin-pro` 转换，含 Map 缓存）。
 - **加载占位仅在 `loading && notes.length === 0` 时显示**：已有缓存笔记时立即渲染列表（后台静默刷新），避免每次进入资料库都闪现"正在加载笔记…"中间态。
 - 右键菜单 Teleport 定位（边缘 clamp）；document 级 pointerdown / Escape 关闭。

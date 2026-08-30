@@ -60,6 +60,7 @@
               @select="handleSelectNote"
               @open-source="handleOpenSource"
               @delete="handleDeleteNote"
+              @create-blank="handleCreateBlankNote"
               @create-from-image="openImageDialog('note')"
             />
           </template>
@@ -137,7 +138,7 @@ import ReferenceList from '../components/references/ReferenceList.vue'
 import ReferenceEditDialog from '../components/references/ReferenceEditDialog.vue'
 import ReviewSessionList from '../components/review/ReviewSessionList.vue'
 import { listReviewSessions, type ReviewSessionMeta } from '../utils/review-session'
-import type { ReferenceMeta } from '../types'
+import type { ReferenceMeta, ExtractedNote } from '../types'
 
 // 图片转笔记弹窗按需加载（仅在打开时解析，避免增加路由首屏加载权重）
 const ImageToMarkdownDialog = defineAsyncComponent(() => import('../components/notes/ImageToMarkdownDialog.vue'))
@@ -284,6 +285,38 @@ function openImageDialog(mode: 'note' | 'reference', reference: ReferenceMeta | 
   imageDialogMode.value = mode
   imageDialogReference.value = reference
   imageDialogVisible.value = true
+}
+
+/** 新建空白笔记：默认标题「无标题笔记」，重名时追加序号，创建后跳转编辑 */
+async function handleCreateBlankNote() {
+  const vaultPath = vaultStore.vaultPath
+  if (!vaultPath) {
+    toast.error('请先打开 Vault 再新建笔记')
+    return
+  }
+  let title = '无标题笔记'
+  const existing = new Set(noteStore.notes.map((n) => n.title))
+  let seq = 2
+  while (existing.has(title)) {
+    title = `无标题笔记 ${seq}`
+    seq++
+  }
+  const blankNote: ExtractedNote = {
+    title,
+    description: '',
+    proposition: '',
+    explanation: '',
+    type: 'concept',
+    tags: [],
+    confidence: 0.5,
+  }
+  const path = await noteStore.saveNote(vaultPath, blankNote, '', '', '')
+  if (!path) {
+    toast.error('创建笔记失败')
+    return
+  }
+  toast.success('空白笔记已创建')
+  router.push(`/notes/${encodeURIComponent(path)}`)
 }
 
 function handleImageDialogClose() {
