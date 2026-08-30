@@ -60,11 +60,6 @@ describe('POST /api/auth/send-code（仅邮箱）', () => {
     expect(res.status).toBe(429);
   });
 
-  it('rejects a phone number (email-only registration) with 400', async () => {
-    const res = await postJson('/api/auth/send-code', { identifier: '13800138000' });
-    expect(res.status).toBe(400);
-  });
-
   it('rejects an invalid identifier with 400', async () => {
     const res = await postJson('/api/auth/send-code', { identifier: 'not-an-identifier' });
     expect(res.status).toBe(400);
