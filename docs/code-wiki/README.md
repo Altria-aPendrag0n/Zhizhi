@@ -42,6 +42,12 @@
 d:\work\Zhizhi\
 ├── docs\                        # 项目文档（本 Code Wiki 位于 docs/code-wiki/）
 ├── progress.json                # 开发进度追踪
+├── server\                      # 官方 API 服务端（Phase 1：账号体系，独立 Node 包）
+│   ├── src\db\                  # SQLite schema / 建表脚本（Drizzle + better-sqlite3）
+│   ├── src\services\            # verify-code / jwt / api-key / auth 业务编排
+│   ├── src\middleware\          # Bearer 鉴权 / 内存限流
+│   ├── src\routes\              # /api/auth/* 与 /api/me
+│   └── test\                    # vitest（4 文件 30 例）
 └── study-thread\                # 应用主体
     ├── public\models\           # 内置离线资源：embedding 模型(ONNX) + ort wasm
     ├── src\                     # Vue 3 前端
@@ -164,6 +170,7 @@ d:\work\Zhizhi\
 | 18 | 调试日志系统 | [18-debug-logging.md](./18-debug-logging.md) | `src/utils/logger.ts`、`src/views/SettingsPage.vue`（调试日志区块） | 统一运行时日志（console + localStorage 环形缓冲）与设置页查看/清空面板 |
 | 19 | 图片转笔记模块 | [19-image-to-note.md](./19-image-to-note.md) | `src/api/skills/image-to-note.ts`、`src/utils/image-compress.ts`、`src/components/notes/ImageToMarkdownDialog.vue` | 多模态图片识别为 Markdown（含表格还原）：三入口（新建笔记/编辑器导入/参考资料识别）+ 独立转笔记模型配置 |
 | 20 | 设置模块 | [20-settings-module.md](./20-settings-module.md) | `src/views/SettingsPage.vue`、`src/views/ModelConfigPage.vue`、`src/views/OfficialModelPage.vue`、`src/views/CustomModelPage.vue` | 设置拆分：模型配置独立页面（知枝官方 API 骨架 / 自定义模型），总览页保留偏好/日志/关于 |
+| 21 | 登录系统服务端 | [21-auth-server.md](./21-auth-server.md) | `server/`（独立 Node 包：`src/db/`、`src/services/`、`src/middleware/`、`src/routes/`） | 官方 API 服务端 Phase 1：全量数据库 schema + 验证码登录/刷新/登出/me 接口（Hono + Drizzle + SQLite） |
 
 ---
 
