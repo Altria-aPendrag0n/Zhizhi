@@ -84,6 +84,7 @@ import { getEmbeddingEngine } from './embedding/engine'
 import { useVaultStore } from './stores/vault'
 import { useSessionStore } from './stores/session'
 import { useNoteStore } from './stores/notes'
+import { useAuthStore } from './stores/auth'
 import type { SessionTreeNode } from './utils/session-tree'
 import { checkForUpdate, type AppUpdate } from './utils/updater'
 
@@ -94,6 +95,7 @@ const busyStore = useBusyStore()
 const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
+const authStore = useAuthStore()
 
 const defaultProjects: Project[] = [
   { id: '1', name: '知枝学习' },
@@ -495,6 +497,8 @@ onMounted(() => {
   updateViewport()
   window.addEventListener('resize', updateViewport)
   vaultStore.restoreLastVault().catch(() => {})
+  // 启动静默续期：钥匙串有 refresh_token 则恢复官方登录会话；无/失败不打扰用户
+  authStore.restore().catch(() => {})
   const engine = getEmbeddingEngine()
   engine.initialize()
     .then(() => {

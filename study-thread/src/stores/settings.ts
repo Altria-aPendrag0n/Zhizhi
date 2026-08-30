@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ProviderType, ProviderConfig, ReviewAlgorithm } from '../types'
+import { useAuthStore } from './auth'
 
 const STORAGE_KEY = 'study-thread-settings'
 const RECENT_VAULTS_KEY = 'study-thread-recent-vaults'
@@ -21,6 +22,14 @@ export const useSettingsStore = defineStore('settings', () => {
   const visionApiKey = ref('')
   const visionModel = ref('glm-4v-flash')
   const recentVaults = ref<string[]>([])
+  /** 知枝官方服务地址默认值：发布包注入生产域名，开发回环；可用 VITE_OFFICIAL_API_URL 覆盖（如自托管/灰度） */
+  const defaultOfficialApiUrl = import.meta.env.PROD ? 'https://api.zhizhi.app' : 'http://127.0.0.1:8787'
+  /** 知枝官方服务地址（设置页可改；非敏感，可明文持久化） */
+  const officialApiBaseUrl = ref(import.meta.env.VITE_OFFICIAL_API_URL || defaultOfficialApiUrl)
+  /** 知枝官方 API 是否启用（仅内存，由 auth store 登录/登出切换，不持久化） */
+  const officialApiEnabled = ref(false)
+  /** 官方 API 使用的模型（Phase 2 网关定档后随套餐/配置动态下发） */
+  const officialModel = ref('glm-4.7-flash')
 
   function saveSettings() {
     const data = {
@@ -36,6 +45,8 @@ export const useSettingsStore = defineStore('settings', () => {
       visionBaseUrl: visionBaseUrl.value,
       visionApiKey: visionApiKey.value,
       visionModel: visionModel.value,
+      officialApiBaseUrl: officialApiBaseUrl.value,
+      officialModel: officialModel.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   }
@@ -57,6 +68,8 @@ export const useSettingsStore = defineStore('settings', () => {
         visionBaseUrl.value = data.visionBaseUrl || 'https://open.bigmodel.cn/api/paas'
         visionApiKey.value = data.visionApiKey || ''
         visionModel.value = data.visionModel || 'glm-4v-flash'
+        officialApiBaseUrl.value = data.officialApiBaseUrl || import.meta.env.VITE_OFFICIAL_API_URL || defaultOfficialApiUrl
+        officialModel.value = data.officialModel || 'glm-4.7-flash'
       } catch {
         // 解析失败则使用默认值
       }
@@ -81,6 +94,16 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function getProviderConfig(): ProviderConfig {
+    // 官方 API 启用时优先返回官方配置（apiKey 取自 auth store 内存，来自钥匙串，不落盘）
+    if (officialApiEnabled.value) {
+      return {
+        type: 'openai-compat',
+        apiKey: useAuthStore().apiKey,
+        baseUrl: officialApiBaseUrl.value.trim() || 'http://127.0.0.1:8787',
+        model: officialModel.value,
+        enableWebSearch: enableWebSearch.value,
+      }
+    }
     return {
       type: activeProvider.value,
       apiKey: apiKey.value,
@@ -121,6 +144,9 @@ export const useSettingsStore = defineStore('settings', () => {
     visionApiKey,
     visionModel,
     recentVaults,
+    officialApiBaseUrl,
+    officialApiEnabled,
+    officialModel,
     saveSettings,
     loadSettings,
     addRecentVault,

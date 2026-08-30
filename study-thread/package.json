@@ -36,6 +36,7 @@
     "mermaid": "^11.16.1",
     "pinia": "^4.0.2",
     "pinyin-pro": "^3.28.2",
+    "tauri-plugin-keyring-api": "^0.1.1",
     "vue": "^3.5.13",
     "vue-router": "^4.6.4"
   },

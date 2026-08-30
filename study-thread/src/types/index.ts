@@ -160,6 +160,25 @@ export interface ProviderConfig {
   enableWebSearch?: boolean
 }
 
+// 知枝官方账号（与服务端 /api/me 响应对齐）
+export interface OfficialPlan {
+  id: string
+  name: string
+  price_cents: number
+  token_quota: number
+  model_group: string | null
+}
+
+export interface OfficialUser {
+  id: string
+  identifier: string
+  plan_id: string | null
+  plan_expires_at: number | null
+  quota_tokens: number
+  api_key_created: boolean
+  plan: OfficialPlan | null
+}
+
 // Stream 相关类型
 export interface StreamChunk {
   type: 'text' | 'stop' | 'error' | 'thinking'

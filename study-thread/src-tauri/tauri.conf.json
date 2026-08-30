@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' https://api.anthropic.com https://api.openai.com https://api.deepseek.com https://dashscope.aliyuncs.com https://open.bigmodel.cn http://localhost:11434 https://huggingface.co https://hf-mirror.com https://cdn.jsdelivr.net; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' https: http://127.0.0.1:8787 https://api.anthropic.com https://api.openai.com https://api.deepseek.com https://dashscope.aliyuncs.com https://open.bigmodel.cn http://localhost:11434 https://huggingface.co https://hf-mirror.com https://cdn.jsdelivr.net; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     }
   },
   "plugins": {

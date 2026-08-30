@@ -8,6 +8,9 @@
     "process:default",
     "opener:default",
     "dialog:default",
-    "updater:default"
+    "updater:default",
+    "keyring:allow-get-password",
+    "keyring:allow-set-password",
+    "keyring:allow-delete-password"
   ]
 }

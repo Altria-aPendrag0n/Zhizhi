@@ -10,31 +10,64 @@
       <p class="settings-page__subtitle">开箱即用的云服务：登录账号购买套餐后自动启用，API Key 对用户不可见</p>
     </div>
 
-    <!-- 登录引导 -->
+    <!-- 登录引导 / 已登录态 -->
     <section class="card-block">
       <h3 class="card-block__title">登录知枝账号</h3>
-      <p class="form-hint">
-        登录后即可购买套餐并自动启用官方 API。无需手动配置任何 Key：官方密钥由服务端下发并安全存储在系统钥匙串中，应用自动使用。
-      </p>
 
-      <div class="login-form">
-        <div class="form-group">
-          <label class="form-label" for="account">账号（邮箱 / 手机号）</label>
-          <input id="account" v-model="account" type="text" class="form-input" placeholder="you@example.com" />
-        </div>
+      <!-- 未登录：登录表单 -->
+      <template v-if="!authStore.isOfficialActive">
+        <p class="form-hint">
+          登录后即可购买套餐并自动启用官方 API。无需手动配置任何 Key：官方密钥由服务端下发并安全存储在系统钥匙串中，应用自动使用。
+        </p>
 
-        <div class="form-group">
-          <label class="form-label" for="verify-code">验证码</label>
-          <div class="verify-row">
-            <input id="verify-code" v-model="verifyCode" type="text" class="form-input" placeholder="6 位验证码" />
-            <button class="btn btn-secondary" @click="handleNotReady">获取验证码</button>
+        <div class="login-form">
+          <div class="form-group">
+            <label class="form-label" for="account">账号（邮箱 / 手机号）</label>
+            <input id="account" v-model="account" type="text" class="form-input" placeholder="you@example.com" :disabled="isBusy" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="verify-code">验证码</label>
+            <div class="verify-row">
+              <input id="verify-code" v-model="verifyCode" type="text" class="form-input" placeholder="6 位验证码" :disabled="isBusy" />
+              <button class="btn btn-secondary" :disabled="countdown > 0 || isBusy" @click="handleSendCode">
+                {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" :disabled="isBusy" @click="handleLogin">
+              {{ isBusy ? '登录中…' : '登录' }}
+            </button>
           </div>
         </div>
+      </template>
 
-        <div class="form-actions">
-          <button class="btn btn-primary" @click="handleNotReady">登录</button>
+      <!-- 已登录：账号与套餐状态 -->
+      <template v-else>
+        <div class="account-card">
+          <div class="account-card__row">
+            <span class="account-card__label">已登录账号</span>
+            <span class="account-card__value">{{ authStore.user?.identifier ?? '—' }}</span>
+          </div>
+          <div class="account-card__row">
+            <span class="account-card__label">当前套餐</span>
+            <span class="account-card__value">{{ authStore.user?.plan?.name ?? '未开通' }}</span>
+          </div>
+          <div class="account-card__row">
+            <span class="account-card__label">剩余额度</span>
+            <span class="account-card__value">{{ authStore.user ? formatTokens(authStore.user.quota_tokens) : '—' }}</span>
+          </div>
+          <p class="form-hint account-card__hint">
+            官方 API 已自动启用：Key 安全存储于系统钥匙串，对用户不可见。用量实时扣减。
+          </p>
+          <div class="form-actions">
+            <button class="btn btn-secondary" @click="handleLogout">退出登录</button>
+            <button class="btn btn-secondary" @click="goBack">完成</button>
+          </div>
         </div>
-      </div>
+      </template>
     </section>
 
     <!-- 套餐预览 -->
@@ -67,25 +100,97 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft } from '@lucide/vue'
 import { useToast } from '../composables/useToast'
+import { useAuthStore } from '../stores/auth'
+import { ZhizhiApiError } from '../api/zhizhi-api'
 
 const router = useRouter()
 const toast = useToast()
+const authStore = useAuthStore()
+
+const account = ref('')
+const verifyCode = ref('')
+const countdown = ref(0)
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+const isBusy = computed(() => authStore.status === 'authenticating')
 
 function goBack() {
   router.push({ name: 'settings-models' })
 }
 
-const account = ref('')
-const verifyCode = ref('')
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M tokens`
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K tokens`
+  return `${tokens} tokens`
+}
 
-/** 账号服务尚未上线：所有登录/购买交互统一提示 */
+function messageOf(err: unknown): string {
+  if (err instanceof ZhizhiApiError) return err.message
+  return err instanceof Error ? err.message : '操作失败，请稍后再试'
+}
+
+function startCountdown(seconds: number) {
+  countdown.value = seconds
+  if (countdownTimer) clearInterval(countdownTimer)
+  countdownTimer = setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0 && countdownTimer) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
+
+async function handleSendCode() {
+  const identifier = account.value.trim()
+  if (!identifier) {
+    toast.error('请先输入账号（邮箱或手机号）')
+    return
+  }
+  if (countdown.value > 0 || isBusy.value) return
+  try {
+    const seconds = await authStore.sendCode(identifier)
+    startCountdown(seconds)
+    toast.success('验证码已发送，请查收（开发阶段见服务端日志）')
+  } catch (err) {
+    toast.error(messageOf(err))
+  }
+}
+
+async function handleLogin() {
+  const identifier = account.value.trim()
+  const code = verifyCode.value.trim()
+  if (!identifier || !code) {
+    toast.error('请输入账号与验证码')
+    return
+  }
+  try {
+    await authStore.login(identifier, code)
+    toast.success('登录成功，官方 API 已启用')
+  } catch (err) {
+    toast.error(messageOf(err))
+  }
+}
+
+async function handleLogout() {
+  await authStore.logout()
+  toast.success('已退出登录')
+  account.value = ''
+  verifyCode.value = ''
+}
+
+/** 套餐购买（Phase 2 接入）：当前提示未上线 */
 function handleNotReady() {
   toast.error('账号服务尚未上线，敬请期待')
 }
+
+onUnmounted(() => {
+  if (countdownTimer) clearInterval(countdownTimer)
+})
 
 const plans = [
   {
@@ -226,6 +331,10 @@ const plans = [
   border-color: var(--brand);
 }
 
+.form-input:disabled {
+  opacity: 0.6;
+}
+
 .verify-row {
   display: flex;
   gap: 8px;
@@ -241,6 +350,37 @@ const plans = [
   margin-top: 4px;
 }
 
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.account-card__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.account-card__label {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.account-card__value {
+  font-size: 13px;
+  font-weight: 590;
+  color: var(--ink);
+}
+
+.account-card__hint {
+  margin: 6px 0 0;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -252,6 +392,11 @@ const plans = [
   font-weight: 590;
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn-primary {

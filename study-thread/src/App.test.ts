@@ -70,6 +70,16 @@ vi.mock('./stores/notes', () => ({
   }),
 }))
 
+vi.mock('./stores/auth', () => ({
+  useAuthStore: () => ({
+    status: 'anonymous',
+    user: null,
+    isOfficialActive: false,
+    restore: vi.fn().mockResolvedValue(undefined),
+    logout: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 const SAMPLE_SESSIONS = [
   { id: 'sess_1', title: '费曼学习法拆解', created: '2026-08-12T02:30:00.000Z', filePath: '/vault/sessions/sess_1.md' },
   { id: 'sess_2', title: '工作记忆的边界', created: '2026-08-10T09:15:00.000Z', filePath: '/vault/sessions/sess_2.md' },
