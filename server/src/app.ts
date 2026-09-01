@@ -4,6 +4,7 @@ import type { AuthVariables } from './middleware/auth.js';
 import type { Notifier } from './services/notifier.js';
 import { createNotifier } from './services/notifier.js';
 import { createAuthRouter } from './routes/auth.js';
+import { gatewayRouter } from './routes/gateway.js';
 import { keysRouter } from './routes/keys.js';
 import { meRouter } from './routes/me.js';
 
@@ -36,6 +37,7 @@ export function createApp(opts: { notifier?: Notifier } = {}): Hono<{ Variables:
   app.route('/api/auth', createAuthRouter({ notifier }));
   app.route('/api', keysRouter);
   app.route('/api', meRouter);
+  app.route('/', gatewayRouter);
 
   app.onError((err, c) => {
     const isProd = process.env.NODE_ENV === 'production';
