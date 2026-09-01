@@ -3,6 +3,7 @@ import { Hono, type Context } from 'hono';
 import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import { DB_UI_HTML } from './db-ui-page.js';
+import { createApp } from './app.js';
 
 type Sqlite = Database.Database;
 
@@ -199,7 +200,28 @@ if (isMain) {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   const port = Number(process.env.DB_UI_PORT ?? 8790);
-  serve({ fetch: createDbUiApp(sqlite).fetch, hostname: '127.0.0.1', port }, (info) => {
+  const uiServer = serve({ fetch: createDbUiApp(sqlite).fetch, hostname: '127.0.0.1', port }, (info) => {
     console.log(`[db-ui] SQLite 控制台已启动: http://127.0.0.1:${info.port}（数据库: ${dbPath}）`);
   });
+  uiServer.on('error', (err: NodeJS.ErrnoException) => {
+    const reason = err.code === 'EADDRINUSE' ? `端口 ${port} 已被占用` : err.message;
+    console.error(`[db-ui] 控制台启动失败: ${reason}`);
+    process.exit(1);
+  });
+
+  if (process.env.JWT_SECRET) {
+    const apiPort = Number(process.env.PORT ?? 8787);
+    const apiServer = serve({ fetch: createApp().fetch, port: apiPort }, (info) => {
+      console.log(`[db-ui] 主服务已自动启动: http://localhost:${info.port}`);
+    });
+    apiServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`[db-ui] 端口 ${apiPort} 已被占用（主服务可能已在运行），跳过自动启动。`);
+      } else {
+        console.error(`[db-ui] 主服务启动失败: ${err.message}`);
+      }
+    });
+  } else {
+    console.error('[db-ui] 未设置 JWT_SECRET，主服务未自动启动（仅数据库控制台可用）。');
+  }
 }

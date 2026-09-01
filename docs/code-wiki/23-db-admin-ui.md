@@ -4,7 +4,8 @@
 
 ## 定位与边界
 
-- **独立进程**，与 `npm run dev` 的主服务（8787）完全分离：`npm run db:ui` 启动，仅监听 `127.0.0.1:8790`（`DB_UI_PORT` 可覆盖），零生产暴露面。
+- **同进程双服务**：`npm run db:ui` 一次启动两个服务——SQLite 控制台（仅 `127.0.0.1:8790`，`DB_UI_PORT` 可覆盖）+ 主 API（复用 `createApp()`，`PORT ?? 8787`），省去另开终端跑 `npm run dev`；开发便利工具，零生产暴露面。
+- **优雅降级**：`JWT_SECRET` 未设置 → 打印警告、仅启动控制台；主 API 端口被占用（如 `npm run dev` 已在运行）→ 警告并跳过，控制台照常可用；控制台端口被占用 → 报错退出（exit 1）。
 - 直接用 better-sqlite3 打开同一数据库文件（WAL 模式允许与主服务并发读写）；`DB_PATH` 环境变量可指定其他库文件。
 - 纯本地单文件 UI（`DB_UI_HTML` 内嵌于 TS 模板字符串，客户端 JS 全部字符串拼接、不含反引号与 `${`），零外部依赖、完全离线。
 
@@ -48,6 +49,7 @@
 
 ## 使用与验证
 
-- 启动：`cd server && npm run db:ui` → 浏览器打开 http://127.0.0.1:8790
+- 启动：`cd server && npm run db:ui` → 控制台 http://127.0.0.1:8790 + 主服务自动启动（需 `JWT_SECRET`，如 `[db-ui] 主服务已自动启动: http://localhost:8787`）
+- 降级验证：不带 `JWT_SECRET` 启动 → 警告且仅控制台可用；另开 `npm run dev` 后再启动 → 8787 被占用的警告且控制台正常
 - 测试：`npm test`（含 `test/db-ui.test.ts` 19 例，全套 58 例）
 - 类型：`npm run build`（tsc 严格检查通过）
