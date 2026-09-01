@@ -7,6 +7,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { gatewayRouter } from './routes/gateway.js';
 import { keysRouter } from './routes/keys.js';
 import { meRouter } from './routes/me.js';
+import { usageRouter } from './routes/usage.js';
 
 /** 生产环境 CORS 白名单：Tauri WebView 的 origin（Windows: tauri://localhost；macOS/Linux: http(s)://tauri.localhost）+ 开发服务器 */
 const DEFAULT_CORS_ORIGINS = [
@@ -37,6 +38,7 @@ export function createApp(opts: { notifier?: Notifier } = {}): Hono<{ Variables:
   app.route('/api/auth', createAuthRouter({ notifier }));
   app.route('/api', keysRouter);
   app.route('/api', meRouter);
+  app.route('/api', usageRouter);
   app.route('/', gatewayRouter);
 
   app.onError((err, c) => {
