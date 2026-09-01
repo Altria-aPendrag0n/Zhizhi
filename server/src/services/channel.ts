@@ -49,12 +49,12 @@ export function orderChannelsByWeight<T extends { weight: number }>(rows: T[], r
   return ordered;
 }
 
-/** 按模型与用户分组筛选启用渠道并解密上游 Key，返回故障转移候选序列 */
-export async function resolveChannelCandidates(model: string, group: string): Promise<ChannelCandidate[]> {
+/** 按模型与用户分组筛选启用渠道并解密上游 Key，返回故障转移候选序列（rng 可注入用于测试） */
+export async function resolveChannelCandidates(model: string, group: string, rng: () => number = Math.random): Promise<ChannelCandidate[]> {
   const db = getDb();
   const rows = await db.select().from(channels).where(eq(channels.status, 1));
   const matched = rows.filter((row) => channelSupportsModel(row, model) && channelMatchesGroup(row, group));
-  return orderChannelsByWeight(matched).map((row) => ({
+  return orderChannelsByWeight(matched, rng).map((row) => ({
     id: row.id,
     name: row.name,
     base_url: row.base_url.replace(/\/+$/, ''),
