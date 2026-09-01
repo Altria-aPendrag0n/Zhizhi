@@ -14,6 +14,10 @@ export class HttpError extends Error {
   }
 }
 
+export function likeEscape(term: string): string {
+  return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 function all<T>(sqlite: Sqlite, sql: string, ...params: unknown[]): T[] {
   return sqlite.prepare(sql).all(...params) as T[];
 }
@@ -261,5 +265,240 @@ export function registerAdminRoutes(app: Hono, sqlite: Sqlite): void {
     } finally {
       clearTimeout(timer);
     }
+  });
+
+  // ===== 子 Key 管理 =====
+
+  app.get('/api/admin/keys', (c) => {
+    const search = (c.req.query('search') ?? '').trim();
+    const userId = (c.req.query('userId') ?? '').trim();
+    const status = (c.req.query('status') ?? '').trim();
+
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (search) {
+      where.push('(k.key_preview LIKE ? OR k.name LIKE ? OR u.username LIKE ? OR u.identifier LIKE ?)');
+      const like = `%${likeEscape(search)}%`;
+      params.push(like, like, like, like);
+    }
+    if (userId) {
+      where.push('k.user_id = ?');
+      params.push(userId);
+    }
+    if (status === 'active') {
+      where.push('k.revoked_at IS NULL AND k.enabled = 1');
+    } else if (status === 'revoked') {
+      where.push('k.revoked_at IS NOT NULL');
+    } else if (status === 'disabled') {
+      where.push('k.revoked_at IS NULL AND k.enabled = 0');
+    }
+
+    const sqlText = `
+      SELECT k.id, k.user_id, k.key_preview, k.name, k.purpose, k.enabled, k.quota_tokens, k.used_tokens,
+             k.expired_at, k.allowed_models, k.rpm_limit, k.created_at, k.last_used_at, k.revoked_at,
+             u.username, u.identifier
+      FROM api_keys k
+      LEFT JOIN users u ON u.id = k.user_id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY k.created_at DESC
+      LIMIT 500`;
+    return c.json({ keys: all(sqlite, sqlText, ...params) });
+  });
+
+  app.patch('/api/admin/keys/:id', async (c) => {
+    const id = c.req.param('id');
+    const exists = get<{ id: string }>(sqlite, 'SELECT id FROM api_keys WHERE id = ?', id);
+    if (!exists) {
+      throw new HttpError(404, '子 Key 不存在：' + id);
+    }
+    const body = await readJsonObject(c);
+    const sets: string[] = [];
+    const params: unknown[] = [];
+
+    const name = optionalString(body, 'name', 64);
+    if (name !== undefined) {
+      sets.push('name = ?');
+      params.push(name);
+    }
+    if (body.enabled !== undefined && body.enabled !== '') {
+      const enabled = Number(body.enabled);
+      if (enabled !== 0 && enabled !== 1) {
+        throw new HttpError(400, 'enabled 只允许 0 或 1');
+      }
+      sets.push('enabled = ?');
+      params.push(enabled);
+    }
+    for (const field of ['quota_tokens', 'rpm_limit', 'expired_at'] as const) {
+      if (body[field] !== undefined) {
+        if (body[field] === null || body[field] === '') {
+          sets.push(`${field} = NULL`);
+        } else {
+          const num = Number(body[field]);
+          if (!Number.isFinite(num)) {
+            throw new HttpError(400, `字段必须是数字或 null：${field}`);
+          }
+          sets.push(`${field} = ?`);
+          params.push(Math.trunc(num));
+        }
+      }
+    }
+    if (body.allowed_models !== undefined) {
+      if (body.allowed_models === null || body.allowed_models === '') {
+        sets.push('allowed_models = NULL');
+      } else if (typeof body.allowed_models === 'string') {
+        sets.push('allowed_models = ?');
+        params.push(body.allowed_models.trim());
+      } else {
+        throw new HttpError(400, 'allowed_models 必须是字符串或 null');
+      }
+    }
+
+    if (sets.length === 0) {
+      throw new HttpError(400, '没有需要更新的字段');
+    }
+    sqlite.prepare(`UPDATE api_keys SET ${sets.join(', ')} WHERE id = ?`).run(...params, id);
+    return c.json({ ok: true });
+  });
+
+  app.delete('/api/admin/keys/:id', (c) => {
+    const id = c.req.param('id');
+    const row = get<{ revoked_at: number | null }>(sqlite, 'SELECT revoked_at FROM api_keys WHERE id = ?', id);
+    if (!row) {
+      throw new HttpError(404, '子 Key 不存在：' + id);
+    }
+    if (row.revoked_at === null) {
+      sqlite.prepare('UPDATE api_keys SET revoked_at = ?, enabled = 0 WHERE id = ?').run(Date.now(), id);
+    }
+    return c.json({ ok: true });
+  });
+
+  // ===== 用户管理 =====
+
+  app.get('/api/admin/users', (c) => {
+    const search = (c.req.query('search') ?? '').trim();
+    const where = search ? 'WHERE u.username LIKE ? OR u.identifier LIKE ?' : '';
+    const like = `%${likeEscape(search)}%`;
+    const rows = all(
+      sqlite,
+      `SELECT u.id, u.identifier, u.username, u.plan_id, u.plan_expires_at, u.quota_tokens, u.created_at,
+              p.name AS plan_name, p.model_group AS plan_model_group,
+              (SELECT COUNT(*) FROM api_keys k WHERE k.user_id = u.id AND k.revoked_at IS NULL) AS active_keys,
+              (SELECT COALESCE(SUM(k.used_tokens), 0) FROM api_keys k WHERE k.user_id = u.id) AS used_tokens
+       FROM users u
+       LEFT JOIN plans p ON p.id = u.plan_id
+       ${where}
+       ORDER BY u.created_at DESC
+       LIMIT 500`,
+      ...(search ? [like, like] : []),
+    );
+    return c.json({ users: rows });
+  });
+
+  app.post('/api/admin/users/:id/quota', async (c) => {
+    const id = c.req.param('id');
+    const row = get<{ quota_tokens: number }>(sqlite, 'SELECT quota_tokens FROM users WHERE id = ?', id);
+    if (!row) {
+      throw new HttpError(404, '用户不存在：' + id);
+    }
+    const body = await readJsonObject(c);
+    let next: number;
+    if (body.set !== undefined && body.set !== '') {
+      const num = Number(body.set);
+      if (!Number.isFinite(num) || num < 0) {
+        throw new HttpError(400, 'set 必须是非负数字');
+      }
+      next = Math.trunc(num);
+    } else if (body.delta !== undefined && body.delta !== '') {
+      const num = Number(body.delta);
+      if (!Number.isFinite(num) || !Number.isInteger(num)) {
+        throw new HttpError(400, 'delta 必须是整数');
+      }
+      next = row.quota_tokens + num;
+    } else {
+      throw new HttpError(400, '缺少 delta 或 set 字段');
+    }
+    sqlite.prepare('UPDATE users SET quota_tokens = ?, updated_at = ? WHERE id = ?').run(next, Date.now(), id);
+    return c.json({ quota_tokens: next });
+  });
+
+  // ===== 总览统计 =====
+
+  app.get('/api/admin/overview', (c) => {
+    const days = clampInt({ days: c.req.query('days') }, 'days', 1, 90, 7);
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const todayStart = midnight.getTime();
+
+    const usageTotals = (sinceTs: number) =>
+      get<{ requests: number; tokens: number; cost_cents: number }>(
+        sqlite,
+        `SELECT COUNT(*) AS requests,
+                COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
+                COALESCE(SUM(cost_cents), 0) AS cost_cents
+         FROM usage_logs WHERE created_at >= ?`,
+        sinceTs,
+      )!;
+
+    const daily = all(
+      sqlite,
+      `SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day,
+              COUNT(*) AS requests,
+              COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
+              COALESCE(SUM(cost_cents), 0) AS cost_cents
+       FROM usage_logs WHERE created_at >= ?
+       GROUP BY day ORDER BY day DESC`,
+      since,
+    );
+
+    const topModels = all(
+      sqlite,
+      `SELECT model, COUNT(*) AS requests,
+              COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
+              COALESCE(SUM(cost_cents), 0) AS cost_cents
+       FROM usage_logs WHERE created_at >= ?
+       GROUP BY model ORDER BY tokens DESC LIMIT 10`,
+      since,
+    );
+
+    const topUsers = all(
+      sqlite,
+      `SELECT u.id, u.username, u.identifier,
+              COUNT(*) AS requests,
+              COALESCE(SUM(l.prompt_tokens + l.completion_tokens), 0) AS tokens,
+              COALESCE(SUM(l.cost_cents), 0) AS cost_cents
+       FROM usage_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       WHERE l.created_at >= ?
+       GROUP BY l.user_id ORDER BY tokens DESC LIMIT 10`,
+      since,
+    );
+
+    const quality = get<{ estimated: number; aborted: number }>(
+      sqlite,
+      `SELECT COALESCE(SUM(estimated), 0) AS estimated,
+               SUM(CASE WHEN status = 'aborted' THEN 1 ELSE 0 END) AS aborted
+       FROM usage_logs WHERE created_at >= ?`,
+      since,
+    )!;
+
+    return c.json({
+      cards: {
+        users_total: Number(get<{ c: number }>(sqlite, 'SELECT COUNT(*) AS c FROM users')!.c),
+        keys_active: Number(get<{ c: number }>(sqlite, 'SELECT COUNT(*) AS c FROM api_keys WHERE revoked_at IS NULL AND enabled = 1')!.c),
+        channels_enabled: Number(get<{ c: number }>(sqlite, 'SELECT COUNT(*) AS c FROM channels WHERE status = 1')!.c),
+        channels_total: Number(get<{ c: number }>(sqlite, 'SELECT COUNT(*) AS c FROM channels')!.c),
+        quota_sum: Number(get<{ c: number }>(sqlite, 'SELECT COALESCE(SUM(quota_tokens), 0) AS c FROM users')!.c),
+      },
+      today: usageTotals(todayStart),
+      window: {
+        days,
+        totals: usageTotals(since),
+        quality: { estimated: Number(quality.estimated), aborted: Number(quality.aborted ?? 0) },
+        daily,
+        top_models: topModels,
+        top_users: topUsers,
+      },
+    });
   });
 }

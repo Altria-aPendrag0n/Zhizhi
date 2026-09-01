@@ -188,3 +188,157 @@ describe('DELETE /api/admin/channels/:id', () => {
     expect((await app.request(`/api/admin/channels/${id}`, { method: 'DELETE' })).status).toBe(404);
   });
 });
+
+// ===== A2：用户 / 子 Key / 总览 =====
+
+const USER_A = 'user-aaaa';
+const USER_B = 'user-bbbb';
+const KEY_A = 'key-aaaa';
+const KEY_B = 'key-bbbb';
+
+beforeAll(() => {
+  const now = Date.now();
+  sqlite
+    .prepare(
+      'INSERT INTO plans (id, name, price_cents, token_quota, model_group) VALUES (?,?,?,?,?)',
+    )
+    .run('plan-lite', '轻量', 990, 1_000_000, 'lite');
+  const insertUser = sqlite.prepare(
+    'INSERT INTO users (id, identifier, username, password_hash, plan_id, plan_expires_at, quota_tokens, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+  );
+  insertUser.run(USER_A, 'a@example.com', 'alice2026', 'hash', 'plan-lite', null, 1_000, now, now);
+  insertUser.run(USER_B, 'b@example.com', 'bob2026', 'hash', null, null, 0, now + 1, now + 1);
+  const insertKey = sqlite.prepare(
+    `INSERT INTO api_keys (id, user_id, key_hash, key_preview, name, purpose, enabled, quota_tokens, used_tokens, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  );
+  insertKey.run(KEY_A, USER_A, 'hash-a', 'sk-zhizhi-AAAA…', '主力对话', 'chat', 1, -1, 150, now);
+  insertKey.run(KEY_B, USER_B, 'hash-b', 'sk-zhizhi-BBBB…', '视觉转笔记', 'vision', 1, -1, 0, now + 2);
+
+  const insertLog = sqlite.prepare(
+    `INSERT INTO usage_logs (id, user_id, api_key_id, channel_id, model, prompt_tokens, completion_tokens, cost_cents, status, latency_ms, estimated, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+  );
+  insertLog.run('log-1', USER_A, KEY_A, 'ch-x', 'glm-5', 100, 200, 50, 'success', 300, 0, now);
+  insertLog.run('log-2', USER_A, KEY_A, 'ch-x', 'glm-5', 50, 25, 10, 'aborted', 100, 1, now - 3 * 24 * 60 * 60 * 1000);
+  insertLog.run('log-3', USER_A, KEY_A, 'ch-x', 'deepseek-v4-flash', 10, 5, 1, 'success', 80, 0, now);
+});
+
+describe('GET /api/admin/users', () => {
+  it('lists users with plan, key count and used tokens', async () => {
+    const res = await app.request('/api/admin/users');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { users: Array<Record<string, unknown>> };
+    const alice = body.users.find((u) => u.username === 'alice2026');
+    expect(alice).toBeTruthy();
+    expect(alice?.plan_name).toBe('轻量');
+    expect(alice?.active_keys).toBe(1);
+    expect(alice?.used_tokens).toBe(150);
+    expect(alice?.quota_tokens).toBe(1_000);
+  });
+
+  it('filters by search', async () => {
+    const res = await app.request('/api/admin/users?search=alice');
+    const body = (await res.json()) as { users: Array<{ username: string }> };
+    expect(body.users.map((u) => u.username)).toEqual(['alice2026']);
+  });
+});
+
+describe('POST /api/admin/users/:id/quota', () => {
+  it('adds quota via delta', async () => {
+    const res = await postJson(`/api/admin/users/${USER_B}/quota`, { delta: 5_000 });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { quota_tokens: number }).quota_tokens).toBe(5_000);
+  });
+
+  it('sets quota exactly', async () => {
+    const res = await postJson(`/api/admin/users/${USER_A}/quota`, { set: 42 });
+    const body = (await res.json()) as { quota_tokens: number };
+    expect(body.quota_tokens).toBe(42);
+  });
+
+  it('rejects invalid payloads and unknown users', async () => {
+    expect((await postJson(`/api/admin/users/${USER_A}/quota`, {})).status).toBe(400);
+    expect((await postJson(`/api/admin/users/${USER_A}/quota`, { set: -1 })).status).toBe(400);
+    expect((await postJson('/api/admin/users/nope/quota', { set: 1 })).status).toBe(404);
+  });
+});
+
+describe('GET /api/admin/keys', () => {
+  it('lists keys joined with user info', async () => {
+    const res = await app.request('/api/admin/keys');
+    const body = (await res.json()) as { keys: Array<Record<string, unknown>> };
+    const keyA = body.keys.find((k) => k.id === KEY_A);
+    expect(keyA?.username).toBe('alice2026');
+    expect(keyA?.used_tokens).toBe(150);
+  });
+
+  it('supports search and status filters', async () => {
+    const byUser = (await (await app.request('/api/admin/keys?search=bob')).json()) as { keys: Array<{ id: string }> };
+    expect(byUser.keys.map((k) => k.id)).toEqual([KEY_B]);
+    const vision = (await (await app.request('/api/admin/keys?status=active')).json()) as { keys: Array<{ id: string }> };
+    expect(vision.keys).toHaveLength(2);
+  });
+});
+
+describe('PATCH & DELETE /api/admin/keys/:id', () => {
+  it('updates limits, clears fields with null, and revokes', async () => {
+    const res = await patchJson(`/api/admin/keys/${KEY_B}`, {
+      quota_tokens: 100_000,
+      rpm_limit: 30,
+      allowed_models: 'glm-4v-flash',
+    });
+    expect(res.status).toBe(200);
+    let row = sqlite.prepare('SELECT * FROM api_keys WHERE id = ?').get(KEY_B) as Record<string, unknown>;
+    expect(row.quota_tokens).toBe(100_000);
+    expect(row.rpm_limit).toBe(30);
+    expect(row.allowed_models).toBe('glm-4v-flash');
+
+    await patchJson(`/api/admin/keys/${KEY_B}`, { allowed_models: null, rpm_limit: null, enabled: 0 });
+    row = sqlite.prepare('SELECT * FROM api_keys WHERE id = ?').get(KEY_B) as Record<string, unknown>;
+    expect(row.allowed_models).toBeNull();
+    expect(row.rpm_limit).toBeNull();
+    expect(row.enabled).toBe(0);
+
+    expect((await app.request(`/api/admin/keys/${KEY_B}`, { method: 'DELETE' })).status).toBe(200);
+    row = sqlite.prepare('SELECT * FROM api_keys WHERE id = ?').get(KEY_B) as Record<string, unknown>;
+    expect(row.revoked_at).not.toBeNull();
+    expect((await app.request('/api/admin/keys/nope', { method: 'DELETE' })).status).toBe(404);
+    expect((await patchJson('/api/admin/keys/nope', { enabled: 1 })).status).toBe(404);
+    expect((await patchJson(`/api/admin/keys/${KEY_A}`, { enabled: 5 })).status).toBe(400);
+  });
+});
+
+describe('GET /api/admin/overview', () => {
+  it('aggregates cards, today usage, daily trend and top lists', async () => {
+    const res = await app.request('/api/admin/overview?days=7');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      cards: Record<string, number>;
+      today: { requests: number; tokens: number; cost_cents: number };
+      window: {
+        days: number;
+        totals: { requests: number; tokens: number; cost_cents: number };
+        quality: { estimated: number; aborted: number };
+        daily: Array<{ day: string }>;
+        top_models: Array<{ model: string; tokens: number }>;
+        top_users: Array<{ username: string; tokens: number }>;
+      };
+    };
+    expect(body.cards.users_total).toBe(2);
+    expect(body.cards.keys_active).toBe(1);
+    expect(body.cards.channels_enabled).toBeGreaterThanOrEqual(1);
+    expect(body.cards.quota_sum).toBe(5042);
+    expect(body.today.requests).toBe(2);
+    expect(body.today.tokens).toBe(315);
+    expect(body.window.days).toBe(7);
+    expect(body.window.totals.requests).toBe(3);
+    expect(body.window.totals.tokens).toBe(390);
+    expect(body.window.quality.estimated).toBe(1);
+    expect(body.window.quality.aborted).toBe(1);
+    expect(body.window.daily.length).toBeGreaterThanOrEqual(2);
+    expect(body.window.top_models[0].model).toBe('glm-5');
+    expect(body.window.top_models[0].tokens).toBe(375);
+    expect(body.window.top_users[0].username).toBe('alice2026');
+  });
+});

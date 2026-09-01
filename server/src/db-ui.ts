@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import { DB_UI_HTML } from './db-ui-page.js';
 import { createApp } from './app.js';
-import { HttpError, registerAdminRoutes } from './db-ui-admin.js';
+import { HttpError, likeEscape, registerAdminRoutes } from './db-ui-admin.js';
 
 type Sqlite = Database.Database;
 
@@ -12,10 +12,6 @@ const ROWS_CAP = 500;
 
 function quoteIdent(name: string): string {
   return '"' + name.replace(/"/g, '""') + '"';
-}
-
-function likeEscape(term: string): string {
-  return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 function listTables(sqlite: Sqlite): string[] {
