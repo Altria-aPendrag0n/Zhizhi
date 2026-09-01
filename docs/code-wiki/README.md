@@ -6,6 +6,7 @@
 - **技术栈**：Tauri v2（Rust 后端）+ Vue 3（Composition API + `<script setup>`）+ TypeScript + Vite + Pinia + Vue Router + Tailwind CSS + CodeMirror 6 + D3.js
 - **代码位置**：`study-thread/`（前端 `src/`，Rust 后端 `src-tauri/`）
 - **当前版本**：0.1.0（产品名"知枝"，`com.study-thread.app`）
+- **服务端**：官方 API 服务端已迁移至独立仓库 `Zhizhi-Server`（同级目录，GitHub 私有仓库），服务端相关模块（21/23/24）文档随迁，此处条目保留编号并标注迁移。
 
 ---
 
@@ -42,14 +43,6 @@
 d:\work\Zhizhi\
 ├── docs\                        # 项目文档（本 Code Wiki 位于 docs/code-wiki/）
 ├── progress.json                # 开发进度追踪
-├── server\                      # 官方 API 服务端（Phase 1：账号体系，独立 Node 包）
-│   ├── src\db\                  # SQLite schema / 建表脚本（Drizzle + better-sqlite3）
-│   ├── src\services\            # verify-code / jwt / api-key / auth 业务编排
-│   ├── src\middleware\          # Bearer 鉴权 / 内存限流
-│   ├── src\routes\              # /api/auth/* 与 /api/me、/api/keys、/api/usage、/v1/* 网关
-│   ├── src\db-ui.ts             # 综合管理控制台（npm run db:ui，127.0.0.1:8790）
-│   ├── src\db-ui-admin.ts       # 管理台运营端点：渠道/用户/子Key 管理 + 总览统计
-│   └── test\                    # vitest（11 文件 125 例）
 └── study-thread\                # 应用主体
     ├── public\models\           # 内置离线资源：embedding 模型(ONNX) + ort wasm
     ├── src\                     # Vue 3 前端
@@ -172,10 +165,10 @@ d:\work\Zhizhi\
 | 18 | 调试日志系统 | [18-debug-logging.md](./18-debug-logging.md) | `src/utils/logger.ts`、`src/views/SettingsPage.vue`（调试日志区块） | 统一运行时日志（console + localStorage 环形缓冲）与设置页查看/清空面板 |
 | 19 | 图片转笔记模块 | [19-image-to-note.md](./19-image-to-note.md) | `src/api/skills/image-to-note.ts`、`src/utils/image-compress.ts`、`src/components/notes/ImageToMarkdownDialog.vue` | 多模态图片识别为 Markdown（含表格还原）：三入口（新建笔记/编辑器导入/参考资料识别）+ 独立转笔记模型配置 |
 | 20 | 设置模块 | [20-settings-module.md](./20-settings-module.md) | `src/views/SettingsPage.vue`、`src/views/ModelConfigPage.vue`、`src/views/OfficialModelPage.vue`、`src/views/CustomModelPage.vue` | 设置拆分：模型配置独立页面（知枝官方 API 骨架 / 自定义模型），总览页保留偏好/日志/关于 |
-| 21 | 登录系统服务端 | [21-auth-server.md](./21-auth-server.md) | `server/`（独立 Node 包：`src/db/`、`src/services/`、`src/middleware/`、`src/routes/`） | 官方 API 服务端 Phase 1：全量数据库 schema + 验证码登录/刷新/登出/me 接口（Hono + Drizzle + SQLite） |
+| 21 | 登录系统服务端（已迁移） | 21-auth-server.md → `Zhizhi-Server` 仓库 `docs/code-wiki/` | `Zhizhi-Server/src/` | 官方 API 服务端 Phase 1：全量数据库 schema + 验证码登录/刷新/登出/me 接口（Hono + Drizzle + SQLite） |
 | 22 | 客户端登录接入 | [22-auth-client.md](./22-auth-client.md) | `src/utils/secure-store.ts`、`src/api/zhizhi-api.ts`、`src/stores/auth.ts`、`src/views/OfficialModelPage.vue`、`src-tauri/`（keyring） | 知枝官方账号客户端：OS 钥匙串凭据边界、401 single-flight 续期、登录状态机、官方地址与 CSP 配置 |
-| 23 | 综合管理控制台 | [23-db-admin-ui.md](./23-db-admin-ui.md) | `server/src/db-ui.ts`、`server/src/db-ui-admin.ts`、`server/src/db-ui-page.ts` | 本地综合管理台（`npm run db:ui`，仅 127.0.0.1:8790，同进程拉起主 API）：五视图——总览仪表盘（用量/成本/质量指标）、渠道管理（CRUD/连通性测试/Key 掩码加密）、用户发额度、子 Key 限额/吊销、数据库表浏览 + SQL 控制台 |
-| 24 | API 分发网关 | [24-api-gateway.md](./24-api-gateway.md) | `server/src/routes/gateway.ts`、`server/src/middleware/api-key-auth.ts`、`server/src/routes/{keys,usage}.ts`、`server/src/services/{channel,usage,model-prices,secret-box}.ts` | OpenAI 兼容网关：一个上游渠道分发多个子 Key（purpose/额度/过期/白名单/限速），故障转移转发、流式透传、usage 计量扣费与按天/模型统计 |
+| 23 | 综合管理控制台（已迁移） | 23-db-admin-ui.md → `Zhizhi-Server` 仓库 `docs/code-wiki/` | `Zhizhi-Server/src/db-ui.ts`、`src/db-ui-admin.ts`、`src/db-ui-page.ts` | 本地综合管理台（`npm run db:ui`，仅 127.0.0.1:8790，同进程拉起主 API）：五视图——总览仪表盘（用量/成本/质量指标）、渠道管理（CRUD/连通性测试/Key 掩码加密）、用户发额度、子 Key 限额/吊销、数据库表浏览 + SQL 控制台 |
+| 24 | API 分发网关（已迁移） | 24-api-gateway.md → `Zhizhi-Server` 仓库 `docs/code-wiki/` | `Zhizhi-Server/src/routes/gateway.ts`、`src/middleware/api-key-auth.ts`、`src/routes/{keys,usage}.ts`、`src/services/{channel,usage,model-prices,secret-box}.ts` | OpenAI 兼容网关：一个上游渠道分发多个子 Key（purpose/额度/过期/白名单/限速），故障转移转发、流式透传、usage 计量扣费与按天/模型统计 |
 
 ---
 

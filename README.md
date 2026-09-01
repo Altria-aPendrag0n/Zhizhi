@@ -201,9 +201,10 @@ npm run tauri dev
 ```
 docs/             # 文档（用户手册 / 运行指南 / 开发文档 / code-wiki / 发布计划）
 scripts/          # 开发辅助脚本（窗口恢复、截图等）
-server/           # 官方 API 服务端（Phase 1：账号体系，独立 Node 包，Hono + SQLite）
 study-thread/     # 应用主体（前端 Vue 3 + Rust 后端 Tauri v2）
 ```
+
+> 官方 API 服务端（账号体系 + API 分发网关 + 综合管理控制台）已迁移至独立私有仓库 **Zhizhi-Server**（`d:\work\Zhizhi-Server` / github.com/Altria-aPendrag0n/Zhizhi-Server），相关 code-wiki 模块（21/23/24）随迁。
 
 ## 许可证
 
