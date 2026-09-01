@@ -3,7 +3,7 @@
 > 模块位置：`server/src/middleware/api-key-auth.ts`、`server/src/routes/gateway.ts`、`server/src/routes/keys.ts`、`server/src/routes/usage.ts`、`server/src/services/{channel,model-prices,secret-box,usage}.ts`
 > 目标：把上游厂商 API（渠道）通过一个 OpenAI 兼容端点分发为多个子 Key，对每个子 Key **独立控制**（启停/过期/额度/模型白名单/限速）并**独立统计用量**。设计依据见 [docs/research/API分发网关实现调研-子Key独立控制与统计.md](../research/API分发网关实现调研-子Key独立控制与统计.md) 与 [docs/官方API分发机制调研与开发方案.md](../官方API分发机制调研与开发方案.md)，参考实现为 one-api 的 Token/Channel 模型。
 
----
+***
 
 ## 1. 三层模型
 
@@ -18,15 +18,16 @@
 ```
 
 - **子 Key 不是上游 Key 的分片**：它是自己数据库里的一行记录，控制与统计全部发生在网关内。
+
 - 一用户可持多把子 Key，按 `purpose` 区分用途：`chat`（会话大模型）/ `vision`（图片转笔记），后续可扩展新用途；注册时自动签发 `chat` Key（`services/auth.ts#issueApiKeyIfMissing`，明文仅注册响应返回一次）。
 
 ## 2. 数据模型
 
-| 表 | 关键列 | 说明 |
-|---|---|---|
-| `api_keys`（M1 扩展） | `purpose`、`quota_tokens`（-1=跟随用户池）、`used_tokens`、`expired_at`、`allowed_models`、`rpm_limit`、`key_preview`、`enabled`/`revoked_at` | 子 Key 本体与控制策略 |
-| `channels`（新增） | `base_url`（不含 `/v1`，网关拼接 `/v1/chat/completions`，与客户端 openai-compat 预设同约定）、`api_key_enc`、`models`（逗号分隔，支持 `*` 通配）、`group_tag`（`*`=全分组）、`weight`、`status` | 上游渠道 |
-| `usage_logs`（M3 扩展） | `channel_id`、`status`（success/aborted）、`latency_ms`、`estimated`（1=字符估算）+ 索引 `idx_usage_key_time` / `idx_usage_user_time` | 计量明细，只增不改 |
+| 表                   | 关键列                                                                                                                                                     | 说明            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `api_keys`（M1 扩展）   | `purpose`、`quota_tokens`（-1=跟随用户池）、`used_tokens`、`expired_at`、`allowed_models`、`rpm_limit`、`key_preview`、`enabled`/`revoked_at`                         | 子 Key 本体与控制策略 |
+| `channels`（新增）      | `base_url`（不含 `/v1`，网关拼接 `/v1/chat/completions`，与客户端 openai-compat 预设同约定）、`api_key_enc`、`models`（逗号分隔，支持 `*` 通配）、`group_tag`（`*`=全分组）、`weight`、`status` | 上游渠道          |
+| `usage_logs`（M3 扩展） | `channel_id`、`status`（success/aborted）、`latency_ms`、`estimated`（1=字符估算）+ 索引 `idx_usage_key_time` / `idx_usage_user_time`                                | 计量明细，只增不改     |
 
 旧库迁移：`db/migrate.ts` 中 `ensureApiKeyColumns` / `ensureUsageLogColumns` 幂等 `ALTER TABLE`；`channels` 表与智谱/DeepSeek 渠道种子（Key 留空）由 `SEED_CHANNELS` `INSERT OR IGNORE`。
 
@@ -52,47 +53,57 @@
 ## 4. 计量与扣费（services/usage.ts）
 
 - **非流式**：响应体 `usage.prompt_tokens/completion_tokens` 直接提取。
+
 - **流式**：`tapUpstreamStream` 用 ReadableStream 包装上游流——字节原样透传，旁路 `SseUsageExtractor` 按 SSE 行解析，捕获末 chunk（`choices` 为空数组）的 `usage`；同时累计 `delta.content` 字符数。
-- **估算兜底**：上游不返回 usage 时按 ~1.6 字符/token 估算，`estimated=1` 便于对账。
+
+- **估算兜底**：上游不返回 usage 时按 \~1.6 字符/token 估算，`estimated=1` 便于对账。
+
 - **记账**（better-sqlite3 同步）：`usage_logs` 插明细（含渠道/状态/延迟）→ 无条件扣减 `users.quota_tokens` 与 `api_keys.used_tokens` + 更新 `last_used_at`。预检在请求前、扣减在完成后；并发滥用下余量可能小幅击穿为负，随后预检立即封住（与 one-api 预检+后扣同语义）。
+
 - **断连**：客户端 cancel → 流记 `aborted` 并按已收字符估算（上游已产生 token 必须计费）。
+
 - **成本**：`services/model-prices.ts` 静态单价表（分/百万 token）：GLM-4.7-Flash/GLM-4V-Flash 免费、GLM-5 400/1800、DeepSeek V4-Flash 100/200、V4-Pro 300/600；未知模型计 0。
 
 ## 5. API 一览
 
-| 端点 | 鉴权 | 说明 |
-|---|---|---|
-| `POST /v1/chat/completions` | 子 Key | OpenAI 兼容推理（流式/非流式） |
-| `GET /v1/models` | 子 Key | 当前分组可用模型列表 |
-| `POST /api/keys` `{name?, purpose}` | JWT | 签发子 Key（明文仅此一次，上限 20 把活跃） |
-| `GET /api/keys` | JWT | 列出本人 Key（含 `key_preview`/用量，无哈希） |
-| `PATCH /api/keys/:id` `{name?, enabled?}` | JWT | 改名/启停（吊销后 409） |
-| `DELETE /api/keys/:id` | JWT | 吊销（幂等） |
-| `GET /api/keys/:id/usage?days=30` | JWT | 单 Key 按天/模型聚合（仅本人） |
-| `GET /api/usage/summary?days=30` | JWT | 用户级汇总：余量 + 总量 + 趋势 |
+| 端点                                        | 鉴权    | 说明                               |
+| ----------------------------------------- | ----- | -------------------------------- |
+| `POST /v1/chat/completions`               | 子 Key | OpenAI 兼容推理（流式/非流式）              |
+| `GET /v1/models`                          | 子 Key | 当前分组可用模型列表                       |
+| `POST /api/keys` `{name?, purpose}`       | JWT   | 签发子 Key（明文仅此一次，上限 20 把活跃）        |
+| `GET /api/keys`                           | JWT   | 列出本人 Key（含 `key_preview`/用量，无哈希） |
+| `PATCH /api/keys/:id` `{name?, enabled?}` | JWT   | 改名/启停（吊销后 409）                   |
+| `DELETE /api/keys/:id`                    | JWT   | 吊销（幂等）                           |
+| `GET /api/keys/:id/usage?days=30`         | JWT   | 单 Key 按天/模型聚合（仅本人）               |
+| `GET /api/usage/summary?days=30`          | JWT   | 用户级汇总：余量 + 总量 + 趋势               |
 
 `days` 非法值回退 30，上限 365。
 
-## 6. 运维手册（db:ui 本地管理，无 admin 角色/API）
+## 6. 运维手册（综合管理台 db:ui）
 
-1. **配置渠道**：`npm run db:migrate` 后 `channels` 表有两行种子（智谱/DeepSeek，`api_key_enc` 为空）。在 db:ui（`npm run db:ui`，仅 127.0.0.1:8790）编辑渠道行，把上游 Key 填入 `api_key_enc`；服务端设置了 `CHANNEL_ENC_KEY` 时写入加密串（`services/secret-box.ts#encryptSecret`），否则原样存储（启动时建议配置加密）。
-2. **发放额度**：db:ui 编辑 `users.quota_tokens`（0 = 不可用；新用户注册即为 0）。
-3. **调整子 Key 策略**：`api_keys.quota_tokens`（-1=不限）、`allowed_models`、`rpm_limit`、`expired_at`；用户自助也能做同类操作（管理路由）。
-4. **对账**：`usage_logs.estimated=1` 的行是估算值；`status='aborted'` 是客户端断连（照常计费）。
+> 已升级为综合管理台（见 [23-db-admin-ui.md](./23-db-admin-ui.md)）：渠道、用户额度、子 Key、用量统计均有图形界面，无需手写 SQL。以下为对应关系。
+
+1. **配置渠道**：「渠道管理」视图 → 新建/编辑渠道，填入 Base URL 与上游 Key（设置 `CHANNEL_ENC_KEY` 时自动加密落库），点「测试」验证连通；种子渠道（智谱/DeepSeek）由 `npm run db:migrate` 创建，Key 留空待填。
+2. **发放额度**：「用户」视图 → 「发额度」（delta 增减或 set 直设 `users.quota_tokens`，0 = 不可用，新用户注册即为 0）。
+3. **调整子 Key 策略**：「子 Key」视图 → 编辑独立额度/模型白名单/RPM/过期时间、启停、吊销（用户自助管理路由也能做同类操作）。
+4. **对账**：「总览」视图质量指标中 `estimated` 行为估算值请求量、`aborted` 为客户端断连；需要逐条甄别时在数据库视图查 `usage_logs`。
 
 ## 7. 环境变量（server/.env.example）
 
-| 变量 | 说明 |
-|---|---|
-| `CHANNEL_ENC_KEY` | 可选。设置后渠道上游 Key 以 AES-256-GCM 加密落库 |
-| `GATEWAY_MAX_BODY_BYTES` | 可选。请求体上限，默认 10MB |
-| `GATEWAY_UPSTREAM_TIMEOUT_MS` | 可选。上游首字节（响应头）超时，默认 300s |
+| 变量                            | 说明                                |
+| ----------------------------- | --------------------------------- |
+| `CHANNEL_ENC_KEY`             | 可选。设置后渠道上游 Key 以 AES-256-GCM 加密落库 |
+| `GATEWAY_MAX_BODY_BYTES`      | 可选。请求体上限，默认 10MB                  |
+| `GATEWAY_UPSTREAM_TIMEOUT_MS` | 可选。上游首字节（响应头）超时，默认 300s           |
 
 ## 8. 测试
 
 - `test/keys.test.ts`（11 例）：签发/列表/禁用/吊销/越权/上限/校验。
+
 - `test/channel.test.ts`（10 例）：加密往返与防篡改、模型/分组筛选、加权排序、价格计算。
+
 - `test/gateway.test.ts`（19 例）：控制链全语义（401/403/402/429/413/400）、mock 上游故障转移（首个请求 500 → 次渠成功）、SSE 透传 + `stream_options` 注入、400 透传不泄露上游、精确 usage/估算/断连 aborted 计量、子 Key 额度边界。
+
 - `test/usage.test.ts`（7 例）：聚合正确性、days 钳制、越权 404、用户隔离。
 
 运行：`cd server && npm test`。
@@ -100,6 +111,10 @@
 ## 9. 已知边界（后续增强方向）
 
 - 渠道健康熔断、TPM 限速、日汇总 rollup 表未实现（M5 范围）。
+
 - RPM 限速为进程内存态，多实例部署需改 Redis；当前单机 SQLite 语义成立。
+
 - 子 Key 预检+后扣在极端并发下允许小幅超支（负余量即封禁）。
+
 - `purpose` 目前仅作 Key 归类展示，不做模型级强制。
+
