@@ -80,10 +80,14 @@ export const usageLogs = sqliteTable('usage_logs', {
   id: text('id').primaryKey(),
   user_id: text('user_id'),
   api_key_id: text('api_key_id'),
+  channel_id: text('channel_id'),
   model: text('model'),
   prompt_tokens: integer('prompt_tokens').notNull().default(0),
   completion_tokens: integer('completion_tokens').notNull().default(0),
   cost_cents: integer('cost_cents').notNull().default(0),
+  status: text('status').notNull().default('success'),
+  latency_ms: integer('latency_ms'),
+  estimated: integer('estimated').notNull().default(0),
   created_at: integer('created_at'),
 });
 

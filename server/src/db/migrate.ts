@@ -42,6 +42,23 @@ function ensureApiKeyColumns() {
 }
 ensureApiKeyColumns();
 
+/** 旧库增量迁移：usage_logs 表补充渠道/状态/延迟/估算列（索引由 CREATE_TABLES 幂等创建） */
+function ensureUsageLogColumns() {
+  const columns = db.all<{ name: string }>(sql`PRAGMA table_info(usage_logs)`).map((c) => c.name);
+  const additions: Array<[column: string, definition: string]> = [
+    ['channel_id', 'TEXT'],
+    ['status', "TEXT NOT NULL DEFAULT 'success'"],
+    ['latency_ms', 'INTEGER'],
+    ['estimated', 'INTEGER NOT NULL DEFAULT 0'],
+  ];
+  for (const [column, definition] of additions) {
+    if (!columns.includes(column)) {
+      db.run(sql.raw(`ALTER TABLE usage_logs ADD COLUMN ${column} ${definition}`));
+    }
+  }
+}
+ensureUsageLogColumns();
+
 for (const plan of SEED_PLANS) {
   db.run(
     sql`INSERT OR IGNORE INTO plans (id, name, price_cents, token_quota, model_group)

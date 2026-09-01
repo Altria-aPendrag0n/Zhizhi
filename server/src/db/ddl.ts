@@ -83,12 +83,18 @@ export const CREATE_TABLES: string[] = [
     id TEXT PRIMARY KEY,
     user_id TEXT,
     api_key_id TEXT,
+    channel_id TEXT,
     model TEXT,
     prompt_tokens INTEGER NOT NULL DEFAULT 0,
     completion_tokens INTEGER NOT NULL DEFAULT 0,
     cost_cents INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'success',
+    latency_ms INTEGER,
+    estimated INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER
   )`,
+  `CREATE INDEX IF NOT EXISTS idx_usage_key_time ON usage_logs(api_key_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_usage_user_time ON usage_logs(user_id, created_at)`,
 ];
 
 export const SEED_CHANNELS: Array<{

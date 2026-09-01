@@ -7,6 +7,7 @@ import { channels } from '../db/schema.js';
 import { openAiError, requireApiKey, type GatewayContext, type GatewayVariables } from '../middleware/api-key-auth.js';
 import { createRateLimiter, ipKeyOf, rateLimit } from '../middleware/rate-limit.js';
 import { parseChannelModels, resolveChannelCandidates, type ChannelCandidate } from '../services/channel.js';
+import { extractUsageFromBody, recordUsage, SseUsageExtractor } from '../services/usage.js';
 
 const DEFAULT_RPM = 60;
 const MAX_RPM = 600;
@@ -91,6 +92,68 @@ async function attemptForward(
   }
 }
 
+interface TapContext {
+  userId: string;
+  apiKeyId: string;
+  channelId: string;
+  model: string;
+  promptChars: number;
+  latencyMs: () => number;
+}
+
+/** 包装上游流：字节原样透传，旁路解析 SSE usage；流正常结束记 success，客户端断开记 aborted 并按已收内容估算 */
+function tapUpstreamStream(response: Response, ctx: TapContext): ReadableStream<Uint8Array> {
+  const extractor = new SseUsageExtractor();
+  const reader = response.body!.getReader();
+  let finalized = false;
+  const finalize = (status: 'success' | 'aborted'): void => {
+    if (finalized) {
+      return;
+    }
+    finalized = true;
+    const { usage, contentChars } = extractor.result();
+    try {
+      recordUsage({
+        userId: ctx.userId,
+        apiKeyId: ctx.apiKeyId,
+        channelId: ctx.channelId,
+        model: ctx.model,
+        usage,
+        promptChars: ctx.promptChars,
+        completionChars: contentChars,
+        status,
+        latencyMs: ctx.latencyMs(),
+      });
+    } catch (error) {
+      console.error('[gateway] failed to record stream usage:', error);
+    }
+  };
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          finalize('success');
+          return;
+        }
+        if (value) {
+          extractor.push(value);
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        finalize('aborted');
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      void reader.cancel(reason).catch(() => undefined);
+      finalize('aborted');
+    },
+  });
+}
+
 async function handleChatCompletions(c: GatewayContext): Promise<Response> {
   const maxBodyBytes = Number(process.env.GATEWAY_MAX_BODY_BYTES ?? 10 * 1024 * 1024);
   const contentLength = Number(c.req.header('content-length') ?? 0);
@@ -160,6 +223,9 @@ async function handleChatCompletions(c: GatewayContext): Promise<Response> {
   }
   let injectedUsage = stream;
 
+  const startedAt = Date.now();
+  const promptChars = JSON.stringify(parsed.data.messages ?? []).length;
+
   let lastStatus = 502;
   let lastMessage = 'All upstream channels failed';
   for (const channel of candidates) {
@@ -174,7 +240,15 @@ async function handleChatCompletions(c: GatewayContext): Promise<Response> {
       const { response } = result;
       if (response.ok) {
         if (stream) {
-          return new Response(response.body, {
+          const tapped = tapUpstreamStream(response, {
+            userId: user.id,
+            apiKeyId: key.id,
+            channelId: channel.id,
+            model,
+            promptChars,
+            latencyMs: () => Date.now() - startedAt,
+          });
+          return new Response(tapped, {
             status: 200,
             headers: {
               'content-type': 'text/event-stream; charset=utf-8',
@@ -183,6 +257,17 @@ async function handleChatCompletions(c: GatewayContext): Promise<Response> {
           });
         }
         const body = (await response.json()) as Record<string, unknown>;
+        recordUsage({
+          userId: user.id,
+          apiKeyId: key.id,
+          channelId: channel.id,
+          model,
+          usage: extractUsageFromBody(body),
+          promptChars,
+          completionChars: 0,
+          status: 'success',
+          latencyMs: Date.now() - startedAt,
+        });
         return c.json(body);
       }
       const text = await response.text();

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { getDb } from '../src/db/index.js';
 import { CREATE_TABLES } from '../src/db/ddl.js';
-import { apiKeys, channels, users } from '../src/db/schema.js';
+import { apiKeys, channels, usageLogs, users } from '../src/db/schema.js';
 import { hashKey } from '../src/services/api-key.js';
 import type { Notifier } from '../src/services/notifier.js';
 
@@ -44,6 +44,18 @@ const mockUpstream = createServer((req, res) => {
     if (body.model === 'reject-model') {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'bad param from upstream', type: 'invalid_request_error' } }));
+      return;
+    }
+    if (body.model === 'estimate-model') {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('data: {"id":"2","choices":[{"delta":{"content":"abcdefghij"}}]}\n\n');
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+    if (body.model === 'hang-model') {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('data: {"id":"3","choices":[{"delta":{"content":"abc"}}]}\n\n');
       return;
     }
     if (mockRequestCount === 1) {
@@ -124,7 +136,7 @@ beforeAll(async () => {
     name: 'mock-ok',
     base_url: `http://127.0.0.1:${port}`,
     api_key_enc: 'sk-upstream-ok',
-    models: 'test-model,reject-model',
+    models: 'test-model,reject-model,estimate-model,hang-model',
     group_tag: '*',
     weight: 100,
     status: 1,
@@ -135,7 +147,7 @@ beforeAll(async () => {
     name: 'mock-ok-2',
     base_url: `http://127.0.0.1:${port}`,
     api_key_enc: 'sk-upstream-ok-2',
-    models: 'test-model,reject-model',
+    models: 'test-model,reject-model,estimate-model,hang-model',
     group_tag: '*',
     weight: 100,
     status: 1,
@@ -156,6 +168,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   mockUpstream.close();
+  (mockUpstream as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
   (db as unknown as { $client: { close(): void } }).$client.close();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -281,5 +294,96 @@ describe('转发与故障转移', () => {
     const ids = body.data.map((m) => m.id);
     expect(ids).toContain('test-model');
     expect(ids).toContain('dead-model');
+  });
+});
+
+describe('计量与扣费', () => {
+  async function latestUsageLog(apiKeyId: string) {
+    const rows = await db
+      .select()
+      .from(usageLogs)
+      .where(eq(usageLogs.api_key_id, apiKeyId))
+      .orderBy(sql`created_at DESC`)
+      .limit(1);
+    return rows[0];
+  }
+
+  it('records exact usage from upstream and deducts user quota (non-stream)', async () => {
+    const apiKeyId = await keyIdOf(keyA);
+    const before = ((await (await app.request('/api/me', { headers: authed(tokenA) })).json()) as { quota_tokens: number }).quota_tokens;
+
+    const res = await chat(keyA, { stream: false });
+    expect(res.status).toBe(200);
+
+    const after = ((await (await app.request('/api/me', { headers: authed(tokenA) })).json()) as { quota_tokens: number }).quota_tokens;
+    expect(before - after).toBe(15);
+
+    const log = await latestUsageLog(apiKeyId);
+    expect(log).toBeTruthy();
+    expect(log?.prompt_tokens).toBe(10);
+    expect(log?.completion_tokens).toBe(5);
+    expect(log?.estimated).toBe(0);
+    expect(log?.status).toBe('success');
+    expect(log?.channel_id).toMatch(/^test-ok2?$/);
+    expect(log?.cost_cents).toBe(0);
+    expect(log?.latency_ms).toBeGreaterThanOrEqual(0);
+
+    const [keyRow] = await db.select().from(apiKeys).where(eq(apiKeys.id, apiKeyId));
+    expect(keyRow.used_tokens).toBeGreaterThanOrEqual(15);
+    expect(keyRow.last_used_at).toBeGreaterThan(0);
+  });
+
+  it('records exact usage from the final SSE usage chunk (stream)', async () => {
+    const apiKeyId = await keyIdOf(keyA);
+    const res = await chat(keyA, { stream: true });
+    expect(res.status).toBe(200);
+    await res.text();
+
+    const log = await latestUsageLog(apiKeyId);
+    expect(log?.prompt_tokens).toBe(10);
+    expect(log?.completion_tokens).toBe(5);
+    expect(log?.estimated).toBe(0);
+    expect(log?.status).toBe('success');
+  });
+
+  it('falls back to char estimation and marks estimated when upstream omits usage', async () => {
+    const apiKeyId = await keyIdOf(keyA);
+    const messages = [{ role: 'user', content: 'hi' }];
+    const expectedPrompt = Math.ceil(JSON.stringify(messages).length / 1.6);
+    const res = await postJson('/v1/chat/completions', { model: 'estimate-model', messages, stream: true }, authed(keyA));
+    expect(res.status).toBe(200);
+    await res.text();
+
+    const log = await latestUsageLog(apiKeyId);
+    expect(log?.estimated).toBe(1);
+    expect(log?.prompt_tokens).toBe(expectedPrompt);
+    expect(log?.completion_tokens).toBe(Math.ceil(10 / 1.6));
+    expect(log?.status).toBe('success');
+  });
+
+  it('records aborted streams with estimation when the client disconnects', async () => {
+    const apiKeyId = await keyIdOf(keyA);
+    const res = await chat(keyA, { model: 'hang-model', stream: true });
+    expect(res.status).toBe(200);
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+
+    const log = await latestUsageLog(apiKeyId);
+    expect(log?.status).toBe('aborted');
+    expect(log?.estimated).toBe(1);
+    expect(log?.completion_tokens).toBe(Math.ceil(3 / 1.6));
+    expect(log?.prompt_tokens).toBeGreaterThan(0);
+  });
+
+  it('blocks further requests once a per-key quota is exhausted', async () => {
+    const plain = await createKey(tokenA);
+    const id = await keyIdOf(plain);
+    await db.update(apiKeys).set({ quota_tokens: 10 }).where(eq(apiKeys.id, id));
+    const first = await chat(plain, { stream: false });
+    expect(first.status).toBe(200);
+    const second = await chat(plain, { stream: false });
+    expect(second.status).toBe(402);
+    expect(((await second.json()) as { error: { code: string } }).error.code).toBe('quota_exhausted');
   });
 });
