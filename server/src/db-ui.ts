@@ -4,17 +4,9 @@ import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import { DB_UI_HTML } from './db-ui-page.js';
 import { createApp } from './app.js';
+import { HttpError, registerAdminRoutes } from './db-ui-admin.js';
 
 type Sqlite = Database.Database;
-
-class HttpError extends Error {
-  constructor(
-    public status: 400 | 404 | 500,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 const ROWS_CAP = 500;
 
@@ -187,6 +179,8 @@ export function createDbUiApp(sqlite: Sqlite): Hono {
     }
     return c.json({ error: err.message }, 500);
   });
+
+  registerAdminRoutes(app, sqlite);
 
   return app;
 }
