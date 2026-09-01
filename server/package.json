@@ -9,6 +9,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "db:migrate": "tsx src/db/migrate.ts",
+    "db:ui": "tsx src/db-ui.ts",
     "test": "vitest run"
   },
   "dependencies": {

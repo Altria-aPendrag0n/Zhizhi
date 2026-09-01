@@ -47,7 +47,8 @@ d:\work\Zhizhi\
 │   ├── src\services\            # verify-code / jwt / api-key / auth 业务编排
 │   ├── src\middleware\          # Bearer 鉴权 / 内存限流
 │   ├── src\routes\              # /api/auth/* 与 /api/me
-│   └── test\                    # vitest（4 文件 30 例）
+│   ├── src\db-ui.ts             # 本地数据库管理控制台（npm run db:ui，127.0.0.1:8790）
+│   └── test\                    # vitest（6 文件 58 例）
 └── study-thread\                # 应用主体
     ├── public\models\           # 内置离线资源：embedding 模型(ONNX) + ort wasm
     ├── src\                     # Vue 3 前端
@@ -172,6 +173,7 @@ d:\work\Zhizhi\
 | 20 | 设置模块 | [20-settings-module.md](./20-settings-module.md) | `src/views/SettingsPage.vue`、`src/views/ModelConfigPage.vue`、`src/views/OfficialModelPage.vue`、`src/views/CustomModelPage.vue` | 设置拆分：模型配置独立页面（知枝官方 API 骨架 / 自定义模型），总览页保留偏好/日志/关于 |
 | 21 | 登录系统服务端 | [21-auth-server.md](./21-auth-server.md) | `server/`（独立 Node 包：`src/db/`、`src/services/`、`src/middleware/`、`src/routes/`） | 官方 API 服务端 Phase 1：全量数据库 schema + 验证码登录/刷新/登出/me 接口（Hono + Drizzle + SQLite） |
 | 22 | 客户端登录接入 | [22-auth-client.md](./22-auth-client.md) | `src/utils/secure-store.ts`、`src/api/zhizhi-api.ts`、`src/stores/auth.ts`、`src/views/OfficialModelPage.vue`、`src-tauri/`（keyring） | 知枝官方账号客户端：OS 钥匙串凭据边界、401 single-flight 续期、登录状态机、官方地址与 CSP 配置 |
+| 23 | 数据库管理控制台 | [23-db-admin-ui.md](./23-db-admin-ui.md) | `server/src/db-ui.ts`、`server/src/db-ui-page.ts`、`server/test/db-ui.test.ts` | 本地 SQLite 图形化管理工具（`npm run db:ui`，仅监听 127.0.0.1:8790）：表浏览/搜索/排序/分页、按 rowid 删行、单条 SQL 控制台 |
 
 ---
 
