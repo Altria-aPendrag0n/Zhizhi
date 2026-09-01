@@ -73,11 +73,12 @@ describe('GET /api/meta', () => {
     const meta = body as unknown as MetaBody;
     expect(status).toBe(200);
     expect(meta.dbPath).toContain('test.db');
-    expect(meta.tables).toHaveLength(8);
+    expect(meta.tables).toHaveLength(9);
     const byName = new Map(meta.tables.map((t) => [t.name, t.count]));
     expect(byName.get('users')).toBe(2);
     expect(byName.get('plans')).toBe(1);
     expect(byName.get('refresh_tokens')).toBe(0);
+    expect(byName.get('channels')).toBe(0);
   });
 });
 

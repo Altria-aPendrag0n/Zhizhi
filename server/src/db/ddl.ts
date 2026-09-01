@@ -36,6 +36,17 @@ export const CREATE_TABLES: string[] = [
     last_used_at INTEGER,
     revoked_at INTEGER
   )`,
+  `CREATE TABLE IF NOT EXISTS channels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    api_key_enc TEXT NOT NULL DEFAULT '',
+    models TEXT NOT NULL DEFAULT '',
+    group_tag TEXT NOT NULL DEFAULT '*',
+    weight INTEGER NOT NULL DEFAULT 100,
+    status INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER
+  )`,
   `CREATE TABLE IF NOT EXISTS verify_codes (
     id TEXT PRIMARY KEY,
     identifier TEXT NOT NULL,
@@ -78,6 +89,32 @@ export const CREATE_TABLES: string[] = [
     cost_cents INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER
   )`,
+];
+
+export const SEED_CHANNELS: Array<{
+  id: string;
+  name: string;
+  base_url: string;
+  models: string;
+  group_tag: string;
+  weight: number;
+}> = [
+  {
+    id: 'channel-zhipu',
+    name: '智谱开放平台',
+    base_url: 'https://open.bigmodel.cn/api/paas',
+    models: 'glm-4.7-flash,glm-4-flash,glm-4v-flash,glm-5',
+    group_tag: '*',
+    weight: 100,
+  },
+  {
+    id: 'channel-deepseek',
+    name: 'DeepSeek 开放平台',
+    base_url: 'https://api.deepseek.com',
+    models: 'deepseek-v4-flash,deepseek-v4-pro',
+    group_tag: '*',
+    weight: 100,
+  },
 ];
 
 export const SEED_PLANS: Array<{

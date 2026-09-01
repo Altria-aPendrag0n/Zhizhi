@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { CREATE_TABLES, SEED_PLANS } from './ddl.js';
+import { CREATE_TABLES, SEED_CHANNELS, SEED_PLANS } from './ddl.js';
 import { createDb } from './index.js';
 
 const dbPath = process.env.DB_PATH ?? './data/zhizhi.db';
@@ -49,5 +49,12 @@ for (const plan of SEED_PLANS) {
   );
 }
 
+for (const channel of SEED_CHANNELS) {
+  db.run(
+    sql`INSERT OR IGNORE INTO channels (id, name, base_url, api_key_enc, models, group_tag, weight, status, created_at)
+        VALUES (${channel.id}, ${channel.name}, ${channel.base_url}, '', ${channel.models}, ${channel.group_tag}, ${channel.weight}, 1, ${Date.now()})`
+  );
+}
+
 const tableCount = db.get<{ count: number }>(sql`SELECT count(*) AS count FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`);
-console.log(`[db:migrate] DB ready at ${dbPath}，${tableCount?.count ?? 0} 张表，plans 种子 ${SEED_PLANS.length} 条`);
+console.log(`[db:migrate] DB ready at ${dbPath}，${tableCount?.count ?? 0} 张表，plans 种子 ${SEED_PLANS.length} 条，channels 种子 ${SEED_CHANNELS.length} 条（上游 Key 留空，请通过 db:ui 填写）`);

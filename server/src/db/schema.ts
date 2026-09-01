@@ -87,7 +87,20 @@ export const usageLogs = sqliteTable('usage_logs', {
   created_at: integer('created_at'),
 });
 
+export const channels = sqliteTable('channels', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  base_url: text('base_url').notNull(),
+  api_key_enc: text('api_key_enc').notNull().default(''),
+  models: text('models').notNull().default(''),
+  group_tag: text('group_tag').notNull().default('*'),
+  weight: integer('weight').notNull().default(100),
+  status: integer('status').notNull().default(1),
+  created_at: integer('created_at'),
+});
+
 export type User = typeof users.$inferSelect;
+export type Channel = typeof channels.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
