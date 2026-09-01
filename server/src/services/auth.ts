@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { apiKeys, refreshTokens, users } from '../db/schema.js';
-import { generateApiKey, hashKey } from './api-key.js';
+import { generateApiKey, hashKey, keyPreviewOf } from './api-key.js';
 import { signAccessToken } from './jwt.js';
 import { verify as verifyCode } from './verify-code.js';
 import { hashPassword, verifyPassword } from './password.js';
@@ -56,13 +56,15 @@ async function issueTokens(db: ReturnType<typeof getDb>, user: { id: string; pla
 }
 
 async function issueApiKeyIfMissing(db: ReturnType<typeof getDb>, userId: string, now = Date.now()): Promise<string | undefined> {
-  const existing = await db.select().from(apiKeys).where(eq(apiKeys.user_id, userId)).limit(1).then((r) => r[0]);
+  const existing = await db.select({ id: apiKeys.id }).from(apiKeys).where(eq(apiKeys.user_id, userId)).limit(1).then((r) => r[0]);
   if (existing) return undefined;
   const apiKey = generateApiKey();
   await db.insert(apiKeys).values({
     id: randomUUID(),
     user_id: userId,
     key_hash: hashKey(apiKey),
+    key_preview: keyPreviewOf(apiKey),
+    purpose: 'chat',
     enabled: 1,
     created_at: now,
   });

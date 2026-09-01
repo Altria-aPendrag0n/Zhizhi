@@ -4,6 +4,7 @@ import type { AuthVariables } from './middleware/auth.js';
 import type { Notifier } from './services/notifier.js';
 import { createNotifier } from './services/notifier.js';
 import { createAuthRouter } from './routes/auth.js';
+import { keysRouter } from './routes/keys.js';
 import { meRouter } from './routes/me.js';
 
 /** 生产环境 CORS 白名单：Tauri WebView 的 origin（Windows: tauri://localhost；macOS/Linux: http(s)://tauri.localhost）+ 开发服务器 */
@@ -33,6 +34,7 @@ export function createApp(opts: { notifier?: Notifier } = {}): Hono<{ Variables:
 
   const notifier = opts.notifier ?? createNotifier();
   app.route('/api/auth', createAuthRouter({ notifier }));
+  app.route('/api', keysRouter);
   app.route('/api', meRouter);
 
   app.onError((err, c) => {

@@ -21,6 +21,27 @@ function ensureUserColumns() {
 }
 ensureUserColumns();
 
+/** 旧库增量迁移：api_keys 表补充子 Key 控制列（key_preview/name/purpose/额度/过期/白名单/限速） */
+function ensureApiKeyColumns() {
+  const columns = db.all<{ name: string }>(sql`PRAGMA table_info(api_keys)`).map((c) => c.name);
+  const additions: Array<[column: string, definition: string]> = [
+    ['key_preview', 'TEXT'],
+    ['name', 'TEXT'],
+    ['purpose', "TEXT NOT NULL DEFAULT 'chat'"],
+    ['quota_tokens', 'INTEGER NOT NULL DEFAULT -1'],
+    ['used_tokens', 'INTEGER NOT NULL DEFAULT 0'],
+    ['expired_at', 'INTEGER'],
+    ['allowed_models', 'TEXT'],
+    ['rpm_limit', 'INTEGER'],
+  ];
+  for (const [column, definition] of additions) {
+    if (!columns.includes(column)) {
+      db.run(sql.raw(`ALTER TABLE api_keys ADD COLUMN ${column} ${definition}`));
+    }
+  }
+}
+ensureApiKeyColumns();
+
 for (const plan of SEED_PLANS) {
   db.run(
     sql`INSERT OR IGNORE INTO plans (id, name, price_cents, token_quota, model_group)
