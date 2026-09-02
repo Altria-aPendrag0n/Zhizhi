@@ -14,9 +14,9 @@
     <section class="card-block">
       <h3 class="card-block__title">知枝账号</h3>
 
-      <!-- 未登录：登录 / 注册 -->
+      <!-- 未登录：登录 / 注册 / 重置密码 -->
       <template v-if="!authStore.isOfficialActive">
-        <div class="mode-switch" role="tablist">
+        <div v-if="mode !== 'reset'" class="mode-switch" role="tablist">
           <button
             type="button"
             class="mode-switch__item"
@@ -54,6 +54,39 @@
             <button type="submit" class="btn btn-primary" :disabled="isBusy">
               {{ isBusy ? '登录中…' : '登录' }}
             </button>
+            <button type="button" class="forgot-link" @click="switchMode('reset')">忘记密码？</button>
+          </div>
+        </form>
+
+        <!-- 重置密码：邮箱验证码 + 新密码 -->
+        <form v-else-if="mode === 'reset'" class="login-form" @submit.prevent="handleResetPassword">
+          <p class="form-hint">输入注册邮箱获取重置验证码；重置成功后请使用新密码重新登录，原登录会话将全部失效。</p>
+          <div class="form-group">
+            <label class="form-label" for="reset-email">注册邮箱</label>
+            <input id="reset-email" v-model="resetEmail" type="email" class="form-input" placeholder="you@example.com" autocomplete="email" :disabled="resetSubmitting" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reset-code">邮箱验证码</label>
+            <div class="verify-row">
+              <input id="reset-code" v-model="resetCode" type="text" class="form-input" placeholder="6 位验证码" inputmode="numeric" :disabled="resetSubmitting" />
+              <button type="button" class="btn btn-secondary" :disabled="resetCountdown > 0 || resetSending" @click="handleResetSendCode">
+                {{ resetCountdown > 0 ? `${resetCountdown}s` : '获取验证码' }}
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reset-password">新密码</label>
+            <input id="reset-password" v-model="resetPassword1" type="password" class="form-input" placeholder="仅数字与大小写字母，6-64 位" autocomplete="new-password" :disabled="resetSubmitting" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reset-password2">确认新密码</label>
+            <input id="reset-password2" v-model="resetPassword2" type="password" class="form-input" placeholder="再次输入新密码" autocomplete="new-password" :disabled="resetSubmitting" />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" :disabled="resetSubmitting">
+              {{ resetSubmitting ? '重置中…' : '重置密码' }}
+            </button>
+            <button type="button" class="forgot-link" @click="switchMode('login')">返回登录</button>
           </div>
         </form>
 
@@ -121,6 +154,14 @@
           </p>
           <div class="form-actions">
             <button class="btn btn-secondary" :disabled="isBusy" @click="handleLogout">退出登录</button>
+            <button
+              class="btn btn-danger"
+              :class="{ 'btn-danger--confirm': confirmingDelete }"
+              :disabled="isBusy"
+              @click="handleDeleteAccount"
+            >
+              {{ confirmingDelete ? '确认注销（不可恢复）' : '注销账号' }}
+            </button>
             <button class="btn btn-secondary" @click="goBack">完成</button>
           </div>
         </div>
@@ -198,14 +239,22 @@ import { useRouter } from 'vue-router'
 import { ArrowLeft } from '@lucide/vue'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
-import { fetchPlans, fetchUsageSummary, redeemPlan, ZhizhiApiError, type UsageSummary } from '../api/zhizhi-api'
+import {
+  fetchPlans,
+  fetchUsageSummary,
+  forgotPassword,
+  redeemPlan,
+  resetPassword,
+  ZhizhiApiError,
+  type UsageSummary,
+} from '../api/zhizhi-api'
 import type { OfficialPlan } from '../types'
 
 const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
 
-type AuthMode = 'login' | 'register'
+type AuthMode = 'login' | 'register' | 'reset'
 
 /** 与服务端一致：仅数字与大小写字母 */
 const USERNAME_RE = /^[A-Za-z0-9]{3,32}$/
@@ -239,6 +288,115 @@ function switchMode(next: AuthMode) {
   if (countdownTimer) {
     clearInterval(countdownTimer)
     countdownTimer = null
+  }
+  if (next !== 'reset' && resetTimer) {
+    clearInterval(resetTimer)
+    resetTimer = null
+  }
+}
+
+// ===== 忘记密码 / 重置（上线方案 S7） =====
+
+const resetEmail = ref('')
+const resetCode = ref('')
+const resetPassword1 = ref('')
+const resetPassword2 = ref('')
+const resetCountdown = ref(0)
+const resetSending = ref(false)
+const resetSubmitting = ref(false)
+let resetTimer: ReturnType<typeof setInterval> | null = null
+
+function startResetCountdown(seconds: number) {
+  resetCountdown.value = seconds
+  if (resetTimer) clearInterval(resetTimer)
+  resetTimer = setInterval(() => {
+    resetCountdown.value -= 1
+    if (resetCountdown.value <= 0 && resetTimer) {
+      clearInterval(resetTimer)
+      resetTimer = null
+    }
+  }, 1000)
+}
+
+async function handleResetSendCode() {
+  const mail = resetEmail.value.trim()
+  if (!EMAIL_RE.test(mail)) {
+    toast.error('请输入有效的邮箱地址')
+    return
+  }
+  if (resetCountdown.value > 0 || resetSending.value) return
+  resetSending.value = true
+  try {
+    const result = await forgotPassword(mail)
+    startResetCountdown(result.cooldown_seconds || 60)
+    toast.success('重置验证码已发送，请查收邮箱')
+  } catch (err) {
+    toast.error(messageOf(err))
+  } finally {
+    resetSending.value = false
+  }
+}
+
+async function handleResetPassword() {
+  const mail = resetEmail.value.trim()
+  const code = resetCode.value.trim()
+  if (!EMAIL_RE.test(mail)) {
+    toast.error('请输入有效的邮箱地址')
+    return
+  }
+  if (!/^\d{6}$/.test(code)) {
+    toast.error('请输入 6 位验证码')
+    return
+  }
+  if (!PASSWORD_RE.test(resetPassword1.value)) {
+    toast.error('密码仅允许 6-64 位数字与大小写字母')
+    return
+  }
+  if (resetPassword1.value !== resetPassword2.value) {
+    toast.error('两次输入的密码不一致')
+    return
+  }
+  resetSubmitting.value = true
+  try {
+    await resetPassword(mail, code, resetPassword1.value)
+    toast.success('密码已重置，请使用新密码登录')
+    mode.value = 'login'
+    resetEmail.value = ''
+    resetCode.value = ''
+    resetPassword1.value = ''
+    resetPassword2.value = ''
+    if (resetTimer) {
+      clearInterval(resetTimer)
+      resetTimer = null
+    }
+  } catch (err) {
+    toast.error(messageOf(err))
+  } finally {
+    resetSubmitting.value = false
+  }
+}
+
+// ===== 注销账号（上线方案 S7/S8）：两击确认，4 秒未确认自动复位 =====
+
+const confirmingDelete = ref(false)
+let deleteConfirmTimer: ReturnType<typeof setTimeout> | null = null
+
+async function handleDeleteAccount() {
+  if (!confirmingDelete.value) {
+    confirmingDelete.value = true
+    if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer)
+    deleteConfirmTimer = setTimeout(() => {
+      confirmingDelete.value = false
+    }, 4000)
+    return
+  }
+  if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer)
+  confirmingDelete.value = false
+  try {
+    await authStore.deleteAccount()
+    toast.success('账号已注销，本地凭据已清除')
+  } catch (err) {
+    toast.error(messageOf(err))
   }
 }
 
@@ -347,6 +505,8 @@ async function handleLogout() {
 
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
+  if (resetTimer) clearInterval(resetTimer)
+  if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer)
 })
 
 // ===== 套餐中心（上线方案 S6） =====
@@ -755,5 +915,30 @@ onMounted(() => {
   margin-top: 4px;
   font-size: 9px;
   color: var(--ink-3);
+}
+
+/* 账号安全 */
+.forgot-link {
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  align-self: center;
+}
+
+.forgot-link:hover {
+  color: var(--brand);
+}
+
+.btn-danger {
+  color: var(--state-error);
+  background: color-mix(in srgb, var(--state-error) 10%, transparent);
+}
+
+.btn-danger--confirm {
+  color: #fff;
+  background: var(--state-error);
 }
 </style>

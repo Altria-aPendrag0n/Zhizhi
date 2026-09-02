@@ -79,7 +79,7 @@ function endpoint(path: string): string {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'DELETE'
   body?: unknown
   auth?: boolean
   allowRetry?: boolean
@@ -244,4 +244,25 @@ export async function fetchUsageSummary(days = 30): Promise<UsageSummary> {
 /** 本人订单列表（需登录） */
 export async function fetchMyOrders(): Promise<{ orders: MyOrder[] }> {
   return request('/api/me/orders')
+}
+
+// ===== 账号安全（上线方案 S7/S8） =====
+
+/** 忘记密码：发送重置验证码（响应不暴露邮箱是否存在，防枚举） */
+export async function forgotPassword(email: string): Promise<{ success: boolean; cooldown_seconds: number }> {
+  return request('/api/auth/forgot-password', { method: 'POST', body: { email }, auth: false })
+}
+
+/** 重置密码：邮箱验证码 + 新密码（成功后该账号全部会话失效，需重新登录） */
+export async function resetPassword(email: string, code: string, newPassword: string): Promise<{ success: boolean }> {
+  return request('/api/auth/reset-password', {
+    method: 'POST',
+    body: { email, code, new_password: newPassword },
+    auth: false,
+  })
+}
+
+/** 注销账号（需登录）：服务端匿名化数据，调用方负责本地凭据清理 */
+export async function deleteAccount(): Promise<void> {
+  await request('/api/me', { method: 'DELETE' })
 }

@@ -129,6 +129,13 @@ export const useAuthStore = defineStore('auth', () => {
     reset()
   }
 
+  /** 注销账号：服务端匿名化数据（DELETE /api/me）后本地全清（Key/令牌/状态） */
+  async function deleteAccount(): Promise<void> {
+    await zhizhiApi.deleteAccount()
+    await clearCredentials()
+    reset()
+  }
+
   return {
     status,
     user,
@@ -142,5 +149,6 @@ export const useAuthStore = defineStore('auth', () => {
     silentRefresh,
     fetchMe,
     logout,
+    deleteAccount,
   }
 })

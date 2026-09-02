@@ -16,6 +16,9 @@ const state = vi.hoisted(() => ({
   fetchPlans: vi.fn(),
   fetchUsageSummary: vi.fn(),
   redeemPlan: vi.fn(),
+  forgotPassword: vi.fn(),
+  resetPassword: vi.fn(),
+  deleteAccount: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -31,6 +34,8 @@ vi.mock('../api/zhizhi-api', () => ({
   fetchPlans: (...args: unknown[]) => state.fetchPlans(...args),
   fetchUsageSummary: (...args: unknown[]) => state.fetchUsageSummary(...args),
   redeemPlan: (...args: unknown[]) => state.redeemPlan(...args),
+  forgotPassword: (...args: unknown[]) => state.forgotPassword(...args),
+  resetPassword: (...args: unknown[]) => state.resetPassword(...args),
 }))
 
 vi.mock('../stores/auth', async () => {
@@ -75,6 +80,11 @@ vi.mock('../stores/auth', async () => {
     fetchMe: async () => {
       state.fetchMe()
     },
+    deleteAccount: async () => {
+      await state.deleteAccount()
+      status.value = 'anonymous'
+      user.value = null
+    },
   })
   return {
     __resetAuthMock: () => {
@@ -103,6 +113,9 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
       state.fetchPlans,
       state.fetchUsageSummary,
       state.redeemPlan,
+      state.forgotPassword,
+      state.resetPassword,
+      state.deleteAccount,
     ]) {
       fn.mockClear()
     }
@@ -306,5 +319,79 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
     await wrapper.find('.back-link').trigger('click')
 
     expect(state.push).toHaveBeenCalledWith({ name: 'settings-models' })
+  })
+
+  it('忘记密码入口切换到重置表单并发送重置验证码', async () => {
+    state.forgotPassword.mockResolvedValue({ success: true, cooldown_seconds: 60 })
+    const wrapper = mount(OfficialModelPage)
+
+    const forgotButton = wrapper.findAll('button').find((b) => b.text() === '忘记密码？')!
+    await forgotButton.trigger('click')
+
+    expect(wrapper.find('#reset-email').exists()).toBe(true)
+    await wrapper.find('#reset-email').setValue('a@b.com')
+
+    const sendButton = wrapper.findAll('.btn').find((b) => b.text() === '获取验证码')!
+    await sendButton.trigger('click')
+
+    expect(state.forgotPassword).toHaveBeenCalledWith('a@b.com')
+    expect(state.toastSuccess).toHaveBeenCalledWith('重置验证码已发送，请查收邮箱')
+  })
+
+  it('重置密码成功后回到登录表单', async () => {
+    state.resetPassword.mockResolvedValue({ success: true })
+    const wrapper = mount(OfficialModelPage)
+
+    await wrapper.findAll('button').find((b) => b.text() === '忘记密码？')!.trigger('click')
+    await wrapper.find('#reset-email').setValue('a@b.com')
+    await wrapper.find('#reset-code').setValue('123456')
+    await wrapper.find('#reset-password').setValue('NewPass9')
+    await wrapper.find('#reset-password2').setValue('NewPass9')
+    await wrapper.find('form').trigger('submit')
+
+    expect(state.resetPassword).toHaveBeenCalledWith('a@b.com', '123456', 'NewPass9')
+    expect(state.toastSuccess).toHaveBeenCalledWith('密码已重置，请使用新密码登录')
+    expect(wrapper.find('#reset-email').exists()).toBe(false)
+    expect(wrapper.find('#account-username').exists()).toBe(true)
+  })
+
+  it('两次新密码不一致提示错误且不提交', async () => {
+    const wrapper = mount(OfficialModelPage)
+    await wrapper.findAll('button').find((b) => b.text() === '忘记密码？')!.trigger('click')
+    await wrapper.find('#reset-email').setValue('a@b.com')
+    await wrapper.find('#reset-code').setValue('123456')
+    await wrapper.find('#reset-password').setValue('NewPass9')
+    await wrapper.find('#reset-password2').setValue('Other1')
+    await wrapper.find('form').trigger('submit')
+
+    expect(state.toastError).toHaveBeenCalledWith('两次输入的密码不一致')
+    expect(state.resetPassword).not.toHaveBeenCalled()
+  })
+
+  it('注销账号：两击确认后调用删除并回到登录表单', async () => {
+    state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
+    state.deleteAccount.mockResolvedValue(undefined)
+    const wrapper = mount(OfficialModelPage)
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    const deleteButton = wrapper.findAll('.btn').find((b) => b.text() === '注销账号')!
+    await deleteButton.trigger('click')
+    expect(state.deleteAccount).not.toHaveBeenCalled()
+    const confirmButton = wrapper.findAll('.btn').find((b) => b.text() === '确认注销（不可恢复）')!
+
+    await confirmButton.trigger('click')
+    expect(state.deleteAccount).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('登录')
+    expect(wrapper.text()).not.toContain('退出登录')
   })
 })

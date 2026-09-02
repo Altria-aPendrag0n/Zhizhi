@@ -221,7 +221,7 @@ describe('SettingsPage 设置页（侧边栏常驻嵌套路由布局）', () => 
     await cards[0].trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('套餐预览')
+    expect(wrapper.text()).toContain('套餐中心')
     expect(wrapper.findAll('.settings-nav__item')).toHaveLength(3)
     expect(wrapper.findAll('.settings-nav__item')[1].classes()).toContain('settings-nav__item--active')
   })

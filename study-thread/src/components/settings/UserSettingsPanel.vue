@@ -152,6 +152,14 @@
         </p>
         <div class="form-actions">
           <button class="btn btn-secondary" :disabled="isBusy" @click="handleLogout">退出登录</button>
+          <button
+            class="btn btn-danger"
+            :class="{ 'btn-danger--confirm': confirmingDelete }"
+            :disabled="isBusy"
+            @click="handleDeleteAccount"
+          >
+            {{ confirmingDelete ? '确认注销（不可恢复）' : '注销账号' }}
+          </button>
         </div>
       </div>
     </template>
@@ -188,6 +196,30 @@ const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const isBusy = computed(() => authStore.status === 'authenticating')
+
+// ===== 注销账号（上线方案 S7/S8）：两击确认，4 秒未确认自动复位 =====
+
+const confirmingDelete = ref(false)
+let deleteConfirmTimer: ReturnType<typeof setTimeout> | null = null
+
+async function handleDeleteAccount() {
+  if (!confirmingDelete.value) {
+    confirmingDelete.value = true
+    if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer)
+    deleteConfirmTimer = setTimeout(() => {
+      confirmingDelete.value = false
+    }, 4000)
+    return
+  }
+  if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer)
+  confirmingDelete.value = false
+  try {
+    await authStore.deleteAccount()
+    toast.success('账号已注销，本地凭据已清除')
+  } catch (err) {
+    toast.error(err instanceof ZhizhiApiError ? err.message : '注销失败，请稍后再试')
+  }
+}
 
 function switchMode(next: AuthMode) {
   if (mode.value === next || isBusy.value) return
@@ -301,6 +333,7 @@ async function handleLogout() {
 
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
+  if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer)
 })
 </script>
 
@@ -430,6 +463,16 @@ onUnmounted(() => {
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--line);
+}
+
+.btn-danger {
+  color: var(--state-error);
+  background: color-mix(in srgb, var(--state-error) 10%, transparent);
+}
+
+.btn-danger--confirm {
+  color: #fff;
+  background: var(--state-error);
 }
 
 .account-card {

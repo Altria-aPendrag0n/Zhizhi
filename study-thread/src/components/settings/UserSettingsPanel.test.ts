@@ -1,4 +1,4 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import * as authModule from '../../stores/auth'
 import UserSettingsPanel from './UserSettingsPanel.vue'
@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  deleteAccount: vi.fn(),
 }))
 
 vi.mock('../../composables/useToast', () => ({
@@ -48,6 +49,11 @@ vi.mock('../../stores/auth', async () => {
       status.value = 'anonymous'
       user.value = null
     },
+    deleteAccount: async () => {
+      await state.deleteAccount()
+      status.value = 'anonymous'
+      user.value = null
+    },
   })
   return {
     __resetAuthMock: () => {
@@ -68,6 +74,7 @@ describe('UserSettingsPanel 设置-用户面板', () => {
     state.login.mockReset()
     state.register.mockReset()
     state.logout.mockReset()
+    state.deleteAccount.mockReset()
   })
 
   it('默认登录模式：渲染用户名/密码表单与「登录」「注册」切换', () => {
@@ -223,5 +230,43 @@ describe('UserSettingsPanel 设置-用户面板', () => {
     expect(state.logout).toHaveBeenCalled()
     expect(wrapper.text()).toContain('登录')
     expect(wrapper.text()).not.toContain('退出登录')
+  })
+
+  it('注销账号：两击确认后调用删除并回到登录表单', async () => {
+    state.login.mockResolvedValue(undefined)
+    state.deleteAccount.mockResolvedValue(undefined)
+    const wrapper = mount(UserSettingsPanel)
+    await wrapper.find('#user-username').setValue('Alice2026')
+    await wrapper.find('#user-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    expect(wrapper.text()).toContain('退出登录')
+
+    const deleteButton = wrapper.findAll('.btn').find((b) => b.text() === '注销账号')!
+    await deleteButton.trigger('click')
+    // 第一次点击进入确认态，尚未调用删除
+    expect(state.deleteAccount).not.toHaveBeenCalled()
+    const confirmButton = wrapper.findAll('.btn').find((b) => b.text() === '确认注销（不可恢复）')!
+
+    await confirmButton.trigger('click')
+    expect(state.deleteAccount).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('登录')
+    expect(wrapper.text()).not.toContain('退出登录')
+  })
+
+  it('注销失败提示错误并保持登录态', async () => {
+    state.login.mockResolvedValue(undefined)
+    state.deleteAccount.mockRejectedValue(new Error('server busy'))
+    const wrapper = mount(UserSettingsPanel)
+    await wrapper.find('#user-username').setValue('Alice2026')
+    await wrapper.find('#user-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+
+    const deleteButton = wrapper.findAll('.btn').find((b) => b.text() === '注销账号')!
+    await deleteButton.trigger('click')
+    const confirmButton = wrapper.findAll('.btn').find((b) => b.text() === '确认注销（不可恢复）')!
+    await confirmButton.trigger('click')
+
+    expect(state.toastError).toHaveBeenCalledWith('注销失败，请稍后再试')
+    expect(wrapper.text()).toContain('退出登录')
   })
 })
