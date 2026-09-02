@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-page">
+  <div class="custom-model-page">
     <div class="settings-page__header">
       <button type="button" class="back-link" @click="goBack">
         <ArrowLeft :size="14" />
