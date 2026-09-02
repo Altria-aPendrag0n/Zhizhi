@@ -329,12 +329,6 @@ const plans = [
 </script>
 
 <style scoped>
-.settings-page {
-  padding: 42px 54px 72px;
-  height: 100%;
-  overflow-y: auto;
-}
-
 .settings-page__header {
   margin-bottom: 32px;
 }
@@ -610,17 +604,5 @@ const plans = [
   font-size: 13px;
   line-height: 2;
   color: var(--ink);
-}
-
-@media (max-width: 1240px) {
-  .settings-page {
-    padding: 34px 34px 64px;
-  }
-}
-
-@media (max-width: 860px) {
-  .settings-page {
-    padding: 22px 20px 56px;
-  }
 }
 </style>

@@ -7,7 +7,7 @@
           type="button"
           class="settings-nav__item"
           :class="{ 'settings-nav__item--active': section === 'general' }"
-          @click="section = 'general'"
+          @click="goToSection('general')"
         >
           <SlidersHorizontal :size="15" />
           <span>常规设置</span>
@@ -16,7 +16,7 @@
           type="button"
           class="settings-nav__item"
           :class="{ 'settings-nav__item--active': section === 'models' }"
-          @click="section = 'models'"
+          @click="goToSection('models')"
         >
           <Sparkles :size="15" />
           <span>模型配置</span>
@@ -25,7 +25,7 @@
           type="button"
           class="settings-nav__item"
           :class="{ 'settings-nav__item--active': section === 'user' }"
-          @click="section = 'user'"
+          @click="goToSection('user')"
         >
           <UserRound :size="15" />
           <span>用户</span>
@@ -35,38 +35,42 @@
 
     <!-- 右侧内容区 -->
     <main class="settings-content">
-      <header class="settings-content__header">
+      <header v-if="sectionMeta" class="settings-content__header">
         <div class="eyebrow">{{ sectionMeta.eyebrow }}</div>
         <h1 class="settings-content__title">{{ sectionMeta.title }}</h1>
         <p class="settings-content__subtitle">{{ sectionMeta.subtitle }}</p>
       </header>
 
-      <GeneralSettingsPanel v-if="section === 'general'" />
-      <ModelSettingsPanel v-else-if="section === 'models'" />
-      <UserSettingsPanel v-else />
+      <router-view />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { SlidersHorizontal, Sparkles, UserRound } from '@lucide/vue'
-import GeneralSettingsPanel from '../components/settings/GeneralSettingsPanel.vue'
-import ModelSettingsPanel from '../components/settings/ModelSettingsPanel.vue'
-import UserSettingsPanel from '../components/settings/UserSettingsPanel.vue'
 
 type SettingsSection = 'general' | 'models' | 'user'
 
-const section = ref<SettingsSection>('general')
+const route = useRoute()
+const router = useRouter()
 
-const sectionMeta = computed<{ eyebrow: string; title: string; subtitle: string }>(() => {
+const section = computed<SettingsSection>(() => {
+  const name = typeof route.name === 'string' ? route.name : ''
+  if (name.startsWith('settings-models')) return 'models'
+  if (name === 'settings-user') return 'user'
+  return 'general'
+})
+
+function goToSection(next: SettingsSection) {
+  router.push({ name: `settings-${next}` })
+}
+
+const sectionMeta = computed<{ eyebrow: string; title: string; subtitle: string } | null>(() => {
   switch (section.value) {
     case 'models':
-      return {
-        eyebrow: 'Model Configuration',
-        title: '模型配置',
-        subtitle: '选择 AI 能力来源：知枝官方 API（开箱即用）或自定义模型（自持 Key）',
-      }
+      return null
     case 'user':
       return {
         eyebrow: 'Account',

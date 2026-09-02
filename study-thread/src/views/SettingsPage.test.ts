@@ -1,7 +1,14 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
+import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import * as authModule from '../stores/auth'
 import SettingsPage from './SettingsPage.vue'
+import GeneralSettingsPanel from '../components/settings/GeneralSettingsPanel.vue'
+import UserSettingsPanel from '../components/settings/UserSettingsPanel.vue'
+import ModelConfigPage from '../views/ModelConfigPage.vue'
+import OfficialModelPage from '../views/OfficialModelPage.vue'
+import CustomModelPage from '../views/CustomModelPage.vue'
 
 // 与 AboutSection.test.ts 一致：AboutSection 依赖的 Tauri 插件在测试环境需 mock
 vi.mock('@tauri-apps/api/app', () => ({
@@ -25,16 +32,11 @@ vi.mock('@tauri-apps/plugin-process', () => ({
 }))
 
 const state = vi.hoisted(() => ({
-  push: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   sendCode: vi.fn(),
   login: vi.fn(),
   logout: vi.fn(),
-}))
-
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: state.push }),
 }))
 
 vi.mock('../composables/useToast', () => ({
@@ -88,6 +90,10 @@ vi.mock('../stores/settings', () => ({
     autoGenerateNoteTitle: true,
     autoGenerateNoteTags: true,
     reviewAlgorithm: 'classic',
+    visionEnabled: false,
+    visionBaseUrl: 'https://open.bigmodel.cn/api/paas',
+    visionApiKey: '',
+    visionModel: 'glm-4v-flash',
     saveSettings: vi.fn(),
   }),
 }))
@@ -98,17 +104,74 @@ vi.mock('../api/openai-compat', () => ({
 
 vi.mock('../api/provider-factory', () => ({
   createProvider: vi.fn(),
+  createVisionProvider: vi.fn(),
 }))
 
 vi.mock('../utils/vault-fs', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }))
 
-describe('SettingsPage 设置页（侧边栏布局）', () => {
+// 与 src/router/index.ts 的设置嵌套路由保持一致
+function createSettingsRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      {
+        path: '/settings',
+        component: SettingsPage,
+        children: [
+          { path: '', redirect: { name: 'settings-general' } },
+          {
+            path: 'general',
+            name: 'settings-general',
+            component: GeneralSettingsPanel,
+          },
+          {
+            path: 'models',
+            name: 'settings-models',
+            component: ModelConfigPage,
+          },
+          {
+            path: 'models/official',
+            name: 'settings-models-official',
+            component: OfficialModelPage,
+          },
+          {
+            path: 'models/custom',
+            name: 'settings-models-custom',
+            component: CustomModelPage,
+          },
+          {
+            path: 'user',
+            name: 'settings-user',
+            component: UserSettingsPanel,
+          },
+        ],
+      },
+    ],
+  })
+}
+
+async function mountSettings() {
+  const router = createSettingsRouter()
+  await router.push('/settings')
+  await router.isReady()
+
+  const Host = defineComponent({ name: 'Host', render: () => h(RouterView) })
+  const wrapper = mount(Host, {
+    global: {
+      plugins: [router],
+      stubs: { VaultSettings: true },
+    },
+  })
+  await flushPromises()
+  return wrapper
+}
+
+describe('SettingsPage 设置页（侧边栏常驻嵌套路由布局）', () => {
   afterEach(() => {
     vi.useRealTimers()
     ;(authModule as unknown as { __resetAuthMock(): void }).__resetAuthMock()
-    state.push.mockClear()
     state.toastError.mockClear()
     state.toastSuccess.mockClear()
     state.sendCode.mockReset()
@@ -116,64 +179,88 @@ describe('SettingsPage 设置页（侧边栏布局）', () => {
     state.logout.mockReset()
   })
 
-  it('渲染左侧导航栏（常规设置/模型配置/用户）与默认常规设置面板', () => {
-    const wrapper = mount(SettingsPage, {
-      global: {
-        stubs: { VaultSettings: true },
-      },
-    })
+  it('渲染左侧导航栏（常规设置/模型配置/用户）并默认进入常规设置面板', async () => {
+    const wrapper = await mountSettings()
 
-    // 左侧三个栏目
+    const navItems = wrapper.findAll('.settings-nav__item')
+    expect(navItems).toHaveLength(3)
+    expect(navItems[0].classes()).toContain('settings-nav__item--active')
+
     expect(wrapper.text()).toContain('常规设置')
     expect(wrapper.text()).toContain('模型配置')
     expect(wrapper.text()).toContain('用户')
 
-    // 默认显示常规设置面板：关于知枝 + 检查更新（回归防线：AboutSection 曾在模板中使用但未 import）
+    expect(wrapper.find('.settings-content__title').text()).toBe('常规设置')
     expect(wrapper.text()).toContain('关于知枝')
     expect(wrapper.text()).toContain('检查更新')
   })
 
-  it('点击「模型配置」切换右侧面板并更新标题', async () => {
-    const wrapper = mount(SettingsPage, {
-      global: {
-        stubs: { VaultSettings: true },
-      },
-    })
+  it('点击「模型配置」切换子路由且侧边栏常驻', async () => {
+    const wrapper = await mountSettings()
 
     const navItems = wrapper.findAll('.settings-nav__item')
     await navItems[1].trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('.settings-content__title').text()).toBe('模型配置')
+    expect(wrapper.text()).toContain('返回设置')
     expect(wrapper.text()).toContain('知枝官方 API')
     expect(wrapper.text()).toContain('自定义模型')
+    expect(wrapper.find('.settings-page__title').text()).toBe('模型配置')
+
+    expect(wrapper.findAll('.settings-nav__item')).toHaveLength(3)
+    expect(wrapper.findAll('.settings-nav__item')[1].classes()).toContain('settings-nav__item--active')
+  })
+
+  it('进入官方 API 子页后侧边栏仍常驻', async () => {
+    const wrapper = await mountSettings()
+
+    await wrapper.findAll('.settings-nav__item')[1].trigger('click')
+    await flushPromises()
+
+    const cards = wrapper.findAll('.entry-card')
+    await cards[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('套餐预览')
+    expect(wrapper.findAll('.settings-nav__item')).toHaveLength(3)
+    expect(wrapper.findAll('.settings-nav__item')[1].classes()).toContain('settings-nav__item--active')
+  })
+
+  it('进入自定义模型子页后侧边栏仍常驻', async () => {
+    const wrapper = await mountSettings()
+
+    await wrapper.findAll('.settings-nav__item')[1].trigger('click')
+    await flushPromises()
+
+    const cards = wrapper.findAll('.entry-card')
+    await cards[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('服务商')
+    expect(wrapper.text()).toContain('API 地址')
+    expect(wrapper.findAll('.settings-nav__item')).toHaveLength(3)
+    expect(wrapper.findAll('.settings-nav__item')[1].classes()).toContain('settings-nav__item--active')
   })
 
   it('点击「用户」切换右侧登录/注册面板', async () => {
-    const wrapper = mount(SettingsPage, {
-      global: {
-        stubs: { VaultSettings: true },
-      },
-    })
+    const wrapper = await mountSettings()
 
-    const navItems = wrapper.findAll('.settings-nav__item')
-    await navItems[2].trigger('click')
+    await wrapper.findAll('.settings-nav__item')[2].trigger('click')
+    await flushPromises()
 
     expect(wrapper.find('.settings-content__title').text()).toBe('用户')
     expect(wrapper.text()).toContain('用户名')
     expect(wrapper.text()).toContain('密码')
     expect(wrapper.text()).toContain('注册')
+    expect(wrapper.findAll('.settings-nav__item')).toHaveLength(3)
   })
 
   it('用户面板登录成功后展示已登录态', async () => {
     state.login.mockResolvedValue(undefined)
-    const wrapper = mount(SettingsPage, {
-      global: {
-        stubs: { VaultSettings: true },
-      },
-    })
+    const wrapper = await mountSettings()
 
-    const navItems = wrapper.findAll('.settings-nav__item')
-    await navItems[2].trigger('click')
+    await wrapper.findAll('.settings-nav__item')[2].trigger('click')
+    await flushPromises()
 
     await wrapper.find('#user-username').setValue('Alice2026')
     await wrapper.find('#user-password').setValue('Passw0rd')
