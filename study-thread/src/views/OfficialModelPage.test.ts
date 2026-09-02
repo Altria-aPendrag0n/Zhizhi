@@ -1,5 +1,5 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import * as authModule from '../stores/auth'
 import OfficialModelPage from './OfficialModelPage.vue'
 
@@ -7,10 +7,15 @@ const state = vi.hoisted(() => ({
   push: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  toastInfo: vi.fn(),
   sendCode: vi.fn(),
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  fetchMe: vi.fn(),
+  fetchPlans: vi.fn(),
+  fetchUsageSummary: vi.fn(),
+  redeemPlan: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -18,11 +23,14 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('../composables/useToast', () => ({
-  useToast: () => ({ error: state.toastError, success: state.toastSuccess, info: vi.fn() }),
+  useToast: () => ({ error: state.toastError, success: state.toastSuccess, info: state.toastInfo }),
 }))
 
 vi.mock('../api/zhizhi-api', () => ({
   ZhizhiApiError: class ZhizhiApiError extends Error {},
+  fetchPlans: (...args: unknown[]) => state.fetchPlans(...args),
+  fetchUsageSummary: (...args: unknown[]) => state.fetchUsageSummary(...args),
+  redeemPlan: (...args: unknown[]) => state.redeemPlan(...args),
 }))
 
 vi.mock('../stores/auth', async () => {
@@ -41,16 +49,31 @@ vi.mock('../stores/auth', async () => {
     login: async (username: string, password?: string) => {
       await state.login(username, password)
       status.value = 'authenticated'
-      user.value = { username, identifier: 'a@b.com', plan: { name: '标准' }, quota_tokens: 5000000 }
+      user.value = {
+        username,
+        identifier: 'a@b.com',
+        plan: { name: '标准' },
+        plan_expires_at: 1800000000000,
+        quota_tokens: 5000000,
+      }
     },
     register: async (email: string, code: string, username: string, password: string) => {
       await state.register(email, code, username, password)
       status.value = 'authenticated'
-      user.value = { username, identifier: email, plan: { name: '标准' }, quota_tokens: 5000000 }
+      user.value = {
+        username,
+        identifier: email,
+        plan: { name: '标准' },
+        plan_expires_at: 1800000000000,
+        quota_tokens: 5000000,
+      }
     },
     logout: async () => {
       await state.logout()
       status.value = 'anonymous'
+    },
+    fetchMe: async () => {
+      state.fetchMe()
     },
   })
   return {
@@ -62,25 +85,38 @@ vi.mock('../stores/auth', async () => {
   }
 })
 
+const MOCK_PLANS = [
+  { id: 'plan-lite', name: '轻量', price_cents: 990, token_quota: 1_000_000, model_group: 'lite' },
+  { id: 'plan-standard', name: '标准', price_cents: 2990, token_quota: 5_000_000, model_group: 'standard' },
+]
+
 describe('OfficialModelPage 知枝官方 API 页', () => {
   afterEach(() => {
     vi.useRealTimers()
     ;(authModule as unknown as { __resetAuthMock(): void }).__resetAuthMock()
-    state.push.mockClear()
-    state.toastError.mockClear()
-    state.toastSuccess.mockClear()
-    state.sendCode.mockReset()
-    state.login.mockReset()
-    state.register.mockReset()
-    state.logout.mockReset()
+    for (const fn of [
+      state.push,
+      state.toastError,
+      state.toastSuccess,
+      state.toastInfo,
+      state.fetchMe,
+      state.fetchPlans,
+      state.fetchUsageSummary,
+      state.redeemPlan,
+    ]) {
+      fn.mockClear()
+    }
+    for (const fn of [state.sendCode, state.login, state.register, state.logout]) {
+      fn.mockReset()
+    }
   })
 
-  it('渲染登录/注册引导、套餐预览与自动配置说明', () => {
+  it('渲染登录/注册引导、套餐中心与自动配置说明', () => {
     const wrapper = mount(OfficialModelPage)
 
     expect(wrapper.text()).toContain('知枝官方 API')
     expect(wrapper.text()).toContain('知枝账号')
-    expect(wrapper.text()).toContain('套餐预览')
+    expect(wrapper.text()).toContain('套餐中心')
     expect(wrapper.text()).toContain('如何工作')
     expect(wrapper.text()).toContain('用户名')
     expect(wrapper.text()).toContain('密码')
@@ -114,17 +150,27 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
 
   it('登录成功进入已登录态并展示账号与套餐', async () => {
     state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
     const wrapper = mount(OfficialModelPage)
     await wrapper.find('#account-username').setValue('Alice2026')
     await wrapper.find('#account-password').setValue('Passw0rd')
 
     await wrapper.find('form').trigger('submit')
+    await flushPromises()
 
     expect(state.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd')
     expect(state.toastSuccess).toHaveBeenCalledWith('登录成功，官方 API 已启用')
     expect(wrapper.text()).toContain('Alice2026')
     expect(wrapper.text()).toContain('标准')
+    expect(wrapper.text()).toContain('套餐到期')
     expect(wrapper.text()).toContain('退出登录')
+    expect(state.fetchUsageSummary).toHaveBeenCalledWith(30)
   })
 
   it('登录失败提示错误并保持登录表单', async () => {
@@ -175,13 +221,84 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
     expect(wrapper.text()).not.toContain('退出登录')
   })
 
-  it('开通套餐按钮提示未上线', async () => {
+  it('套餐中心渲染服务端套餐列表（价格/额度/兑换按钮）', async () => {
+    state.fetchPlans.mockResolvedValue({ plans: MOCK_PLANS })
     const wrapper = mount(OfficialModelPage)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('轻量')
+    expect(wrapper.text()).toContain('标准')
+    expect(wrapper.text()).toContain('¥10 / 期')
+    expect(wrapper.text()).toContain('¥30 / 期')
+    expect(wrapper.text()).toContain('每期 1.0M tokens')
+    expect(wrapper.text()).toContain('登录后兑换')
+  })
+
+  it('未登录点击开通提示登录后兑换', async () => {
+    state.fetchPlans.mockResolvedValue({ plans: MOCK_PLANS })
+    const wrapper = mount(OfficialModelPage)
+    await flushPromises()
+
     const buttons = wrapper.findAll('.btn--block')
     expect(buttons.length).toBeGreaterThan(0)
     await buttons[0].trigger('click')
 
-    expect(state.toastError).toHaveBeenCalledWith('账号服务尚未上线，敬请期待')
+    expect(state.toastInfo).toHaveBeenCalledWith('登录后使用兑换码开通套餐')
+  })
+
+  it('登录后兑换成功：调用 redeemPlan 并刷新账户', async () => {
+    state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
+    state.redeemPlan.mockResolvedValue({
+      success: true,
+      plan: { id: 'plan-lite', name: '轻量', token_quota: 1_000_000 },
+      plan_expires_at: 1800000000000,
+      quota_tokens: 6_000_000,
+    })
+    const wrapper = mount(OfficialModelPage)
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    await wrapper.find('.redeem-input').setValue('zhizhi-AAAA-BBBB-CCCC')
+    await wrapper.find('.redeem-row .btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(state.redeemPlan).toHaveBeenCalledWith('zhizhi-AAAA-BBBB-CCCC')
+    expect(state.toastSuccess).toHaveBeenCalledWith(
+      '兑换成功：轻量 已开通，当前额度 6.0M tokens',
+    )
+    expect(state.fetchMe).toHaveBeenCalled()
+  })
+
+  it('兑换失败提示服务端错误', async () => {
+    state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
+    state.redeemPlan.mockRejectedValue(new Error('already-used'))
+    const wrapper = mount(OfficialModelPage)
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    await wrapper.find('.redeem-input').setValue('zhizhi-AAAA-BBBB-CCCC')
+    await wrapper.find('.redeem-row .btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(state.toastError).toHaveBeenCalledWith('already-used')
   })
 
   it('返回按钮跳回模型配置入口页', async () => {

@@ -197,3 +197,51 @@ export async function fetchMe(): Promise<OfficialUser> {
 export async function refreshSession(): Promise<boolean> {
   return (await refreshAccessToken()) !== null
 }
+
+// ===== 套餐中心（上线方案 S6） =====
+
+export interface UsageSummary {
+  days: number
+  quota_tokens: number
+  totals: { requests: number; prompt_tokens: number; completion_tokens: number; cost_cents: number }
+  daily: Array<{ day: string; requests: number; prompt_tokens: number; completion_tokens: number; cost_cents: number }>
+  models: Array<{ model: string | null; requests: number; prompt_tokens: number; completion_tokens: number; cost_cents: number }>
+}
+
+export interface RedeemResult {
+  success: boolean
+  plan: { id: string; name: string; token_quota: number }
+  plan_expires_at: number
+  quota_tokens: number
+}
+
+export interface MyOrder {
+  id: string
+  order_no: string | null
+  plan_id: string | null
+  amount_cents: number
+  status: string
+  provider: string | null
+  paid_at: number | null
+  created_at: number | null
+}
+
+/** 套餐列表（公开） */
+export async function fetchPlans(): Promise<{ plans: import('../types').OfficialPlan[] }> {
+  return request('/api/plans', { auth: false })
+}
+
+/** 兑换码核销（需登录） */
+export async function redeemPlan(code: string): Promise<RedeemResult> {
+  return request('/api/plans/redeem', { method: 'POST', body: { code } })
+}
+
+/** 用户级用量汇总：余量 + 近 N 天聚合（需登录） */
+export async function fetchUsageSummary(days = 30): Promise<UsageSummary> {
+  return request(`/api/usage/summary?days=${days}`)
+}
+
+/** 本人订单列表（需登录） */
+export async function fetchMyOrders(): Promise<{ orders: MyOrder[] }> {
+  return request('/api/me/orders')
+}

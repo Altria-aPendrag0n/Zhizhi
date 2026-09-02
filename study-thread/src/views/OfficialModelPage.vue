@@ -109,6 +109,10 @@
             <span class="account-card__value">{{ authStore.user?.plan?.name ?? '未开通' }}</span>
           </div>
           <div class="account-card__row">
+            <span class="account-card__label">套餐到期</span>
+            <span class="account-card__value">{{ formatExpiry(authStore.user?.plan_expires_at) }}</span>
+          </div>
+          <div class="account-card__row">
             <span class="account-card__label">剩余额度</span>
             <span class="account-card__value">{{ authStore.user ? formatTokens(authStore.user.quota_tokens) : '—' }}</span>
           </div>
@@ -123,19 +127,55 @@
       </template>
     </section>
 
-    <!-- 套餐预览 -->
+    <!-- 套餐中心：兑换码 + 用量 + 套餐列表 -->
     <section class="card-block">
-      <h3 class="card-block__title">套餐预览</h3>
-      <p class="form-hint">购买后自动生效，按套餐额度使用（即将上线）</p>
-      <div class="plan-grid">
-        <div v-for="plan in plans" :key="plan.name" class="plan-card">
-          <div class="plan-card__name">{{ plan.name }}</div>
-          <div class="plan-card__price">{{ plan.price }}</div>
-          <ul class="plan-card__features">
-            <li v-for="feature in plan.features" :key="feature">{{ feature }}</li>
-          </ul>
-          <button class="btn btn-secondary btn--block" @click="handleNotReady">开通</button>
+      <h3 class="card-block__title">套餐中心</h3>
+
+      <!-- 已登录：兑换码输入 + 近 30 天用量 -->
+      <template v-if="authStore.isOfficialActive">
+        <div class="redeem-row">
+          <input
+            v-model="redeemCode"
+            type="text"
+            class="form-input redeem-input"
+            placeholder="输入兑换码，如 zhizhi-XXXX-XXXX-XXXX"
+            :disabled="redeeming"
+            @keyup.enter="handleRedeem"
+          />
+          <button class="btn btn-primary" :disabled="redeeming" @click="handleRedeem">
+            {{ redeeming ? '兑换中…' : '兑换' }}
+          </button>
         </div>
+
+        <div v-if="usage" class="usage-block">
+          <div class="usage-head">
+            近 {{ usage.days }} 天：{{ usage.totals.requests }} 次请求 ·
+            {{ formatTokens(usage.totals.prompt_tokens + usage.totals.completion_tokens) }}
+          </div>
+          <div v-if="usageBars.length" class="usage-chart" role="img" aria-label="近 30 天每日请求柱状图">
+            <div v-for="bar in usageBars" :key="bar.day" class="usage-col" :title="bar.day">
+              <div class="usage-bar" :style="{ height: bar.height + '%' }"></div>
+              <span class="usage-day">{{ bar.day }}</span>
+            </div>
+          </div>
+          <p v-else class="form-hint">近 {{ usage.days }} 天暂无用量记录</p>
+        </div>
+      </template>
+
+      <div class="plan-grid">
+        <div v-for="plan in plans" :key="plan.id" class="plan-card">
+          <div class="plan-card__name">{{ plan.name }}</div>
+          <div class="plan-card__price">{{ formatPrice(plan.price_cents) }}</div>
+          <ul class="plan-card__features">
+            <li>每期 {{ formatTokens(plan.token_quota) }}</li>
+            <li>模型分组：{{ plan.model_group ?? 'default' }}</li>
+            <li>兑换码开通，即买即用</li>
+          </ul>
+          <button class="btn btn-secondary btn--block" @click="handleBuy(plan)">
+            {{ authStore.isOfficialActive ? '兑换开通' : '登录后兑换' }}
+          </button>
+        </div>
+        <p v-if="!plans.length" class="form-hint">套餐加载中…（服务端不可达时为空）</p>
       </div>
     </section>
 
@@ -153,12 +193,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft } from '@lucide/vue'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
-import { ZhizhiApiError } from '../api/zhizhi-api'
+import { fetchPlans, fetchUsageSummary, redeemPlan, ZhizhiApiError, type UsageSummary } from '../api/zhizhi-api'
+import type { OfficialPlan } from '../types'
 
 const router = useRouter()
 const toast = useToast()
@@ -250,6 +291,7 @@ async function handleLogin() {
   try {
     await authStore.login(name, pwd)
     toast.success('登录成功，官方 API 已启用')
+    await loadUsage()
   } catch (err) {
     toast.error(messageOf(err))
   }
@@ -283,6 +325,7 @@ async function handleRegister() {
   try {
     await authStore.register(mail, code, name, pwd)
     toast.success('注册成功，已自动登录')
+    await loadUsage()
   } catch (err) {
     toast.error(messageOf(err))
   }
@@ -300,32 +343,85 @@ async function handleLogout() {
   regPassword2.value = ''
 }
 
-/** 套餐购买（Phase 2 接入）：当前提示未上线 */
-function handleNotReady() {
-  toast.error('账号服务尚未上线，敬请期待')
-}
+/** 套餐开通引导：未登录提示先登录；已登录提示输入对应兑换码 */
 
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
 })
 
-const plans = [
-  {
-    name: '轻量',
-    price: '即将上线',
-    features: ['对话 / 复习出题', '约 100 万 token / 月', '标准模型'],
-  },
-  {
-    name: '标准',
-    price: '即将上线',
-    features: ['全部 AI 能力', '约 500 万 token / 月', '标准 + 视觉模型'],
-  },
-  {
-    name: '专业',
-    price: '即将上线',
-    features: ['全部 AI 能力', '不限量（按量计费）', '高级模型优先'],
-  },
-]
+// ===== 套餐中心（上线方案 S6） =====
+
+const plans = ref<OfficialPlan[]>([])
+const usage = ref<UsageSummary | null>(null)
+const redeemCode = ref('')
+const redeeming = ref(false)
+
+/** 用量柱状图数据：daily 服务端倒序返回，反转为时间正序并按最大请求数归一化高度 */
+const usageBars = computed(() => {
+  const daily = [...(usage.value?.daily ?? [])].reverse()
+  const max = Math.max(1, ...daily.map((d) => d.requests))
+  return daily.map((d) => ({ day: d.day.slice(5), height: Math.max(4, Math.round((d.requests / max) * 100)) }))
+})
+
+async function loadPlans() {
+  try {
+    plans.value = (await fetchPlans()).plans
+  } catch {
+    plans.value = []
+  }
+}
+
+async function loadUsage() {
+  if (!authStore.isOfficialActive) return
+  try {
+    usage.value = await fetchUsageSummary(30)
+  } catch {
+    usage.value = null
+  }
+}
+
+async function handleRedeem() {
+  const code = redeemCode.value.trim()
+  if (!code) {
+    toast.error('请输入兑换码')
+    return
+  }
+  redeeming.value = true
+  try {
+    const result = await redeemPlan(code)
+    toast.success(`兑换成功：${result.plan.name} 已开通，当前额度 ${formatTokens(result.quota_tokens)}`)
+    redeemCode.value = ''
+    await authStore.fetchMe()
+    await loadUsage()
+  } catch (err) {
+    toast.error(messageOf(err))
+  } finally {
+    redeeming.value = false
+  }
+}
+
+function handleBuy(plan: OfficialPlan) {
+  if (!authStore.isOfficialActive) {
+    toast.info('登录后使用兑换码开通套餐')
+    return
+  }
+  toast.info(`输入「${plan.name}」套餐的兑换码后点击兑换`)
+}
+
+function formatPrice(cents: number): string {
+  if (!cents) return '免费'
+  return `¥${(cents / 100).toFixed(0)} / 期`
+}
+
+function formatExpiry(ts: number | null | undefined): string {
+  if (!ts) return '未开通'
+  return new Date(ts).toLocaleDateString('zh-CN')
+}
+
+onMounted(() => {
+  void loadPlans()
+  void loadUsage()
+})
 </script>
 
 <style scoped>
@@ -604,5 +700,60 @@ const plans = [
   font-size: 13px;
   line-height: 2;
   color: var(--ink);
+}
+
+/* 套餐中心 */
+.redeem-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  max-width: 520px;
+}
+
+.redeem-input {
+  flex: 1;
+}
+
+.usage-block {
+  margin-bottom: 18px;
+}
+
+.usage-head {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.usage-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 96px;
+  padding: 10px 10px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.usage-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.usage-bar {
+  width: 100%;
+  max-width: 22px;
+  background: color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: 3px 3px 0 0;
+}
+
+.usage-day {
+  margin-top: 4px;
+  font-size: 9px;
+  color: var(--ink-3);
 }
 </style>
