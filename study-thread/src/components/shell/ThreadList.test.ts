@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ThreadList, { type Thread } from './ThreadList.vue'
 import type { SessionTreeNode } from '../../utils/session-tree'
@@ -128,5 +128,91 @@ describe('ThreadList 分支展开', () => {
     await menuButtons[0].trigger('click')
     expect(wrapper.emitted('delete-branch')).toEqual([['1', 'branch_1']])
     wrapper.unmount()
+  })
+})
+
+describe('ThreadList 分组（学习会话 / 计划会话）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  const groupedThreads: Thread[] = [
+    { id: '1', title: '学习会话A', meta: '10:00' },
+    { id: '2', title: '计划向导', meta: '09:00', kind: 'plan' },
+    { id: '3', title: '学习会话B', meta: '08:00' },
+  ]
+
+  it('按 kind 分为学习/计划两组，计划会话不出现在学习组', () => {
+    const wrapper = mount(ThreadList, {
+      props: {
+        projectName: '知枝学习',
+        threads: groupedThreads,
+        activeId: null,
+        threadCount: 3,
+        noteCount: 0,
+      },
+      global: { stubs: { teleport: true } },
+    })
+
+    const heads = wrapper.findAll('.thread-list__group-head')
+    expect(heads).toHaveLength(2)
+    expect(heads[0].text()).toContain('学习会话')
+    expect(heads[0].text()).toContain('2')
+    expect(heads[1].text()).toContain('计划会话')
+    expect(heads[1].text()).toContain('1')
+
+    const learningGroup = wrapper.findAll('.thread-list__group')[0]
+    expect(learningGroup.text()).not.toContain('计划向导')
+    const planGroup = wrapper.findAll('.thread-list__group')[1]
+    expect(planGroup.text()).toContain('计划向导')
+    wrapper.unmount()
+  })
+
+  it('无计划会话时不显示计划分组头', () => {
+    const wrapper = mountList()
+    expect(wrapper.findAll('.thread-list__group-head')).toHaveLength(1)
+    expect(wrapper.text()).toContain('学习会话')
+    wrapper.unmount()
+  })
+
+  it('两类分组可独立折叠，折叠状态持久化到 localStorage', async () => {
+    const wrapper = mount(ThreadList, {
+      props: {
+        projectName: '知枝学习',
+        threads: groupedThreads,
+        activeId: null,
+        threadCount: 3,
+        noteCount: 0,
+      },
+      global: { stubs: { teleport: true } },
+    })
+
+    const heads = wrapper.findAll('.thread-list__group-head')
+    await heads[0].trigger('click')
+    await heads[1].trigger('click')
+
+    // 两组均收起：会话条目不可见，分组头仍在
+    expect(wrapper.findAll('.thread-list__item')).toHaveLength(0)
+    expect(wrapper.findAll('.thread-list__group-head')).toHaveLength(2)
+    expect(JSON.parse(localStorage.getItem('zhizhi.thread-list.group-collapsed') ?? '{}')).toEqual({
+      learning: true,
+      plan: true,
+    })
+
+    // 重新挂载后折叠状态保持
+    wrapper.unmount()
+    const remounted = mount(ThreadList, {
+      props: {
+        projectName: '知枝学习',
+        threads: groupedThreads,
+        activeId: null,
+        threadCount: 3,
+        noteCount: 0,
+      },
+      global: { stubs: { teleport: true } },
+    })
+    expect(remounted.findAll('.thread-list__item')).toHaveLength(0)
+    expect(remounted.findAll('.thread-list__group-head')).toHaveLength(2)
+    remounted.unmount()
   })
 })

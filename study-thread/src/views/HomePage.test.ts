@@ -47,6 +47,12 @@ vi.mock('../stores/review', () => ({
   }),
 }))
 
+vi.mock('../stores/plan', () => ({
+  usePlanStore: () => ({
+    todayCount: 3,
+  }),
+}))
+
 vi.mock('../utils/learning-stats', async () => {
   const actual = await vi.importActual<typeof import('../utils/learning-stats')>('../utils/learning-stats')
   return { ...actual, collectLearningStats: state.collectLearningStats }
@@ -113,7 +119,7 @@ describe('HomePage 主界面', () => {
     expect(state.createNewThread).toHaveBeenCalledWith('1')
   })
 
-  it('渲染今日学习进度：今日问答/今日笔记/已复习/待复习', async () => {
+  it('渲染今日学习进度：今日问答/今日笔记/已复习/待复习/计划任务', async () => {
     const g = globalThis as unknown as HomePageGlobals
     g.__homeVaultPath!.value = '/vault'
 
@@ -124,7 +130,7 @@ describe('HomePage 主界面', () => {
     expect(state.syncQueueWithNotes).toHaveBeenCalledWith('/vault')
 
     const items = wrapper.findAll('.home-today__item')
-    expect(items).toHaveLength(4)
+    expect(items).toHaveLength(5)
     expect(items[0].text()).toContain('今日问答')
     expect(items[0].text()).toContain('3')
     expect(items[1].text()).toContain('今日笔记')
@@ -133,6 +139,20 @@ describe('HomePage 主界面', () => {
     expect(items[2].text()).toContain('1')
     expect(items[3].text()).toContain('待复习')
     expect(items[3].text()).toContain('2')
+    expect(items[4].text()).toContain('计划任务')
+    expect(items[4].text()).toContain('3')
+  })
+
+  it('点击「计划任务」跳转学习地图计划视图', async () => {
+    const g = globalThis as unknown as HomePageGlobals
+    g.__homeVaultPath!.value = '/vault'
+
+    const wrapper = mountHome()
+    await flushPromises()
+
+    const items = wrapper.findAll('.home-today__item')
+    await items[4].trigger('click')
+    expect(state.routerPush).toHaveBeenCalledWith({ path: '/hub', query: { view: 'plans' } })
   })
 
   it('统计加载失败时静默显示空态，不阻断页面', async () => {

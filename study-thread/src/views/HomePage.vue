@@ -71,6 +71,18 @@
           <span class="home-today__label">待复习</span>
           <strong class="home-today__value">{{ reviewStore.dueCount }}</strong>
         </div>
+        <div
+          class="home-today__item home-today__item--due"
+          role="button"
+          tabindex="0"
+          title="点击前往学习地图计划界面"
+          @click="router.push({ path: '/hub', query: { view: 'plans' } })"
+          @keydown.enter="router.push({ path: '/hub', query: { view: 'plans' } })"
+        >
+          <ListChecks :size="16" class="home-today__icon" />
+          <span class="home-today__label">计划任务</span>
+          <strong class="home-today__value">{{ planStore.todayCount }}</strong>
+        </div>
       </section>
 
       <!-- 学习频率格子图 -->
@@ -111,17 +123,19 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Sprout, MessageSquare, FileText, Map, RefreshCw, CalendarClock } from '@lucide/vue'
+import { Sprout, MessageSquare, FileText, Map, RefreshCw, CalendarClock, ListChecks } from '@lucide/vue'
 import ContributionGraph from '../components/stats/ContributionGraph.vue'
 import { useVaultStore } from '../stores/vault'
 import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
+import { usePlanStore } from '../stores/plan'
 import { collectLearningStats, toDateKey, type DailyCounts, type LearningStats } from '../utils/learning-stats'
 
 const router = useRouter()
 const vaultStore = useVaultStore()
 const noteStore = useNoteStore()
 const reviewStore = useReviewStore()
+const planStore = usePlanStore()
 /** 知枝学习项目下新建会话（由 App 提供） */
 const createNewThread = inject<(projectId?: string) => void>('createNewThread', () => {})
 
@@ -296,7 +310,7 @@ function startNewChat() {
 /* 今日学习进度 */
 .home-today {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   margin-bottom: 30px;
 }

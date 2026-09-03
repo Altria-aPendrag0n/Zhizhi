@@ -6,65 +6,75 @@
         <SquarePen :size="17" :stroke-width="1.75" />
       </button>
     </header>
-    <ul v-if="threads.length > 0" class="thread-list__items">
-      <li
-        v-for="thread in threads"
-        :key="thread.id"
-        class="thread-list__item"
-        :class="{ 'is-active': thread.id === activeId }"
-        @click="selectThread(thread.id)"
-        @contextmenu.prevent="openContextMenu($event, thread.id)"
-      >
-        <template v-if="editingThreadId === thread.id">
-          <input
-            ref="titleInput"
-            v-model="draftTitle"
-            class="thread-list__title-input"
-            aria-label="会话标题"
-            @click.stop
-            @blur="cancelEditing"
-            @keydown.enter.prevent="saveEditing"
-            @keydown.escape.prevent="cancelEditing"
-          />
-          <span class="thread-list__editing-hint">Enter 确认 · Esc 取消</span>
-        </template>
-        <template v-else>
-          <div class="thread-list__item-main">
-            <div class="thread-list__item-text">
-              <span class="thread-list__item-title">{{ thread.title }}</span>
-              <span class="thread-list__item-meta">{{ thread.meta }}</span>
-            </div>
-            <button
-              v-if="threadBranches(thread.id).length > 0"
-              type="button"
-              class="thread-list__item-toggle"
-              :aria-label="isThreadExpanded(thread.id) ? '收起分支' : '展开分支'"
-              @click.stop="toggleThread(thread.id)"
+    <div v-if="threads.length > 0" class="thread-list__scroll">
+      <section v-for="group in threadGroups" :key="group.key" class="thread-list__group">
+        <button class="thread-list__group-head" type="button" @click="toggleGroup(group.key)">
+          <ChevronRight v-if="isGroupCollapsed(group.key)" :size="13" />
+          <ChevronDown v-else :size="13" />
+          <span>{{ group.label }}</span>
+          <span class="thread-list__group-count">{{ group.threads.length }}</span>
+        </button>
+        <ul v-if="!isGroupCollapsed(group.key)" class="thread-list__items">
+          <li
+            v-for="thread in group.threads"
+            :key="thread.id"
+            class="thread-list__item"
+            :class="{ 'is-active': thread.id === activeId }"
+            @click="selectThread(thread.id)"
+            @contextmenu.prevent="openContextMenu($event, thread.id)"
+          >
+            <template v-if="editingThreadId === thread.id">
+              <input
+                ref="titleInput"
+                v-model="draftTitle"
+                class="thread-list__title-input"
+                aria-label="会话标题"
+                @click.stop
+                @blur="cancelEditing"
+                @keydown.enter.prevent="saveEditing"
+                @keydown.escape.prevent="cancelEditing"
+              />
+              <span class="thread-list__editing-hint">Enter 确认 · Esc 取消</span>
+            </template>
+            <template v-else>
+              <div class="thread-list__item-main">
+                <div class="thread-list__item-text">
+                  <span class="thread-list__item-title">{{ thread.title }}</span>
+                  <span class="thread-list__item-meta">{{ thread.meta }}</span>
+                </div>
+                <button
+                  v-if="threadBranches(thread.id).length > 0"
+                  type="button"
+                  class="thread-list__item-toggle"
+                  :aria-label="isThreadExpanded(thread.id) ? '收起分支' : '展开分支'"
+                  @click.stop="toggleThread(thread.id)"
+                >
+                  <ChevronRight v-if="!isThreadExpanded(thread.id)" :size="14" />
+                  <ChevronDown v-else :size="14" />
+                </button>
+              </div>
+            </template>
+            <ul
+              v-if="isThreadExpanded(thread.id) && threadBranches(thread.id).length > 0"
+              class="thread-list__branches"
+              @click.stop
+              @contextmenu.stop
             >
-              <ChevronRight v-if="!isThreadExpanded(thread.id)" :size="14" />
-              <ChevronDown v-else :size="14" />
-            </button>
-          </div>
-        </template>
-        <ul
-          v-if="isThreadExpanded(thread.id) && threadBranches(thread.id).length > 0"
-          class="thread-list__branches"
-          @click.stop
-          @contextmenu.stop
-        >
-          <ThreadBranch
-            v-for="branch in threadBranches(thread.id)"
-            :key="branch.id"
-            :node="branch"
-            :session-id="thread.id"
-            :depth="0"
-            :active-branch-id="activeBranchId"
-            @open-branch="handleOpenBranch"
-            @menu="openBranchMenu"
-          />
+              <ThreadBranch
+                v-for="branch in threadBranches(thread.id)"
+                :key="branch.id"
+                :node="branch"
+                :session-id="thread.id"
+                :depth="0"
+                :active-branch-id="activeBranchId"
+                @open-branch="handleOpenBranch"
+                @menu="openBranchMenu"
+              />
+            </ul>
+          </li>
         </ul>
-      </li>
-    </ul>
+      </section>
+    </div>
     <div v-else class="thread-list__empty">
       <p class="text-muted-foreground text-sm">暂无会话</p>
     </div>
@@ -110,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { Pencil, SquarePen, Trash2, ChevronRight, ChevronDown } from '@lucide/vue'
 import type { SessionTreeNode } from '../../utils/session-tree'
 import ThreadBranch from './ThreadBranch.vue'
@@ -119,6 +129,8 @@ export interface Thread {
   id: string
   title: string
   meta: string
+  /** 会话种类：plan 计划会话（学习计划生成向导）；学习会话不设置（侧边栏按此分组） */
+  kind?: 'review' | 'plan'
 }
 
 const emit = defineEmits<{
@@ -144,6 +156,53 @@ const props = defineProps<{
 
 const contextMenu = ref<{ id: string; x: number; y: number } | null>(null)
 const contextMenuElement = ref<HTMLElement>()
+
+// ===================== 分组（学习会话 / 计划会话） =====================
+
+interface ThreadGroup {
+  key: 'learning' | 'plan'
+  label: string
+  threads: Thread[]
+}
+
+/** 分组折叠状态持久化 key（localStorage） */
+const GROUP_STATE_KEY = 'zhizhi.thread-list.group-collapsed'
+
+const learningThreads = computed(() => props.threads.filter((thread) => thread.kind !== 'plan'))
+const planThreads = computed(() => props.threads.filter((thread) => thread.kind === 'plan'))
+
+/** 计划会话组仅在存在时展示；学习会话组始终展示 */
+const threadGroups = computed<ThreadGroup[]>(() => {
+  const groups: ThreadGroup[] = [{ key: 'learning', label: '学习会话', threads: learningThreads.value }]
+  if (planThreads.value.length > 0) {
+    groups.push({ key: 'plan', label: '计划会话', threads: planThreads.value })
+  }
+  return groups
+})
+
+const collapsedGroups = ref<Record<string, boolean>>(loadCollapsedGroups())
+
+function loadCollapsedGroups(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(GROUP_STATE_KEY) ?? '{}') as Record<string, boolean>
+  } catch {
+    return {}
+  }
+}
+
+function isGroupCollapsed(key: string): boolean {
+  return collapsedGroups.value[key] === true
+}
+
+function toggleGroup(key: string) {
+  const next = { ...collapsedGroups.value, [key]: !isGroupCollapsed(key) }
+  collapsedGroups.value = next
+  try {
+    localStorage.setItem(GROUP_STATE_KEY, JSON.stringify(next))
+  } catch {
+    // 持久化失败不影响本次折叠
+  }
+}
 /** 分支右键菜单（删除分支） */
 const branchMenu = ref<{ sessionId: string; branchId: string; x: number; y: number } | null>(null)
 const branchMenuElement = ref<HTMLElement>()
@@ -308,17 +367,62 @@ onUnmounted(() => {
   background: var(--brand-soft);
 }
 
-.thread-list__items {
+/* 分组滚动容器：所有分组共用一个滚动区，分组头吸顶跟随内容滚动 */
+.thread-list__scroll {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px;
+  overflow-y: auto;
+  /* 禁止横向滚动：长标题以容器右缘（滚动条位置）为边界截断 */
+  overflow-x: hidden;
+}
+
+.thread-list__group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.thread-list__group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px 2px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.thread-list__group-head:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.thread-list__group-count {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.thread-list__items {
   display: grid;
   gap: 3px;
   align-content: start;
   margin: 0;
-  padding: 12px 8px;
-  overflow-y: auto;
-  /* 禁止横向滚动：长标题以容器右缘（滚动条位置）为边界截断 */
-  overflow-x: hidden;
+  padding: 0;
   list-style: none;
+  min-width: 0;
 }
 
 .thread-list__item {
