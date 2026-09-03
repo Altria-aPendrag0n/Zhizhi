@@ -155,6 +155,15 @@ interface ReviewTask {
 - **配置**：settings store 新增 `reviewAlgorithm: 'classic' | 'fsrs'`（默认 classic，localStorage 持久化，无效值回退 classic）；设置页「复习间隔算法」下拉切换；`reviewStore.applyReview` 评级时读取当前设置即时生效。
 - **测试**：`fsrs-scheduler.test.ts`（表现分加权、难度、冷启动 null、良好历史间隔较长、again 遗忘冲击、波动压缩、边界夹取 12 用例）+ `review-scheduler.test.ts`（classic 等价、缺省参数、fsrs 冷启动回退、个性化间隔、fsrs 毕业）+ `review.test.ts`（fsrs 算法下输出个性化间隔）+ `settings.test.ts`（默认值/持久化/无效值回退）。
 
+### 6.3 复习时间轴（未来一周）
+
+复习视图 hero 区之下、到期清单之上的一条**横向 7 天卡片条**，展露未来一周的复习节奏与内容。设计决策见 `docs/todo/复习时间轴开发方案.md`。
+
+- **聚合函数**（`review-scheduler.ts`）：`buildReviewTimeline(tasks, now, days = 7)` → `ReviewTimelineDay[]`（`dateKey`/`date`/`isToday`/`overdueCount`/`tasks`）。语义：只统计未毕业任务（与 `buildDueList` 一致）；窗口 = 今天 0:00 起 7 个本地自然日（`localDateKey` 用本地年月日拼接，避免 UTC 偏移跨日错位）；**逾期任务（dueAt < 今天 0:00）归入今天卡并置前**，`overdueCount` 记录数量；同日任务按 dueAt 升序；窗口外任务忽略。
+- **组件**（`src/components/review/ReviewTimeline.vue`）：props `days` / emits `open(notePath)`；今天卡高亮边框 + 「今天」角标 + 「含 N 项逾期」标注；每卡默认展示 4 条标题，超出折叠为「+N」点击展开/收起（展开状态组件内部按天管理）；无任务的天显示「无」；点击条目 emit `open`。
+- **集成**（`LearningHubPage.vue`）：`reviewTimeline = computed(() => buildReviewTimeline(reviewStore.queue))`——queue 变化（评级/入队/删除）自动重算；`@open="handleTimelineOpen"` 跳转笔记详情（与到期清单「打开」一致，**回看原文不触发复习调度**，避免提前复习重排 dueAt 使时间轴预测自我失效）。
+- **测试**：`review-scheduler.test.ts`（自然日分组、dateKey/本地 0:00 一致、逾期归今天排前、毕业过滤、窗口外忽略、空队列、同日排序）+ `ReviewTimeline.test.ts`（7 卡渲染、今天高亮与逾期标注、空卡「无」、折叠/展开、点击 emit）。
+
 ## 7. 协作链路
 
 ```

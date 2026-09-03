@@ -49,6 +49,9 @@
         </p>
       </section>
 
+      <!-- 未来一周复习时间轴：今天起 7 天的到期分布与内容（点击回看原文，不触发复习调度） -->
+      <ReviewTimeline :days="reviewTimeline" @open="handleTimelineOpen" />
+
       <div class="learning-hub__section">
         <ReviewDueList
           :tasks="reviewStore.dueTasks"
@@ -146,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
@@ -163,7 +166,9 @@ import { buildReviewRelatedNotes, createReviewSession, findIncompleteReviewSessi
 import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
 import ReviewDueList from '../components/review/ReviewDueList.vue'
+import ReviewTimeline from '../components/review/ReviewTimeline.vue'
 import PlanBoard from '../components/plans/PlanBoard.vue'
+import { buildReviewTimeline } from '../utils/review-scheduler'
 
 const router = useRouter()
 const route = useRoute()
@@ -240,6 +245,14 @@ async function handleRate(task: ReviewTask, rating: ReviewRating) {
 function handleOpenReview(task: ReviewTask) {
   router.push(`/notes/${encodeURIComponent(task.notePath)}`)
 }
+
+/** 打开时间轴条目对应的笔记详情（与到期清单「打开」一致，回看原文不触发复习调度） */
+function handleTimelineOpen(notePath: string) {
+  router.push(`/notes/${encodeURIComponent(notePath)}`)
+}
+
+/** 复习时间轴（未来 7 天）：queue 变化（评级/入队/删除）后自动重算 */
+const reviewTimeline = computed(() => buildReviewTimeline(reviewStore.queue))
 
 /** 重新激活已毕业任务（P1 增强）：回到到期清单，立即安排复习 */
 async function handleReactivate(task: ReviewTask) {
