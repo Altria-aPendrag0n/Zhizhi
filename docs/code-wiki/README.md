@@ -169,6 +169,7 @@ d:\work\Zhizhi\
 | 22 | 客户端登录接入 | [22-auth-client.md](./22-auth-client.md) | `src/utils/secure-store.ts`、`src/api/zhizhi-api.ts`、`src/stores/auth.ts`、`src/views/OfficialModelPage.vue`、`src-tauri/`（keyring） | 知枝官方账号客户端：OS 钥匙串凭据边界、401 single-flight 续期、登录状态机、官方地址与 CSP 配置 |
 | 23 | 综合管理控制台（已迁移） | 23-db-admin-ui.md → `Zhizhi-Server` 仓库 `docs/code-wiki/` | `Zhizhi-Server/src/db-ui.ts`、`src/db-ui-admin.ts`、`src/db-ui-page.ts` | 本地综合管理台（`npm run db:ui`，仅 127.0.0.1:8790，同进程拉起主 API）：五视图——总览仪表盘（用量/成本/质量指标）、渠道管理（CRUD/连通性测试/Key 掩码加密）、用户发额度、子 Key 限额/吊销、数据库表浏览 + SQL 控制台 |
 | 24 | API 分发网关（已迁移） | 24-api-gateway.md → `Zhizhi-Server` 仓库 `docs/code-wiki/` | `Zhizhi-Server/src/routes/gateway.ts`、`src/middleware/api-key-auth.ts`、`src/routes/{keys,usage}.ts`、`src/services/{channel,usage,model-prices,secret-box}.ts` | OpenAI 兼容网关：一个上游渠道分发多个子 Key（purpose/额度/过期/白名单/限速），故障转移转发、流式透传、usage 计量扣费与按天/模型统计 |
+| 25 | 学习计划模块 | [25-plan-module.md](./25-plan-module.md) | `src/utils/plan-parser.ts`、`src/stores/plan.ts`、`src/skills/plan-architect/`、`src/api/skills/plan-architect.ts`、`src/components/plans/` | 学习计划 Agent：对话式生成计划（plans/\*.md frontmatter 权威）、今日任务动态顺延、开始学习联动会话与复习闭环、会话 kind 分组 |
 
 ---
 
