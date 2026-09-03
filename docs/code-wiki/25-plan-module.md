@@ -81,12 +81,14 @@ estimatePhaseCompletion(doc, phaseId, now): Date | null
 
 ### 4.1 SKILL.md（`src/skills/plan-architect/`）
 
-多轮对话式规划师系统提示，变量注入 `{today}` / `{vault_overview}` / `{references}`（由 `buildPlanArchitectPrompt` 渲染；残留占位符开发环境抛错，与 loader 约定一致）。核心约束：
+多轮对话式规划师系统提示，变量注入 `{today}` / `{vault_overview}` / `{references}`（由 `buildPlanArchitectPrompt` 渲染；残留占位符开发环境抛错，与 loader 约定一致）。核心约束（v1.1 访谈式策略）：
 
-- 信息不足时**一轮集中追问**（目标/基础/每日时长/周期），交流轮次不输出 JSON；
-- 信息足够时输出**唯一一个 json 代码块**（代码块外无其他内容）；
+- **一次只问一个问题，且每问附推荐答案**（基于 Vault 概况与常识构造，用户可只回复「可以」确认）——沿决策树逐分支遍历：学习目标 → 已有基础（优先由 Vault 概况推断并给出跳过入门的假设）→ 每日时长 × 周期（给推荐组合二选一）→ 偏好分支（可选）；
+- 能由 Vault 概况推出的分支**先给假设让用户确认，不空手问**；用户批量确认时顺势跳过；「你看着安排」则剩余分支按推荐定稿并在 body 说明；
+- 交流轮次**不输出 JSON**；关键分支全部 resolved 后输出**唯一一个 json 代码块**（代码块外无其他内容）；
 - 任务颗粒度 =「一次坐下能完成」的动作，estimate 15–120 分钟，总量 ≈ 每日分钟数 × 周期天数（±15%）；
-- 只用 Vault 内上下文设计任务（`vault_overview` 注入笔记标签统计、`references` 注入资料名），**禁止外部链接**。
+- phases 按 1–2 周粒度划分，每阶段有可检验的 objective；tasks.phase 必须指向 phases 中的 id；
+- 计划衔接用户已有基础（Vault 有相关笔记则在其上进阶），只用 Vault 内上下文设计任务（`vault_overview` 注入笔记标签统计、`references` 注入资料名），**禁止外部链接**。
 
 ### 4.2 执行器（`api/skills/plan-architect.ts`）
 

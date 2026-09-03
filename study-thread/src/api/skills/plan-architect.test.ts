@@ -15,7 +15,7 @@ function planJSON(partial: Record<string, unknown> = {}): string {
 }
 
 describe('buildPlanArchitectPrompt', () => {
-  it('注入 today / vault_overview / references 且无残留占位符', () => {
+  it('注入 today / vaultOverview / references 且无残留占位符', () => {
     const prompt = buildPlanArchitectPrompt({
       today: '2026-09-03 星期四',
       vaultOverview: '（Vault 为空）',
@@ -25,6 +25,21 @@ describe('buildPlanArchitectPrompt', () => {
     expect(prompt).toContain('（Vault 为空）')
     expect(prompt).toContain('（无参考资料）')
     expect(prompt).not.toMatch(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/)
+  })
+
+  it('对话策略为访谈式（一次一问、每问带推荐答案、Vault 假设确认）', () => {
+    const prompt = buildPlanArchitectPrompt({
+      today: '2026-09-03 星期四',
+      vaultOverview: '',
+      references: '',
+    })
+    expect(prompt).toContain('一次只问一个问题')
+    expect(prompt).toContain('推荐答案')
+    expect(prompt).toContain('假设')
+    // 决策树关键分支齐全
+    expect(prompt).toContain('学习目标')
+    expect(prompt).toContain('已有基础')
+    expect(prompt).toContain('每日时长')
   })
 })
 
