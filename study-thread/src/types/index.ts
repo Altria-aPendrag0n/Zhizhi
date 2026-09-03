@@ -27,8 +27,8 @@ export interface Session {
   fork_highlight?: string
   /** 划线文本在消息中的出现序号（第 N 处），重复文本时精确定位；默认第 1 处 */
   fork_highlight_occ?: number
-  /** 会话种类：'review' 为复习会话（独立根会话，不进入分支树）；学习会话不设置 */
-  kind?: 'review'
+  /** 会话种类：'review' 为复习会话（独立根会话，不进入分支树）；'plan' 为计划会话（学习计划生成向导）；学习会话不设置 */
+  kind?: 'review' | 'plan'
   /** 复习会话关联的被复习笔记路径（kind=review 时存在），持久化到 frontmatter */
   reviewed_note?: string
   /** 复习会话的出题结果（持久化到 frontmatter，重新打开时无需重新出题） */
@@ -178,6 +178,53 @@ export interface OfficialUser {
   quota_tokens: number
   api_key_created: boolean
   plan: OfficialPlan | null
+}
+
+// 学习计划相关类型（学习计划 Agent，设计见 docs/todo/学习计划Agent开发方案.md）
+/** 计划状态：active 进行中 / paused 暂停（保留进度）/ archived 归档（只读） */
+export type PlanStatus = 'active' | 'paused' | 'archived'
+
+export interface PlanPhase {
+  id: string
+  title: string
+  /** 阶段目标（一句话，供生成会话与展示） */
+  objective?: string
+}
+
+export interface PlanTask {
+  id: string
+  /** 所属阶段 id */
+  phase: string
+  title: string
+  /** 任务细节（作为「开始学习」会话的初始上下文） */
+  detail?: string
+  /** 预估时长（分钟） */
+  estimate: number
+  done: boolean
+  done_at: string | null
+  /** 关联学习会话路径（「开始学习」后回填） */
+  sessions: string[]
+}
+
+/** 学习计划文档，权威数据为 `<vault>/plans/<plan-id>.md` 的 frontmatter，正文仅供阅读 */
+export interface PlanDoc {
+  /** 文件路径（加载后填充，不写入 frontmatter） */
+  path: string
+  kind: 'plan'
+  /** 计划 id，同文件名 */
+  plan: string
+  title: string
+  goal: string
+  status: PlanStatus
+  created: string
+  /** 每日学习容量（分钟），今日任务按此从队首填充 */
+  daily_minutes: number
+  phases: PlanPhase[]
+  tasks: PlanTask[]
+  /** 正文：AI 生成的可读计划，机器不解析，序列化时原样保留 */
+  body: string
+  /** frontmatter 中的未知字段（解析时保留、序列化时写回，不丢失用户手改内容） */
+  extra?: Record<string, unknown>
 }
 
 // Stream 相关类型
