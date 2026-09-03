@@ -102,6 +102,9 @@ const activeThreadId = computed(() => currentJobThreadId.value || threadId.value
 const activeJob = computed(() => (activeThreadId.value ? chatRunner.getJob(activeThreadId.value) : null))
 const loadedMessages = ref<Message[]>([])
 const loadedNoteRefs = ref<NoteReference[]>([])
+/** 加载会话的种类与计划关联：重存会话时回写，避免侧边栏分组（kind）在续聊后漂移 */
+const loadedSessionKind = ref<Session['kind']>(undefined)
+const loadedSessionPlanId = ref<string | undefined>(undefined)
 const messages = computed(() => activeJob.value?.messages ?? loadedMessages.value)
 const isStreaming = computed(() => activeJob.value?.isStreaming ?? false)
 const streamingText = computed(() => activeJob.value?.streamingText ?? '')
@@ -146,8 +149,12 @@ async function loadThreadMessages(threadId: string) {
       ?? getSessionFilePath(vaultStore.vaultPath, threadId)
     const session = parseSessionFile(await readFile(sessionPath), sessionPath)
     loadedMessages.value = session.messages
+    loadedSessionKind.value = session.kind
+    loadedSessionPlanId.value = session.plan_id
   } catch {
     loadedMessages.value = []
+    loadedSessionKind.value = undefined
+    loadedSessionPlanId.value = undefined
   }
   await refreshNoteRefs(threadId)
 }
@@ -294,6 +301,9 @@ async function saveCurrentSession(threadId: string, sessionMessages: Message[], 
     fork_point: null,
     tags: [],
     messages: sessionMessages,
+    // 保留已落盘会话的种类与计划关联（学习会话两者皆空，与旧文件兼容）
+    ...(loadedSessionKind.value ? { kind: loadedSessionKind.value } : {}),
+    ...(loadedSessionPlanId.value ? { plan_id: loadedSessionPlanId.value } : {}),
   }
   const filePath = await vaultStore.saveCurrentSession(session, false, refs)
   // 会话落盘后刷新侧边栏列表（新会话首条消息后即出现在会话栏；仓库即真相，无本地缓存）

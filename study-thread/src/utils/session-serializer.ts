@@ -83,6 +83,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
   if (session.kind) {
     lines.push(`kind: ${session.kind}`)
   }
+  if (session.plan_id) {
+    // 计划会话关联的学习计划 id（kind=plan），确认生成计划后回填
+    lines.push(`plan_id: ${session.plan_id}`)
+  }
   if (session.reviewed_note) {
     // 路径可能含引号/特殊字符，用 JSON 字符串保证 YAML 解析安全
     lines.push(`reviewed_note: ${JSON.stringify(session.reviewed_note)}`)
@@ -384,6 +388,7 @@ export function parseSessionFile(content: string, filePath = ''): Session {
       ? meta.fork_highlight_occ
       : undefined,
     kind: normalizeKind(meta.kind),
+    plan_id: toString(meta.plan_id) || undefined,
     reviewed_note: toString(meta.reviewed_note) || undefined,
     review_cluster: Array.isArray(meta.review_cluster) && meta.review_cluster.every((item): item is string => typeof item === 'string')
       ? meta.review_cluster

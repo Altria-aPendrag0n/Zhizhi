@@ -17,6 +17,17 @@
           </button>
           <button
             class="hub-nav__item"
+            :class="{ active: currentView === 'plans' }"
+            type="button"
+            @click="switchView('plans')"
+          >
+            学习计划
+            <span v-if="planStore.todayCount > 0" class="hub-nav__badge">
+              {{ planStore.todayCount }}
+            </span>
+          </button>
+          <button
+            class="hub-nav__item"
             :class="{ active: currentView === 'network' }"
             type="button"
             @click="switchView('network')"
@@ -51,6 +62,9 @@
         />
       </div>
     </template>
+
+    <!-- 学习计划视图：今日任务追踪 + 生成向导（PlanBoard） -->
+    <PlanBoard v-else-if="currentView === 'plans'" />
 
     <!-- 认知地图视图（开发中） -->
     <template v-else-if="currentView === 'network'">
@@ -136,6 +150,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteStore } from '../stores/notes'
 import { useReviewStore } from '../stores/review'
+import { usePlanStore } from '../stores/plan'
 import { useVaultStore } from '../stores/vault'
 import { useSettingsStore } from '../stores/settings'
 import { useToast } from '../composables/useToast'
@@ -148,23 +163,27 @@ import { buildReviewRelatedNotes, createReviewSession, findIncompleteReviewSessi
 import { buildReviewCluster } from '../utils/review-cluster'
 import { saveSessionToVault } from '../utils/session-serializer'
 import ReviewDueList from '../components/review/ReviewDueList.vue'
+import PlanBoard from '../components/plans/PlanBoard.vue'
 
 const router = useRouter()
 const route = useRoute()
 const noteStore = useNoteStore()
 const reviewStore = useReviewStore()
+const planStore = usePlanStore()
 const vaultStore = useVaultStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
 
-/** 当前视图：由左侧"学习地图切换管理栏"控制；默认复习视图，支持 ?view=review|network 深链接 */
-const currentView = ref<'review' | 'network'>(route.query.view === 'network' ? 'network' : 'review')
+/** 当前视图：由左侧"学习地图切换管理栏"控制；默认复习视图，支持 ?view=review|network|plans 深链接 */
+const currentView = ref<'review' | 'network' | 'plans'>(
+  route.query.view === 'network' ? 'network' : route.query.view === 'plans' ? 'plans' : 'review',
+)
 
 /** 存在未完成复习会话的笔记路径集合（规范化键），供 ReviewDueList 显示「继续复习」 */
 const ongoingNotePaths = ref<Set<string>>(new Set())
 
 /** 切换学习地图视图并同步 URL query，保证外部入口（主界面待复习 → view=review）可直达 */
-function switchView(view: 'review' | 'network') {
+function switchView(view: 'review' | 'network' | 'plans') {
   currentView.value = view
   router.replace({ query: { view } })
 }

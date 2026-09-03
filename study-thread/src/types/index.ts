@@ -29,6 +29,8 @@ export interface Session {
   fork_highlight_occ?: number
   /** 会话种类：'review' 为复习会话（独立根会话，不进入分支树）；'plan' 为计划会话（学习计划生成向导）；学习会话不设置 */
   kind?: 'review' | 'plan'
+  /** 计划会话关联的学习计划 id（kind=plan 时存在），持久化到 frontmatter */
+  plan_id?: string
   /** 复习会话关联的被复习笔记路径（kind=review 时存在），持久化到 frontmatter */
   reviewed_note?: string
   /** 复习会话的出题结果（持久化到 frontmatter，重新打开时无需重新出题） */
