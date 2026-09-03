@@ -566,3 +566,78 @@ describe('resolveSessionFile 按 id 定位会话文件', () => {
     await expect(resolveSessionFile('/vault', 'sess_1')).resolves.toBeNull()
   })
 })
+
+describe('会话 kind（计划会话）序列化与解析', () => {
+  it('kind: plan 序列化写入 frontmatter 并可解析还原', () => {
+    const session: Session = {
+      id: 'plan_1',
+      title: '制定 Rust 学习计划',
+      created: '2026-09-03T00:00:00.000Z',
+      parent_session: null,
+      fork_point: null,
+      tags: [],
+      messages: [{ role: 'user', content: '我想 30 天入门 Rust', timestamp: '2026-09-03T00:00:01.000Z' }],
+      kind: 'plan',
+    }
+    const raw = serializeSession(session)
+    expect(raw).toContain('kind: plan')
+    const parsed = parseSessionFile(raw)
+    expect(parsed.kind).toBe('plan')
+    expect(parsed.messages).toEqual(session.messages)
+  })
+
+  it('旧文件无 kind 字段时解析为 undefined（学习会话），review 会话不受影响', () => {
+    const legacy = [
+      '---',
+      'session_id: sess_1',
+      'title: 旧会话',
+      'created: 2026-01-01T00:00:00.000Z',
+      '---',
+      '',
+      '## 用户',
+      '',
+      '你好',
+    ].join('\n')
+    expect(parseSessionFile(legacy).kind).toBeUndefined()
+    expect(parseSessionMeta(legacy, '/vault/sessions/sess_1.md').kind).toBeUndefined()
+
+    const review = [
+      '---',
+      'session_id: review_1',
+      'title: 复习',
+      'created: 2026-01-01T00:00:00.000Z',
+      'kind: review',
+      '---',
+      '',
+    ].join('\n')
+    expect(parseSessionFile(review).kind).toBe('review')
+    expect(parseSessionMeta(review, '/vault/sessions/review_1.md').kind).toBe('review')
+  })
+
+  it('parseSessionMeta 提取 kind: plan（侧边栏分组用）', () => {
+    const content = [
+      '---',
+      'session_id: plan_1',
+      'title: 计划会话',
+      'created: 2026-09-03T00:00:00.000Z',
+      'kind: plan',
+      '---',
+      '',
+    ].join('\n')
+    expect(parseSessionMeta(content, '/vault/sessions/plan_1.md').kind).toBe('plan')
+  })
+
+  it('kind 值非法时视为学习会话（undefined）', () => {
+    const content = [
+      '---',
+      'session_id: sess_2',
+      'title: x',
+      'created: 2026-09-03T00:00:00.000Z',
+      'kind: weird',
+      '---',
+      '',
+    ].join('\n')
+    expect(parseSessionFile(content).kind).toBeUndefined()
+    expect(parseSessionMeta(content, '/vault/sessions/sess_2.md').kind).toBeUndefined()
+  })
+})

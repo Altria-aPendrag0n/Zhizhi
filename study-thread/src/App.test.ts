@@ -70,6 +70,15 @@ vi.mock('./stores/notes', () => ({
   }),
 }))
 
+vi.mock('./stores/plan', () => ({
+  usePlanStore: () => ({
+    plans: [],
+    todayGroups: [],
+    todayCount: 0,
+    loadPlans: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 vi.mock('./stores/auth', () => ({
   useAuthStore: () => ({
     status: 'anonymous',

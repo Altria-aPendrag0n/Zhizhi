@@ -233,6 +233,8 @@ export interface SessionMeta {
   /** ISO 创建时间（frontmatter created 缺失时回退为 1970，排序沉底） */
   created: string
   filePath: string
+  /** 会话种类：review 复习会话 / plan 计划会话；学习会话为 undefined（侧边栏分组展示用） */
+  kind?: 'review' | 'plan'
 }
 
 /** 消息头：`## 用户/知枝/系统`，可带 ` · <ISO 时间戳>`（统计问答按天归属） */
@@ -246,6 +248,11 @@ function toString(value: unknown): string {
 
 function toTags(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : []
+}
+
+/** frontmatter kind 归一化：review/plan 之外的值（含缺失）均视为学习会话（undefined），兼容旧文件 */
+function normalizeKind(value: unknown): 'review' | 'plan' | undefined {
+  return value === 'review' || value === 'plan' ? value : undefined
 }
 
 /** frontmatter session_id 缺失时按文件名兜底，兼容新旧命名（sess_1-标题.md / branch-branch_1.md → sess_1 / branch_1） */
@@ -290,6 +297,7 @@ export function parseSessionMeta(content: string, filePath: string): SessionMeta
     title: toString(meta.title) || sessionIdFromFileName(filePath),
     created: toString(meta.created) || '1970-01-01T00:00:00.000Z',
     filePath,
+    kind: normalizeKind(meta.kind),
   }
 }
 
@@ -375,7 +383,7 @@ export function parseSessionFile(content: string, filePath = ''): Session {
     fork_highlight_occ: typeof meta.fork_highlight_occ === 'number' && meta.fork_highlight_occ > 1
       ? meta.fork_highlight_occ
       : undefined,
-    kind: meta.kind === 'review' ? 'review' : undefined,
+    kind: normalizeKind(meta.kind),
     reviewed_note: toString(meta.reviewed_note) || undefined,
     review_cluster: Array.isArray(meta.review_cluster) && meta.review_cluster.every((item): item is string => typeof item === 'string')
       ? meta.review_cluster

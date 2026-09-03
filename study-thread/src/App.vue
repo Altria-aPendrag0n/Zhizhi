@@ -85,6 +85,7 @@ import { useVaultStore } from './stores/vault'
 import { useSessionStore } from './stores/session'
 import { useNoteStore } from './stores/notes'
 import { useAuthStore } from './stores/auth'
+import { usePlanStore } from './stores/plan'
 import type { SessionTreeNode } from './utils/session-tree'
 import { checkForUpdate, type AppUpdate } from './utils/updater'
 
@@ -96,6 +97,7 @@ const vaultStore = useVaultStore()
 const sessionStore = useSessionStore()
 const noteStore = useNoteStore()
 const authStore = useAuthStore()
+const planStore = usePlanStore()
 
 const defaultProjects: Project[] = [
   { id: '1', name: '知枝学习' },
@@ -485,9 +487,12 @@ watch(
     if (path) {
       // vault 就绪后加载会话列表与会话树（仓库即真相：侧边栏会话来自 sessions/*.md）
       void sessionStore.loadSessionsFromVault(path)
+      // 学习计划列表同步加载（学习地图「学习计划」视图与今日任务徽标依赖）
+      void planStore.loadPlans(path)
     } else {
       sessionStore.sessionList = []
       sessionStore.sessionTree = null
+      planStore.plans = []
     }
   },
   { immediate: true },
