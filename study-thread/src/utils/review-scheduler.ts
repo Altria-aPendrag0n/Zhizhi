@@ -219,6 +219,84 @@ export function countDue(tasks: ReviewTask[], now: Date = new Date()): number {
   return buildDueList(tasks, now).length
 }
 
+// ===================== 复习时间轴（未来一周视图） =====================
+
+/** 时间轴单日卡片数据（见 buildReviewTimeline） */
+export interface ReviewTimelineDay {
+  /** 本地时区日期键 YYYY-MM-DD（分组键与「今天」判定依据） */
+  dateKey: string
+  /** 该日 0:00（本地时间） */
+  date: Date
+  isToday: boolean
+  /** 归入该卡的逾期任务数（仅今天可能 > 0） */
+  overdueCount: number
+  /** 该日到期任务（逾期任务已归入今天并排在最前），dueAt 升序 */
+  tasks: ReviewTask[]
+}
+
+/** 本地时区日期键 YYYY-MM-DD：用本地年月日拼接，避免 toISOString 的 UTC 偏移导致跨日错位 */
+function localDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/** 本地时区该日 0:00 */
+function startOfLocalDay(date: Date): Date {
+  const d = new Date(date.getTime())
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+/**
+ * 未来一周复习时间轴（复习界面展示用，纯函数）：
+ * - 只统计未毕业任务（graduated !== true），与 buildDueList 语义一致；
+ * - 窗口 = 今天 0:00 起共 days 个自然日（本地时区，含今天）；
+ * - dueAt 早于今天 0:00 的逾期任务归入今天卡并置于最前，overdueCount 记录数量；
+ * - 每日任务按 dueAt 升序；窗口外（7 天后）的任务忽略；无任务的天 tasks 为空（空卡由 UI 渲染「无」）。
+ */
+export function buildReviewTimeline(
+  tasks: ReviewTask[],
+  now: Date = new Date(),
+  days = 7,
+): ReviewTimelineDay[] {
+  const todayStart = startOfLocalDay(now)
+  const buckets: ReviewTimelineDay[] = []
+  for (let offset = 0; offset < days; offset++) {
+    const date = new Date(todayStart.getTime())
+    date.setDate(date.getDate() + offset)
+    buckets.push({
+      dateKey: localDateKey(date),
+      date,
+      isToday: offset === 0,
+      overdueCount: 0,
+      tasks: [],
+    })
+  }
+  if (buckets.length === 0) return buckets
+  const bucketByKey = new Map(buckets.map((bucket) => [bucket.dateKey, bucket]))
+
+  const overdue: ReviewTask[] = []
+  for (const task of tasks) {
+    if (task.graduated) continue
+    const dueAtMs = new Date(task.dueAt).getTime()
+    if (dueAtMs < todayStart.getTime()) {
+      overdue.push(task)
+      continue
+    }
+    const bucket = bucketByKey.get(localDateKey(new Date(dueAtMs)))
+    if (bucket) bucket.tasks.push(task)
+  }
+
+  const byDueAt = (a: ReviewTask, b: ReviewTask) => a.dueAt.localeCompare(b.dueAt)
+  for (const bucket of buckets) bucket.tasks.sort(byDueAt)
+  overdue.sort(byDueAt)
+  buckets[0].overdueCount = overdue.length
+  buckets[0].tasks = [...overdue, ...buckets[0].tasks]
+  return buckets
+}
+
 /**
  * 汇总指定笔记的复习表现文本（P3-5 复习评级回写画像）：
  * 取每篇笔记最近 windowSize 次评级分布与当前掌握度，供 update-learner 作为升降档依据。

@@ -13,6 +13,7 @@ import {
   isGraduationCandidate,
   reactivateTask,
   applyRatingWithAlgorithm,
+  buildReviewTimeline,
   GRADUATION_MASTERY_THRESHOLD,
 } from './review-scheduler'
 
@@ -378,5 +379,100 @@ describe('summarizeReviewPerformance（P3-5 复习表现序列化）', () => {
     })
     const text = summarizeReviewPerformance([rated], ['notes/其他.md'])
     expect(text).toBe('')
+  })
+})
+
+describe('buildReviewTimeline（复习时间轴）', () => {
+  // 全部用本地时间构造，保证测试在任何时区下行为一致
+  const TL_NOW = new Date(2026, 7, 8, 12, 0) // 本地 2026-08-08 12:00
+
+  /** 本地第 offset 天（相对 TL_NOW 所在日）的某时刻，默认当天 0:00 */
+  function localDay(offset: number, hour = 0, minute = 0): string {
+    const d = new Date(TL_NOW)
+    d.setDate(d.getDate() + offset)
+    d.setHours(hour, minute, 0, 0)
+    return d.toISOString()
+  }
+
+  function tlTask(partial: Partial<ReviewTask> & { notePath: string; title: string }): ReviewTask {
+    return task(partial)
+  }
+
+  it('未毕业任务按本地自然日分组，窗口为今天起 7 天', () => {
+    const buckets = buildReviewTimeline(
+      [
+        tlTask({ notePath: 'notes/a.md', title: '今天上午', dueAt: localDay(0, 9) }),
+        tlTask({ notePath: 'notes/b.md', title: '后天', dueAt: localDay(2, 15) }),
+        tlTask({ notePath: 'notes/c.md', title: '第七天', dueAt: localDay(6, 8) }),
+      ],
+      TL_NOW,
+    )
+
+    expect(buckets).toHaveLength(7)
+    expect(buckets[0].isToday).toBe(true)
+    expect(buckets[1].isToday).toBe(false)
+    expect(buckets[0].tasks.map((t) => t.title)).toEqual(['今天上午'])
+    expect(buckets[1].tasks).toEqual([])
+    expect(buckets[2].tasks.map((t) => t.title)).toEqual(['后天'])
+    expect(buckets[6].tasks.map((t) => t.title)).toEqual(['第七天'])
+  })
+
+  it('dateKey 为本地 YYYY-MM-DD 且与 date（该日 0:00）一致', () => {
+    const buckets = buildReviewTimeline([], TL_NOW)
+    const expected = new Date(2026, 7, 8)
+    expect(buckets[0].dateKey).toBe('2026-08-08')
+    expect(buckets[0].date.getTime()).toBe(expected.getTime())
+    expect(buckets[1].dateKey).toBe('2026-08-09')
+  })
+
+  it('逾期任务归入今天卡、排在最前并计入 overdueCount', () => {
+    const buckets = buildReviewTimeline(
+      [
+        tlTask({ notePath: 'notes/today.md', title: '今天到期', dueAt: localDay(0, 9) }),
+        tlTask({ notePath: 'notes/stale1.md', title: '逾期一', dueAt: localDay(-1, 20) }),
+        tlTask({ notePath: 'notes/stale2.md', title: '逾期二', dueAt: localDay(-3, 8) }),
+      ],
+      TL_NOW,
+    )
+
+    const today = buckets[0]
+    expect(today.isToday).toBe(true)
+    expect(today.overdueCount).toBe(2)
+    // 逾期在前（各自 dueAt 升序），其后是今天正常到期任务
+    expect(today.tasks.map((t) => t.title)).toEqual(['逾期二', '逾期一', '今天到期'])
+  })
+
+  it('已毕业任务不入轴', () => {
+    const buckets = buildReviewTimeline(
+      [tlTask({ notePath: 'notes/g.md', title: '已毕业', dueAt: localDay(0, 9), graduated: true })],
+      TL_NOW,
+    )
+    expect(buckets.every((bucket) => bucket.tasks.length === 0 && bucket.overdueCount === 0)).toBe(true)
+  })
+
+  it('窗口外（第 8 天起）的未来任务被忽略', () => {
+    const buckets = buildReviewTimeline(
+      [tlTask({ notePath: 'notes/far.md', title: '第八天', dueAt: localDay(7, 10) })],
+      TL_NOW,
+    )
+    expect(buckets.every((bucket) => bucket.tasks.length === 0)).toBe(true)
+  })
+
+  it('空队列返回 7 张空卡', () => {
+    const buckets = buildReviewTimeline([], TL_NOW)
+    expect(buckets).toHaveLength(7)
+    expect(buckets[0].isToday).toBe(true)
+    expect(buckets.every((bucket) => bucket.tasks.length === 0 && bucket.overdueCount === 0)).toBe(true)
+  })
+
+  it('同日任务按 dueAt 升序排列', () => {
+    const buckets = buildReviewTimeline(
+      [
+        tlTask({ notePath: 'notes/late.md', title: '晚上', dueAt: localDay(1, 21) }),
+        tlTask({ notePath: 'notes/early.md', title: '早上', dueAt: localDay(1, 7) }),
+      ],
+      TL_NOW,
+    )
+    expect(buckets[1].tasks.map((t) => t.title)).toEqual(['早上', '晚上'])
   })
 })
