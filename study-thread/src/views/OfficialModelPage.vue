@@ -173,6 +173,20 @@
       </template>
     </section>
 
+    <!-- 对话模型选择：列表来自服务端已配置上游 Key 的渠道（GET /v1/models，Bearer 官方 Key） -->
+    <section v-if="authStore.isOfficialActive" class="card-block">
+      <h3 class="card-block__title">对话模型</h3>
+      <p class="form-hint">选择官方 API 使用的模型。列表由服务端下发（仅含已配置上游 Key 的渠道），选择即保存并在所有 AI 能力中生效。</p>
+      <div v-if="modelsLoading" class="form-hint">模型列表加载中…</div>
+      <template v-else>
+        <select v-model="selectedModel" class="form-input" :disabled="models.length === 0" aria-label="对话模型" @change="autoSwitchedFrom = ''">
+          <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+        </select>
+        <p v-if="!models.length" class="form-hint">暂无可用模型：服务端渠道尚未配置上游 API Key（管理台 → 渠道页填写后刷新）。</p>
+        <p v-else-if="autoSwitchedFrom" class="form-hint">默认模型 {{ autoSwitchedFrom }} 不在可用列表中，已切换为 {{ selectedModel }}。</p>
+      </template>
+    </section>
+
     <!-- 套餐中心：兑换码 + 用量 + 套餐列表 -->
     <section class="card-block">
       <h3 class="card-block__title">套餐中心</h3>
@@ -239,12 +253,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@lucide/vue'
 import { useToast } from '../composables/useToast'
 import { useAuthStore, getLastUsername, getRememberPreference } from '../stores/auth'
+import { useSettingsStore } from '../stores/settings'
 import {
+  fetchOfficialModels,
   fetchPlans,
   fetchUsageSummary,
   forgotPassword,
@@ -259,9 +275,50 @@ const router = useRouter()
 const route = useRoute()
 const toast = useToast()
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
 /** 「用户」栏目（settings-user）复用本页：隐藏自有头部，由 SettingsPage 提供标题 */
 const isUserSection = computed(() => route.name === 'settings-user')
+
+// ===== 对话模型选择（官方 API） =====
+
+const models = ref<string[]>([])
+const modelsLoading = ref(false)
+/** 当前模型不在可用列表而自动切换时记录原模型名（手动选择后清除） */
+const autoSwitchedFrom = ref('')
+
+const selectedModel = computed({
+  get: () => settingsStore.officialModel,
+  set: (value: string) => {
+    settingsStore.officialModel = value
+    settingsStore.saveSettings()
+  },
+})
+
+/** 拉取网关可用模型（只含已配置上游 Key 的渠道）；当前模型失效时自动落到第一项 */
+async function loadModels() {
+  if (!authStore.apiKey) return
+  modelsLoading.value = true
+  try {
+    const res = await fetchOfficialModels(authStore.apiKey)
+    models.value = res.data.map((m) => m.id)
+    if (models.value.length > 0 && !models.value.includes(settingsStore.officialModel)) {
+      autoSwitchedFrom.value = settingsStore.officialModel
+      selectedModel.value = models.value[0]!
+    }
+  } catch {
+    models.value = []
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+watch(
+  () => authStore.isOfficialActive,
+  (active) => {
+    if (active) void loadModels()
+  },
+)
 
 type AuthMode = 'login' | 'register' | 'reset'
 
@@ -591,6 +648,8 @@ function formatExpiry(ts: number | null | undefined): string {
 onMounted(() => {
   void loadPlans()
   void loadUsage()
+  // 已登录（含启动恢复会话后进入本页）时拉取可用模型；登录动作由 watch(isOfficialActive) 触发
+  if (authStore.isOfficialActive) void loadModels()
 })
 </script>
 

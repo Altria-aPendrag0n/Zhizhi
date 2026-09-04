@@ -83,6 +83,8 @@ interface RequestOptions {
   body?: unknown
   auth?: boolean
   allowRetry?: boolean
+  /** 覆盖默认鉴权头：网关 /v1/* 需要 sk-zhizhi- 官方 Key（而非 access_token），且 401 不触发会话刷新 */
+  bearer?: string
 }
 
 let refreshing: Promise<RefreshResult | null> | null = null
@@ -118,15 +120,20 @@ async function refreshAccessToken(): Promise<RefreshResult | null> {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = true, allowRetry = true } = options
+  const { method = 'GET', body, auth = true, allowRetry = true, bearer } = options
   const url = endpoint(path) // 不安全 baseUrl 在 fetch 前即拒绝（UNSAFE_BASE_URL）
+  const authorization = bearer
+    ? `Bearer ${bearer}`
+    : auth && apiAccessToken
+      ? `Bearer ${apiAccessToken}`
+      : undefined
   let res: Response
   try {
     res = await fetch(url, {
       method,
       headers: {
         'content-type': 'application/json',
-        ...(auth && apiAccessToken ? { authorization: `Bearer ${apiAccessToken}` } : {}),
+        ...(authorization ? { authorization } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
@@ -134,7 +141,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ZhizhiApiError('网络连接失败，请检查网络或服务地址', undefined, undefined, 'NETWORK')
   }
 
-  if (res.status === 401 && auth && allowRetry) {
+  // bearer 模式的 401 表示官方 Key 无效/被吊销，与会话刷新无关，直接抛给调用方
+  if (res.status === 401 && auth && allowRetry && !bearer) {
     const refreshed = await refreshAccessToken()
     if (refreshed) {
       return request<T>(path, { ...options, allowRetry: false })
@@ -196,6 +204,11 @@ export async function fetchMe(): Promise<OfficialUser> {
 /** 自助补发官方 Key（需登录）：老用户/换机后钥匙串缺失时的自愈通道（服务端只存 hash，明文无法二次下发） */
 export async function createApiKey(): Promise<{ id: string; key: string; key_preview: string }> {
   return request('/api/keys', { method: 'POST', body: { purpose: 'chat' } })
+}
+
+/** 网关可用模型列表（OpenAI 兼容 GET /v1/models，Bearer 官方 api_key；只含已配置上游 Key 的渠道） */
+export async function fetchOfficialModels(apiKey: string): Promise<{ object: string; data: Array<{ id: string }> }> {
+  return request('/v1/models', { bearer: apiKey, allowRetry: false })
 }
 
 /** 使用钥匙串中的 refresh_token 静默续期（启动恢复 / auth store 主动调用）；成功返回 true */

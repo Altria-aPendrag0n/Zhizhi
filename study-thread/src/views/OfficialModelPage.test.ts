@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import * as authModule from '../stores/auth'
 import OfficialModelPage from './OfficialModelPage.vue'
+
+// 组件内 watch(isOfficialActive) 跨用例存活会共享 mock store 状态：每例结束自动 unmount
+enableAutoUnmount(afterEach)
 
 const state = vi.hoisted(() => ({
   push: vi.fn(),
@@ -22,6 +25,11 @@ const state = vi.hoisted(() => ({
   lastUsername: '',
   rememberPreference: true,
   deleteAccount: vi.fn(),
+  /** 对话模型选择（官方 API）：auth.apiKey / 网关模型列表 / settings.officialModel 保存 */
+  officialApiKey: '',
+  officialModels: [] as string[],
+  officialModel: 'glm-4.7-flash',
+  savedOfficialModel: '',
 }))
 
 vi.mock('vue-router', () => ({
@@ -40,6 +48,22 @@ vi.mock('../api/zhizhi-api', () => ({
   redeemPlan: (...args: unknown[]) => state.redeemPlan(...args),
   forgotPassword: (...args: unknown[]) => state.forgotPassword(...args),
   resetPassword: (...args: unknown[]) => state.resetPassword(...args),
+  fetchOfficialModels: async () => ({ object: 'list', data: state.officialModels.map((id) => ({ id })) }),
+}))
+
+vi.mock('../stores/settings', () => ({
+  useSettingsStore: () => ({
+    get officialModel() {
+      return state.officialModel
+    },
+    set officialModel(value: string) {
+      state.officialModel = value
+    },
+    officialApiEnabled: true,
+    saveSettings: () => {
+      state.savedOfficialModel = state.officialModel
+    },
+  }),
 }))
 
 vi.mock('../stores/auth', async () => {
@@ -51,6 +75,10 @@ vi.mock('../stores/auth', async () => {
     status,
     user,
     isOfficialActive,
+    /** 官方 Key（内存镜像）：对话模型选择用它调网关 /v1/models */
+    get apiKey() {
+      return state.officialApiKey
+    },
     sendCode: async () => {
       state.sendCode()
       return 60
@@ -112,6 +140,10 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
     ;(authModule as unknown as { __resetAuthMock(): void }).__resetAuthMock()
     state.lastUsername = ''
     state.rememberPreference = true
+    state.officialApiKey = ''
+    state.officialModels = []
+    state.officialModel = 'glm-4.7-flash'
+    state.savedOfficialModel = ''
     for (const fn of [
       state.push,
       state.toastError,
@@ -193,6 +225,76 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
     expect(wrapper.text()).toContain('套餐到期')
     expect(wrapper.text()).toContain('退出登录')
     expect(state.fetchUsageSummary).toHaveBeenCalledWith(30)
+  })
+
+  it('已登录时展示可用模型下拉，选择即保存', async () => {
+    state.officialApiKey = 'sk-zhizhi-test'
+    state.officialModels = ['deepseek-v4-flash', 'glm-4.7-flash']
+    state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
+    const wrapper = mount(OfficialModelPage)
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    const select = wrapper.find('select')
+    expect(select.exists()).toBe(true)
+    expect(select.findAll('option').map((o) => o.element.value)).toEqual(['deepseek-v4-flash', 'glm-4.7-flash'])
+    expect((select.element as HTMLSelectElement).value).toBe('glm-4.7-flash')
+
+    await select.setValue('deepseek-v4-flash')
+    expect(state.savedOfficialModel).toBe('deepseek-v4-flash')
+  })
+
+  it('当前模型不在可用列表时自动切换到第一项', async () => {
+    state.officialApiKey = 'sk-zhizhi-test'
+    // 列表不含默认模型 glm-4.7-flash
+    state.officialModels = ['deepseek-v4-flash']
+    state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
+    const wrapper = mount(OfficialModelPage)
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('deepseek-v4-flash')
+    expect(state.savedOfficialModel).toBe('deepseek-v4-flash')
+    expect(wrapper.text(), wrapper.html().slice(0, 2500)).toContain('已切换为 deepseek-v4-flash')
+  })
+
+  it('服务端无可用模型（渠道未配置 Key）时下拉禁用并提示', async () => {
+    state.officialApiKey = 'sk-zhizhi-test'
+    state.officialModels = []
+    state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
+    const wrapper = mount(OfficialModelPage)
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('select').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('暂无可用模型')
   })
 
   it('登录失败提示错误并保持登录表单', async () => {

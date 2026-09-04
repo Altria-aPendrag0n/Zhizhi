@@ -86,7 +86,13 @@ Rust 后端
 
 ## Provider 接线
 
-[settings.ts](../study-thread/src/stores/settings.ts) `getProviderConfig()`：`officialApiEnabled` 时返回 `{ type: 'openai-compat', apiKey: authStore.apiKey（内存，来自钥匙串）, baseUrl: officialApiBaseUrl, model: officialModel }`。既有 `createProvider` 消费链（chat-loop / skills / vision）**零改动**。
+[settings.ts](../study-thread/src/stores/settings.ts) `getProviderConfig()`：`officialApiEnabled` 时返回 `{ type: 'openai-compat', apiKey: authStore.apiKey（内存，来自钥匙串）, baseUrl: officialApiBaseUrl, model: officialModel, enableWebSearch }`。既有 `createProvider` 消费链（chat-loop / skills / vision）**零改动**。
+
+## 对话模型选择（官方 API）
+
+- 服务端 `GET /v1/models`（OpenAI 兼容，Bearer 官方 Key）下发**已配置上游 Key 的渠道**的模型并集；客户端 [zhizhi-api.ts](../study-thread/src/api/zhizhi-api.ts) `fetchOfficialModels(apiKey)`（request 支持 `bearer` 覆盖鉴权头，401 不触发会话刷新）。
+- [OfficialModelPage.vue](../study-thread/src/views/OfficialModelPage.vue) 已登录态新增「对话模型」下拉：`selectedModel` 双向绑定 `settings.officialModel`，选择即 `saveSettings()` 持久化；进入页面与登录成功（`watch(isOfficialActive)`）时拉取。
+- 当前模型不在可用列表时自动切换到第一项并提示；服务端无可用模型（渠道未配置 Key）时下拉禁用并提示去管理台配置。
 
 ## OfficialModelPage 登录注册流（唯一账号页）
 
