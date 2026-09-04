@@ -206,6 +206,10 @@ study-thread/     # 应用主体（前端 Vue 3 + Rust 后端 Tauri v2）
 
 > 官方 API 服务端（账号体系 + API 分发网关 + 综合管理控制台）已迁移至独立私有仓库 **Zhizhi-Server**（`d:\work\Zhizhi-Server` / github.com/Altria-aPendrag0n/Zhizhi-Server），相关 code-wiki 模块（21/23/24）随迁。
 
+## 支持作者
+
+项目已入驻[爱发电](https://ifdian.net/a/asahiiiasd)，如果你觉得知枝对你有帮助，欢迎前往支持我的工作，你的支持是项目持续更新的动力。
+
 ## 许可证
 
 [Apache-2.0](LICENSE) © 2026 Asahiiiasd。允许自由使用、修改与分发（含商用），需保留版权声明与许可证文本。
