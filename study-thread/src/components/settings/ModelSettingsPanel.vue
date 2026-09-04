@@ -99,10 +99,12 @@ const officialBadge = computed(() =>
 
 function useOfficial() {
   settingsStore.officialApiEnabled = true
+  settingsStore.saveSettings()
 }
 
 function useCustom() {
   settingsStore.officialApiEnabled = false
+  settingsStore.saveSettings()
 }
 </script>
 

@@ -71,6 +71,9 @@ describe('auth store', () => {
     expect(store.user?.username).toBe('Alice2026')
     expect(store.apiKey).toBe('sk-zhizhi-x')
     expect(useSettingsStore().officialApiEnabled).toBe(true)
+    // officialApiEnabled 必须随登录立即持久化：重启后凭据恢复与通道开关才一致
+    const persisted = JSON.parse(localStorage.getItem('study-thread-settings')!)
+    expect(persisted.officialApiEnabled).toBe(true)
     expect(zhizhi.fetchMe).toHaveBeenCalled()
   })
 
@@ -111,6 +114,10 @@ describe('auth store', () => {
     expect(secure.clearCredentials).toHaveBeenCalled()
     expect(zhizhi.refreshSession).not.toHaveBeenCalled()
     expect(fresh.status).toBe('anonymous')
+    // 官方通道必须一并关闭并持久化（否则重启后 officialApiEnabled=true 而 apiKey 为空，发消息会跳设置页）
+    expect(useSettingsStore().officialApiEnabled).toBe(false)
+    const persisted = JSON.parse(localStorage.getItem('study-thread-settings')!)
+    expect(persisted.officialApiEnabled).toBe(false)
     // 用户名记忆不受「记住密码」影响，重启后仍可预填
     expect(getLastUsername()).toBe('Alice2026')
   })
@@ -169,6 +176,9 @@ describe('auth store', () => {
 
     expect(secure.clearCredentials).toHaveBeenCalled()
     expect(store.status).toBe('anonymous')
+    // 官方通道关闭并持久化（本地服务端不可达时不能残留「使用中」空凭据状态）
+    expect(useSettingsStore().officialApiEnabled).toBe(false)
+    expect(JSON.parse(localStorage.getItem('study-thread-settings')!).officialApiEnabled).toBe(false)
   })
 
   it('restore 刷新成功但钥匙串缺官方 Key：回匿名', async () => {
@@ -193,6 +203,7 @@ describe('auth store', () => {
     expect(secure.clearCredentials).toHaveBeenCalled()
     expect(store.status).toBe('anonymous')
     expect(useSettingsStore().officialApiEnabled).toBe(false)
+    expect(JSON.parse(localStorage.getItem('study-thread-settings')!).officialApiEnabled).toBe(false)
   })
 
   it('fetchMe 更新 user（额度同步）', async () => {

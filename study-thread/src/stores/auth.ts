@@ -39,13 +39,19 @@ export const useAuthStore = defineStore('auth', () => {
     zhizhiApi.setApiBaseUrl(useSettingsStore().officialApiBaseUrl)
   }
 
+  /** 切换官方 API 通道并立即持久化（officialApiEnabled 参与重启恢复，必须落盘，否则重启后残留 true 而凭据为空） */
+  function setOfficialEnabled(enabled: boolean) {
+    useSettingsStore().officialApiEnabled = enabled
+    useSettingsStore().saveSettings()
+  }
+
   function reset() {
     status.value = 'anonymous'
     user.value = null
     accessToken.value = ''
     apiKey.value = ''
     zhizhiApi.setApiAccessToken('')
-    useSettingsStore().officialApiEnabled = false
+    setOfficialEnabled(false)
   }
 
   /** 401 单飞刷新后同步镜像（令牌轮换写钥匙串已由 zhizhi-api 完成） */
@@ -75,7 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
     zhizhiApi.setApiAccessToken(result.access_token)
     apiKey.value = result.api_key ?? (await getApiKey()) ?? ''
     user.value = result.user
-    useSettingsStore().officialApiEnabled = true
+    setOfficialEnabled(true)
     status.value = 'authenticated'
     await fetchMe().catch(() => {})
   }
@@ -108,12 +114,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * 应用启动：钥匙串有 refresh_token 且用户勾选了「记住密码」则静默续期恢复会话。
-   * 未勾选记住（remember=false）：清除上次会话残留凭据、保持匿名（不自动登录）。
+   * 未勾选记住（remember=false）：清除上次会话残留凭据、关闭官方通道、保持匿名（不自动登录）。
    */
   async function restore(): Promise<void> {
     syncBaseUrl()
     if (getRememberPreference() === false) {
       await clearCredentials()
+      reset()
       return
     }
     if (!(await getRefreshToken())) return
@@ -136,7 +143,7 @@ export const useAuthStore = defineStore('auth', () => {
       reset()
       return false
     }
-    useSettingsStore().officialApiEnabled = true
+    setOfficialEnabled(true)
     status.value = 'authenticated'
     await fetchMe().catch(() => {})
     return true

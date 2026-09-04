@@ -52,6 +52,14 @@ Rust 后端
 - 导出函数 `getLastUsername()` / `getRememberPreference()`（[auth.ts](../study-thread/src/stores/auth.ts)）：登录表单（OfficialModelPage / UserSettingsPanel）与 `restore()` 共用同一份偏好。
 - 登录表单新增复选框「记住密码，重启后自动登录（用户名始终保留）」，默认勾选（跟随上次偏好）；`handleLogin` 以 `(username, password, remember)` 三参调用。
 
+## 官方通道开关一致性（officialApiEnabled）
+
+不变式：**`officialApiEnabled = true` 当且仅当已登录且持有官方凭据（apiKey 非空）**。违反会出现的症状：重启后设置面板显示官方「使用中」，但会话发消息因 `getProviderConfig().apiKey` 为空被引导跳设置页（MainChatPage 的空 Key 检查）。
+
+- `officialApiEnabled` 持久化于 `study-thread-settings`，重启由 `loadSettings()` 读回；auth store 内统一经 `setOfficialEnabled(enabled)` 写入——**改 ref 后立即 `saveSettings()` 落盘**（reset / settleAuth / silentRefresh 全部走它）。ModelSettingsPanel 的「切换使用」按钮同样补了 `saveSettings()`。
+- `restore()` 的 remember=false 分支除清凭据外也调用 `reset()`（关闭并持久化官方通道），避免「未登录但 officialApiEnabled=true」残留。
+- 相应地，silentRefresh 恢复成功 / 刷新失败 / 缺 Key、logout、login 失败等所有凭据变化路径都会同步落盘开关状态。
+
 ## API 客户端（api/zhizhi-api.ts）
 
 纯逻辑层（不依赖 Vue/Pinia），baseUrl 与 access_token 为模块级状态：
