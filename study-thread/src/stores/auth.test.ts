@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useAuthStore } from './auth'
+import { useAuthStore, getLastUsername, getRememberPreference } from './auth'
 import { useSettingsStore } from './settings'
 
 const zhizhi = vi.hoisted(() => ({
@@ -80,6 +80,39 @@ describe('auth store', () => {
     await expect(store.login('Alice2026', 'WrongPass')).rejects.toThrow('用户名或密码错误')
     expect(store.status).toBe('anonymous')
     expect(store.isOfficialActive).toBe(false)
+  })
+
+  it('login 默认记住密码：写用户名与 remember 偏好，getLastUsername 可读取', async () => {
+    zhizhi.login.mockResolvedValue({ access_token: 'at', refresh_token: 'rt', user: USER })
+    zhizhi.fetchMe.mockResolvedValue(USER)
+
+    const store = useAuthStore()
+    await store.login('Alice2026', 'Passw0rd')
+
+    expect(JSON.parse(localStorage.getItem('zhizhi.auth.last-username')!)).toBe('Alice2026')
+    expect(JSON.parse(localStorage.getItem('zhizhi.auth.remember')!)).toBe(true)
+    expect(getLastUsername()).toBe('Alice2026')
+    expect(getRememberPreference()).toBe(true)
+  })
+
+  it('login(remember=false)：本会话保持登录，重启后 restore 清凭据且不自动登录', async () => {
+    zhizhi.login.mockResolvedValue({ access_token: 'at', refresh_token: 'rt', user: USER })
+    zhizhi.fetchMe.mockResolvedValue(USER)
+
+    const store = useAuthStore()
+    await store.login('Alice2026', 'Passw0rd', false)
+    expect(store.status).toBe('authenticated')
+    expect(JSON.parse(localStorage.getItem('zhizhi.auth.remember')!)).toBe(false)
+
+    // 模拟重启：新 Pinia 实例 + restore 应依据 remember=false 清残留凭据、保持匿名
+    setActivePinia(createPinia())
+    const fresh = useAuthStore()
+    await fresh.restore()
+    expect(secure.clearCredentials).toHaveBeenCalled()
+    expect(zhizhi.refreshSession).not.toHaveBeenCalled()
+    expect(fresh.status).toBe('anonymous')
+    // 用户名记忆不受「记住密码」影响，重启后仍可预填
+    expect(getLastUsername()).toBe('Alice2026')
   })
 
   it('register 成功：注册自动登录，api_key 写入钥匙串', async () => {

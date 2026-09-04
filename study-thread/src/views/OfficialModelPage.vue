@@ -50,6 +50,10 @@
             <label class="form-label" for="account-password">密码</label>
             <input id="account-password" v-model="password" type="password" class="form-input" placeholder="仅数字与大小写字母，6-64 位" autocomplete="current-password" :disabled="isBusy" />
           </div>
+          <label class="form-remember">
+            <input v-model="rememberPassword" type="checkbox" class="form-remember__box" :disabled="isBusy" />
+            <span>记住密码，重启后自动登录（用户名始终保留）</span>
+          </label>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" :disabled="isBusy">
               {{ isBusy ? '登录中…' : '登录' }}
@@ -238,7 +242,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft } from '@lucide/vue'
 import { useToast } from '../composables/useToast'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore, getLastUsername, getRememberPreference } from '../stores/auth'
 import {
   fetchPlans,
   fetchUsageSummary,
@@ -262,9 +266,10 @@ const PASSWORD_RE = /^[A-Za-z0-9]{6,64}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const mode = ref<AuthMode>('login')
-// 登录
-const username = ref('')
+// 登录（用户名默认回填上次成功登录的账号；「记住密码」默认开启，重启后自动恢复登录）
+const username = ref(getLastUsername())
 const password = ref('')
+const rememberPassword = ref(getRememberPreference())
 // 注册
 const email = ref('')
 const verifyCode = ref('')
@@ -447,7 +452,7 @@ async function handleLogin() {
     return
   }
   try {
-    await authStore.login(name, pwd)
+    await authStore.login(name, pwd, rememberPassword.value)
     toast.success('登录成功，官方 API 已启用')
     await loadUsage()
   } catch (err) {
@@ -690,6 +695,24 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.6;
   color: var(--ink-2);
+}
+
+.form-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 12px;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.form-remember__box {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--brand);
+  cursor: pointer;
 }
 
 .login-form {

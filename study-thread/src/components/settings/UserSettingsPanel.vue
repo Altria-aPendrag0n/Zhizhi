@@ -169,7 +169,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
 import { useToast } from '../../composables/useToast'
-import { useAuthStore } from '../../stores/auth'
+import { useAuthStore, getLastUsername } from '../../stores/auth'
 import { ZhizhiApiError } from '../../api/zhizhi-api'
 
 const toast = useToast()
@@ -184,7 +184,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const mode = ref<AuthMode>('login')
 // 登录
-const username = ref('')
+const username = ref(getLastUsername())
 const password = ref('')
 // 注册
 const email = ref('')

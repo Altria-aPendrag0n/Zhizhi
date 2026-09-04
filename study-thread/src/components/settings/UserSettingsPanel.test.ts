@@ -61,6 +61,7 @@ vi.mock('../../stores/auth', async () => {
       user.value = null
     },
     useAuthStore: () => store,
+    getLastUsername: () => '',
   }
 })
 

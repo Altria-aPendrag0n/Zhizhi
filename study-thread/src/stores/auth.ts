@@ -4,6 +4,21 @@ import type { OfficialUser } from '../types'
 import * as zhizhiApi from '../api/zhizhi-api'
 import { clearCredentials, getApiKey, getRefreshToken, setApiKey, setRefreshToken } from '../utils/secure-store'
 import { useSettingsStore } from './settings'
+import { loadStoredValue, saveStoredValue } from '../utils/local-storage'
+
+/** 「记住密码」偏好与上次登录用户名（localStorage；用户名非敏感，密码本身绝不落盘） */
+const REMEMBER_KEY = 'zhizhi.auth.remember'
+const LAST_USERNAME_KEY = 'zhizhi.auth.last-username'
+
+/** 登录表单预填：上次成功登录的用户名（从未登录过返回空串） */
+export function getLastUsername(): string {
+  return loadStoredValue<string>(LAST_USERNAME_KEY) ?? ''
+}
+
+/** 「记住密码，重启后自动登录」偏好（默认开启；restore 与登录表单共用同一份） */
+export function getRememberPreference(): boolean {
+  return loadStoredValue<boolean>(REMEMBER_KEY) ?? true
+}
 
 export type AuthStatus = 'anonymous' | 'authenticating' | 'authenticated'
 
@@ -43,8 +58,17 @@ export const useAuthStore = defineStore('auth', () => {
     return result.cooldown_seconds
   }
 
-  /** 登录成功后的公共落地逻辑：写钥匙串 + 内存 token + 启用官方 API + 拉取 /me */
-  async function settleAuth(result: { access_token: string; refresh_token: string; user: OfficialUser; api_key?: string }): Promise<void> {
+  /**
+   * 登录成功后的公共落地逻辑：写钥匙串 + 内存 token + 启用官方 API + 拉取 /me。
+   * remember：是否「记住密码，重启后自动登录」——凭据照常写钥匙串（保证会话内令牌轮换正常），
+   * 是否在重启后恢复由 restore() 依据 remember 偏好决定。
+   */
+  async function settleAuth(
+    result: { access_token: string; refresh_token: string; user: OfficialUser; api_key?: string },
+    remember = true,
+  ): Promise<void> {
+    saveStoredValue(LAST_USERNAME_KEY, result.user.username)
+    saveStoredValue(REMEMBER_KEY, remember)
     await setRefreshToken(result.refresh_token)
     if (result.api_key) await setApiKey(result.api_key)
     accessToken.value = result.access_token
@@ -56,13 +80,13 @@ export const useAuthStore = defineStore('auth', () => {
     await fetchMe().catch(() => {})
   }
 
-  /** 用户名 + 密码登录 */
-  async function login(username: string, password: string): Promise<void> {
+  /** 用户名 + 密码登录；remember=false 时本会话保持登录但重启后不自动恢复 */
+  async function login(username: string, password: string, remember = true): Promise<void> {
     status.value = 'authenticating'
     try {
       syncBaseUrl()
       const result = await zhizhiApi.login(username, password)
-      await settleAuth(result)
+      await settleAuth(result, remember)
     } catch (err) {
       reset()
       throw err
@@ -82,9 +106,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /** 应用启动：钥匙串有 refresh_token 则静默续期恢复会话；失败清凭据回匿名（不打扰用户） */
+  /**
+   * 应用启动：钥匙串有 refresh_token 且用户勾选了「记住密码」则静默续期恢复会话。
+   * 未勾选记住（remember=false）：清除上次会话残留凭据、保持匿名（不自动登录）。
+   */
   async function restore(): Promise<void> {
     syncBaseUrl()
+    if (getRememberPreference() === false) {
+      await clearCredentials()
+      return
+    }
     if (!(await getRefreshToken())) return
     await silentRefresh()
   }

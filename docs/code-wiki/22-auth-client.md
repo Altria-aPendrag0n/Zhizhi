@@ -36,13 +36,21 @@ Rust 后端
 | authenticated | login 成功 / restore 静默续期成功 | 官方 API 启用 |
 
 - `sendCode(email)` → 返回 `cooldown_seconds`（UI 倒计时；仅邮箱）。
-- `login(username, password)` → zhizhi-api 登录（用户名+密码）→ 写钥匙串 refresh_token（api_key 注册时已入库）→ 内存 accessToken/apiKey → `settings.officialApiEnabled = true` → `fetchMe()` 拉额度。
-- `register(email, code, username, password)` → 邮箱验证码 + 设置用户名密码 → 服务端注册并签发 Key → `settleAuth()` 自动登录。
-- `settleAuth(result)`：login/register 共用的落地逻辑（写钥匙串 + 内存 token + 启用官方 API + fetchMe）。
-- `restore()`（App.vue onMounted 调用，失败静默）：钥匙串有 refresh_token → `silentRefresh()` → 读 api_key → authenticated。
+- `login(username, password, remember = true)` → zhizhi-api 登录（用户名+密码）→ 写钥匙串 refresh_token（api_key 注册时已入库）→ 内存 accessToken/apiKey → `settings.officialApiEnabled = true` → `fetchMe()` 拉额度。`remember=false` 表示本会话保持登录但重启后不自动恢复。
+- `register(email, code, username, password)` → 邮箱验证码 + 设置用户名密码 → 服务端注册并签发 Key → `settleAuth(result)` 自动登录（register 默认按记住处理）。
+- `settleAuth(result, remember = true)`：login/register 共用的落地逻辑（落库用户名与 remember 偏好 + 写钥匙串 + 内存 token + 启用官方 API + fetchMe）。
+- `restore()`（App.vue onMounted 调用，失败静默）：先查「记住密码」偏好——未勾选则 `clearCredentials()` 清残留凭据、保持匿名；勾选且钥匙串有 refresh_token → `silentRefresh()` → 读 api_key → authenticated。
 - `silentRefresh()`：zhizhi-api `refreshSession()`（轮换写回钥匙串）→ 缺 api_key 或刷新失败 → `clearCredentials()` 回 anonymous。
 - `logout()`：服务端吊销（尽力而为，不可达也本地登出）→ 清钥匙串与内存 → anonymous。
 - 401 单飞刷新回调：`setOnTokensRefreshed` 同步 auth store 的 accessToken 镜像。
+
+## 记住密码与用户名记忆
+
+- **密码绝不落盘**：凭据安全边界不变——refresh_token / api_key 只进 OS 钥匙串。「记住密码」只是控制重启后是否走 `restore()` 自动续期，不改变凭据存储位置。
+- `zhizhi.auth.remember`（localStorage，默认 `true`）：勾选后重启自动登录；未勾选时 `restore()` 主动清掉钥匙串残留凭据（防止上次会话遗留 refresh_token 被静默使用）。
+- `zhizhi.auth.last-username`（localStorage）：上次成功登录的用户名，登录表单始终预填（**用户名非敏感，与「记住密码」开关无关**；从未登录过返回空串）。
+- 导出函数 `getLastUsername()` / `getRememberPreference()`（[auth.ts](../study-thread/src/stores/auth.ts)）：登录表单（OfficialModelPage / UserSettingsPanel）与 `restore()` 共用同一份偏好。
+- 登录表单新增复选框「记住密码，重启后自动登录（用户名始终保留）」，默认勾选（跟随上次偏好）；`handleLogin` 以 `(username, password, remember)` 三参调用。
 
 ## API 客户端（api/zhizhi-api.ts）
 
@@ -84,9 +92,9 @@ Rust 后端
 | 文件 | 覆盖 |
 |---|---|
 | `src/api/zhizhi-api.test.ts` | login（用户名密码）请求与解析、register 请求、不安全 baseUrl 拒绝（不发请求）、网络错误 NETWORK、429 冷却秒数、**并发 401 只刷新一次并重放**、刷新失败清凭据抛 SESSION_EXPIRED、refreshSession 成功/无凭据 |
-| `src/stores/auth.test.ts` | sendCode 冷却、login（用户名密码）成功/失败、register 成功自动登录（api_key 写钥匙串）/失败回匿名、restore 四分支（无凭据/刷新成功/刷新失败/缺 Key）、logout 清凭据、fetchMe 额度同步 |
+| `src/stores/auth.test.ts` | sendCode 冷却、login（用户名密码）成功/失败、login 默认写 remember 偏好与用户名（getLastUsername 可读取）、login(remember=false) 重启后 restore 清凭据不自动登录、register 成功自动登录（api_key 写钥匙串）/失败回匿名、restore 四分支（无凭据/刷新成功/刷新失败/缺 Key）+ remember=false 分支、logout 清凭据、fetchMe 额度同步 |
 | `src/components/settings/UserSettingsPanel.test.ts` | 登录/注册模式切换、发码倒计时（fake timers）、用户名/密码格式与两次密码一致校验、注册成功自动登录、登出回表单 |
-| `src/views/OfficialModelPage.test.ts` | 表单渲染、空提交提示、发码倒计时（fake timers）、登录成功进已登录态、注册成功提示、登录失败保持表单、登出回表单、套餐未上线提示、返回跳转 |
+| `src/views/OfficialModelPage.test.ts` | 表单渲染、空提交提示、发码倒计时（fake timers）、登录成功进已登录态（remember=true 三参）、登录表单预填上次用户名、记住密码复选框默认随偏好且 remember=false 透传、注册成功提示、登录失败保持表单、登出回表单、套餐未上线提示、返回跳转 |
 | `src/views/SettingsPage.test.ts` | 侧边栏切换 + 用户面板登录成功（mock auth store） |
 | `src/App.test.ts` | 新增 auth store mock（App.vue 挂载 restore） |
 

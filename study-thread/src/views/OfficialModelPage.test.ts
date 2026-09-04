@@ -18,6 +18,9 @@ const state = vi.hoisted(() => ({
   redeemPlan: vi.fn(),
   forgotPassword: vi.fn(),
   resetPassword: vi.fn(),
+  /** 登录表单预填与「记住密码」偏好（auth store localStorage 偏好的 mock） */
+  lastUsername: '',
+  rememberPreference: true,
   deleteAccount: vi.fn(),
 }))
 
@@ -51,8 +54,8 @@ vi.mock('../stores/auth', async () => {
       state.sendCode()
       return 60
     },
-    login: async (username: string, password?: string) => {
-      await state.login(username, password)
+    login: async (username: string, password?: string, remember?: boolean) => {
+      await state.login(username, password, remember)
       status.value = 'authenticated'
       user.value = {
         username,
@@ -92,6 +95,8 @@ vi.mock('../stores/auth', async () => {
       user.value = null
     },
     useAuthStore: () => store,
+    getLastUsername: () => state.lastUsername,
+    getRememberPreference: () => state.rememberPreference,
   }
 })
 
@@ -104,6 +109,8 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
   afterEach(() => {
     vi.useRealTimers()
     ;(authModule as unknown as { __resetAuthMock(): void }).__resetAuthMock()
+    state.lastUsername = ''
+    state.rememberPreference = true
     for (const fn of [
       state.push,
       state.toastError,
@@ -171,13 +178,14 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
       models: [],
     })
     const wrapper = mount(OfficialModelPage)
+    expect((wrapper.find('.form-remember__box').element as HTMLInputElement).checked).toBe(true)
     await wrapper.find('#account-username').setValue('Alice2026')
     await wrapper.find('#account-password').setValue('Passw0rd')
 
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(state.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd')
+    expect(state.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd', true)
     expect(state.toastSuccess).toHaveBeenCalledWith('登录成功，官方 API 已启用')
     expect(wrapper.text()).toContain('Alice2026')
     expect(wrapper.text()).toContain('标准')
@@ -197,6 +205,34 @@ describe('OfficialModelPage 知枝官方 API 页', () => {
     expect(state.toastError).toHaveBeenCalledWith('用户名或密码错误')
     expect(wrapper.text()).toContain('登录')
     expect(wrapper.text()).not.toContain('退出登录')
+  })
+
+  it('登录表单默认预填上次登录的用户名', () => {
+    state.lastUsername = 'Bob2026'
+    const wrapper = mount(OfficialModelPage)
+
+    expect((wrapper.find('#account-username').element as HTMLInputElement).value).toBe('Bob2026')
+  })
+
+  it('偏好未勾选记住密码：复选框默认不勾选，登录以 remember=false 调用', async () => {
+    state.login.mockResolvedValue(undefined)
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
+    state.rememberPreference = false
+    const wrapper = mount(OfficialModelPage)
+    expect((wrapper.find('.form-remember__box').element as HTMLInputElement).checked).toBe(false)
+
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(state.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd', false)
   })
 
   it('注册成功：调用 register 并提示「注册成功，已自动登录」', async () => {
