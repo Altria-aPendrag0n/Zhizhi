@@ -47,6 +47,7 @@ export const useSettingsStore = defineStore('settings', () => {
       visionModel: visionModel.value,
       officialApiBaseUrl: officialApiBaseUrl.value,
       officialModel: officialModel.value,
+      officialApiEnabled: officialApiEnabled.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   }
@@ -70,6 +71,7 @@ export const useSettingsStore = defineStore('settings', () => {
         visionModel.value = data.visionModel || 'glm-4v-flash'
         officialApiBaseUrl.value = data.officialApiBaseUrl || import.meta.env.VITE_OFFICIAL_API_URL || defaultOfficialApiUrl
         officialModel.value = data.officialModel || 'glm-4.7-flash'
+        officialApiEnabled.value = data.officialApiEnabled === true
       } catch {
         // 解析失败则使用默认值
       }

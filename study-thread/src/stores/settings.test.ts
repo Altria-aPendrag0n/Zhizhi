@@ -39,6 +39,7 @@ describe('settings store', () => {
     store.visionBaseUrl = 'https://open.bigmodel.cn/api/paas'
     store.visionApiKey = 'sk-vision-key'
     store.visionModel = 'glm-4v-flash'
+    store.officialApiEnabled = true
     store.saveSettings()
 
     const raw = localStorage.getItem('study-thread-settings')
@@ -55,6 +56,7 @@ describe('settings store', () => {
     expect(data.visionEnabled).toBe(true)
     expect(data.visionApiKey).toBe('sk-vision-key')
     expect(data.visionModel).toBe('glm-4v-flash')
+    expect(data.officialApiEnabled).toBe(true)
   })
 
   it('loadSettings 从 localStorage 恢复设置', () => {

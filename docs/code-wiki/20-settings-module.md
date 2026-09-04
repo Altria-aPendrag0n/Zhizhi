@@ -43,12 +43,14 @@
 
 ### 2. ModelSettingsPanel（模型配置）
 
-- 两个入口卡片（点击跳转子路由）：
+- 两个入口卡片（点击跳转子路由；卡片为 `div[role=button]` 以支持内嵌操作按钮，Enter/Space 键盘可达）：
 
-  - **知枝官方 API**：徽标动态显示 `authStore.isOfficialActive ? '已启用' : '未登录'`（登录后即启用官方 API）；文案强调 Key 对用户不可见（存系统钥匙串）。
+  - **知枝官方 API**：徽标三态 `使用中（官方启用，绿色）/ 已登录（已登录未启用）/ 未登录`；右侧操作按钮——`officialApiEnabled` 为真时显示禁用态「使用中」，已登录未启用时显示「切换使用」（一键 `officialApiEnabled = true`，`@click.stop` 不触发卡片跳转），未登录时显示「去登录」（跳官方页）。
 
-  - **自定义模型**：徽标「当前使用」；文案为 BYOK 说明。
+  - **自定义模型**：徽标 `当前使用（自定义生效，绿色）/ 未启用`；右侧操作按钮——自定义生效时禁用态「使用中」，官方启用时显示「切换使用」（一键 `officialApiEnabled = false`）。
 
+- **当前通道语义**与 `settings.getProviderConfig()` 一致：`officialApiEnabled = true` → 官方，否则自定义。此前徽标为硬编码（两卡同时显示已启用/当前使用），现随真实状态联动。
+- **持久化**：`officialApiEnabled` 已纳入 `settings.ts` 的 save/load（此前不落盘，重启后官方启用状态丢失；auth.ts 登录/登出时的写入也随之持久化）。
 - 同时被 `/settings/models`（ModelConfigPage）复用，保证侧边栏面板与独立路由内容一致。
 
 ### 3. UserSettingsPanel（用户 —— 登录/注册）
