@@ -172,9 +172,9 @@ function handleSave() {
   })
 }
 
-function handleDelete() {
+async function handleDelete() {
   if (!props.reference) return
-  if (!window.confirm(`确定要删除“${props.reference.title}”吗？此操作无法撤销。`)) return
+  if (!(await window.confirm(`确定要删除“${props.reference.title}”吗？此操作无法撤销。`))) return
   emit('delete', props.reference.path)
 }
 

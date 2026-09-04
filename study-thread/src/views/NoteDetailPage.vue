@@ -183,7 +183,7 @@ function handleOpenSource(source: NonNullable<Note['source']>) {
 }
 
 async function handleDeleteNote() {
-  if (!currentNote.value || !window.confirm(`确定要删除“${currentNote.value.title}”吗？此操作无法撤销。`)) return
+  if (!currentNote.value || !(await window.confirm(`确定要删除“${currentNote.value.title}”吗？此操作无法撤销。`))) return
 
   if (!(await noteStore.deleteNote(currentNote.value.path))) {
     toast.error('删除 Vault 笔记文件失败，未删除本地数据')

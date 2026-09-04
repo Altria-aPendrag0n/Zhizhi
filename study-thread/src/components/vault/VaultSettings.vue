@@ -112,7 +112,7 @@ async function openVault(path: string) {
 async function handleDeleteVault() {
   const path = vaultStore.vaultPath
   if (!path) return
-  const confirmed = window.confirm(
+  const confirmed = await window.confirm(
     `确定要删除 Vault「${path}」吗？\n\n该目录下的笔记、会话与参考资料将被永久删除，无法恢复。`,
   )
   if (!confirmed) return

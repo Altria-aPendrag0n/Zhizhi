@@ -178,12 +178,13 @@ describe('ReferenceEditDialog', () => {
   })
 
   it('删除按钮 confirm 后 emit delete', async () => {
-    const confirmSpy = vi.fn().mockReturnValue(true)
+    const confirmSpy = vi.fn().mockResolvedValue(true)
     vi.stubGlobal('confirm', confirmSpy)
     const wrapper = createDialog()
     await openDialog(wrapper)
 
     findButton((text) => text === '删除').click()
+    await flushPromises()
 
     expect(confirmSpy).toHaveBeenCalledWith('确定要删除“工作记忆容量”吗？此操作无法撤销。')
     expect(wrapper.emitted('delete')).toEqual([[mdReference.path]])
@@ -191,11 +192,12 @@ describe('ReferenceEditDialog', () => {
   })
 
   it('confirm 取消时不 emit delete', async () => {
-    vi.stubGlobal('confirm', vi.fn().mockReturnValue(false))
+    vi.stubGlobal('confirm', vi.fn().mockResolvedValue(false))
     const wrapper = createDialog()
     await openDialog(wrapper)
 
     findButton((text) => text === '删除').click()
+    await flushPromises()
 
     expect(wrapper.emitted('delete')).toBeUndefined()
     wrapper.unmount()

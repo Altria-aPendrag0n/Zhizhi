@@ -340,7 +340,7 @@ async function handleRetryParse(path: string) {
 
 async function handleDeleteReference(path: string) {
   const reference = referenceStore.references.find((item) => item.path === path)
-  if (!reference || !window.confirm(`确定要删除“${reference.title}”吗？此操作无法撤销。`)) return
+  if (!reference || !(await window.confirm(`确定要删除“${reference.title}”吗？此操作无法撤销。`))) return
 
   if (!(await referenceStore.deleteReference(path))) {
     toast.error('删除参考资料文件失败')
