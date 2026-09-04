@@ -66,6 +66,20 @@ describe('zhizhi-api', () => {
     expect(JSON.parse(String(init.body))).toEqual({ username: 'Alice2026', password: 'Passw0rd' })
   })
 
+  it('createApiKey 携带 access_token 请求 /api/keys 并解析明文 Key', async () => {
+    api.setApiAccessToken('at-token')
+    state.fetchMock.mockResolvedValue(
+      jsonResponse(201, { id: 'k1', key: 'sk-zhizhi-new', key_preview: 'sk-zhizhi-new…' }),
+    )
+    const result = await api.createApiKey()
+
+    expect(result.key).toBe('sk-zhizhi-new')
+    const [url, init] = state.fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${BASE}/api/keys`)
+    expect(init.headers).toMatchObject({ authorization: 'Bearer at-token' })
+    expect(JSON.parse(String(init.body))).toEqual({ purpose: 'chat' })
+  })
+
   it('register 发送邮箱/验证码/用户名/密码并解析 api_key', async () => {
     state.fetchMock.mockResolvedValue(
       jsonResponse(200, { access_token: 'at1', refresh_token: 'rt1', user: ME_BODY, api_key: 'sk-zhizhi-abc' }),

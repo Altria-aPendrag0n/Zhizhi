@@ -193,6 +193,11 @@ export async function fetchMe(): Promise<OfficialUser> {
   return request('/api/me')
 }
 
+/** 自助补发官方 Key（需登录）：老用户/换机后钥匙串缺失时的自愈通道（服务端只存 hash，明文无法二次下发） */
+export async function createApiKey(): Promise<{ id: string; key: string; key_preview: string }> {
+  return request('/api/keys', { method: 'POST', body: { purpose: 'chat' } })
+}
+
 /** 使用钥匙串中的 refresh_token 静默续期（启动恢复 / auth store 主动调用）；成功返回 true */
 export async function refreshSession(): Promise<boolean> {
   return (await refreshAccessToken()) !== null

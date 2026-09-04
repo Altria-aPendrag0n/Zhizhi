@@ -64,6 +64,18 @@ export const useAuthStore = defineStore('auth', () => {
     return result.cooldown_seconds
   }
 
+  /** 官方 Key 自愈：登录响应无 Key 且钥匙串缺失（老用户/换机）时，用 access_token 自助补发一把并写入钥匙串 */
+  async function ensureOfficialKey(): Promise<string | null> {
+    try {
+      const created = await zhizhiApi.createApiKey()
+      await setApiKey(created.key)
+      apiKey.value = created.key
+      return created.key
+    } catch {
+      return null
+    }
+  }
+
   /**
    * 登录成功后的公共落地逻辑：写钥匙串 + 内存 token + 启用官方 API + 拉取 /me。
    * remember：是否「记住密码，重启后自动登录」——凭据照常写钥匙串（保证会话内令牌轮换正常），
@@ -80,6 +92,7 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken.value = result.access_token
     zhizhiApi.setApiAccessToken(result.access_token)
     apiKey.value = result.api_key ?? (await getApiKey()) ?? ''
+    if (!apiKey.value) await ensureOfficialKey()
     user.value = result.user
     setOfficialEnabled(true)
     status.value = 'authenticated'
@@ -138,10 +151,13 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken.value = zhizhiApi.getApiAccessToken()
     apiKey.value = (await getApiKey()) ?? ''
     if (!apiKey.value) {
-      // 钥匙串缺官方 Key（异常态）：视为未登录，要求重新登录
-      await clearCredentials()
-      reset()
-      return false
+      // 钥匙串缺官方 Key（老用户/换机）：先用 access_token 自助补发自愈，失败才视为未登录
+      const healed = await ensureOfficialKey()
+      if (!healed) {
+        await clearCredentials()
+        reset()
+        return false
+      }
     }
     setOfficialEnabled(true)
     status.value = 'authenticated'

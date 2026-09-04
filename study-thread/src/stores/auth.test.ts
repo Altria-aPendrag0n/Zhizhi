@@ -10,6 +10,7 @@ const zhizhi = vi.hoisted(() => ({
   logout: vi.fn(),
   fetchMe: vi.fn(),
   refreshSession: vi.fn(),
+  createApiKey: vi.fn(),
   setApiAccessToken: vi.fn(),
   setApiBaseUrl: vi.fn(),
   getApiAccessToken: vi.fn(),
@@ -181,17 +182,49 @@ describe('auth store', () => {
     expect(JSON.parse(localStorage.getItem('study-thread-settings')!).officialApiEnabled).toBe(false)
   })
 
-  it('restore 刷新成功但钥匙串缺官方 Key：回匿名', async () => {
+  it('restore 刷新成功但钥匙串缺官方 Key：自动补发自愈', async () => {
     secure.getRefreshToken.mockResolvedValue('rt-old')
     zhizhi.refreshSession.mockResolvedValue(true)
     zhizhi.getApiAccessToken.mockReturnValue('at-new')
     secure.getApiKey.mockResolvedValue(null)
+    zhizhi.createApiKey.mockResolvedValue({ id: 'k1', key: 'sk-zhizhi-new', key_preview: 'sk-zhizhi-new…' })
+
+    const store = useAuthStore()
+    await store.restore()
+
+    expect(zhizhi.createApiKey).toHaveBeenCalled()
+    expect(secure.setApiKey).toHaveBeenCalledWith('sk-zhizhi-new')
+    expect(store.status).toBe('authenticated')
+    expect(store.apiKey).toBe('sk-zhizhi-new')
+  })
+
+  it('restore 刷新成功但缺 Key 且补发失败：清凭据回匿名', async () => {
+    secure.getRefreshToken.mockResolvedValue('rt-old')
+    zhizhi.refreshSession.mockResolvedValue(true)
+    zhizhi.getApiAccessToken.mockReturnValue('at-new')
+    secure.getApiKey.mockResolvedValue(null)
+    zhizhi.createApiKey.mockRejectedValue(new Error('key limit reached'))
 
     const store = useAuthStore()
     await store.restore()
 
     expect(secure.clearCredentials).toHaveBeenCalled()
     expect(store.status).toBe('anonymous')
+  })
+
+  it('login 响应无 api_key 且钥匙串空：自动补发官方 Key 写入钥匙串', async () => {
+    zhizhi.login.mockResolvedValue({ access_token: 'at', refresh_token: 'rt', user: USER })
+    secure.getApiKey.mockResolvedValue(null)
+    zhizhi.createApiKey.mockResolvedValue({ id: 'k2', key: 'sk-zhizhi-heal', key_preview: 'sk-zhizhi-heal…' })
+    zhizhi.fetchMe.mockResolvedValue(USER)
+
+    const store = useAuthStore()
+    await store.login('Alice2026', 'Passw0rd')
+
+    expect(zhizhi.createApiKey).toHaveBeenCalled()
+    expect(secure.setApiKey).toHaveBeenCalledWith('sk-zhizhi-heal')
+    expect(store.apiKey).toBe('sk-zhizhi-heal')
+    expect(store.status).toBe('authenticated')
   })
 
   it('logout：调服务端吊销并清空凭据', async () => {

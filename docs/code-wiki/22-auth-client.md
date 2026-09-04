@@ -60,6 +60,14 @@ Rust 后端
 - `restore()` 的 remember=false 分支除清凭据外也调用 `reset()`（关闭并持久化官方通道），避免「未登录但 officialApiEnabled=true」残留。
 - 相应地，silentRefresh 恢复成功 / 刷新失败 / 缺 Key、logout、login 失败等所有凭据变化路径都会同步落盘开关状态。
 
+## 官方 Key 自愈（老用户/换机兜底）
+
+服务端 Key 明文只在注册时返回一次（库中仅存 sha256，无法二次下发）。因此登录响应可能没有 `api_key`（老用户注册于 Key 机制上线前 / 换机器钥匙串为空），客户端凭 `ensureOfficialKey()` 自愈：
+
+- `settleAuth`：登录后 `apiKey` 为空（响应无 Key 且钥匙串无 Key）→ 以 access_token 调 `POST /api/keys`（`createApiKey()`）补发一把新 Key 并写入钥匙串。
+- `silentRefresh`：恢复会话后发现钥匙串缺 Key → 同样先自愈，失败才 `clearCredentials()` 回匿名。
+- 服务端配套：`login()` 也调用 `issueApiKeyIfMissing` 幂等补发（见服务端 code-wiki 21 号文档）——两条腿保证任何场景登录后都能拿到可用 Key。
+
 ## API 客户端（api/zhizhi-api.ts）
 
 纯逻辑层（不依赖 Vue/Pinia），baseUrl 与 access_token 为模块级状态：
