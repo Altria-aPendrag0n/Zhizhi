@@ -130,7 +130,8 @@
         <button class="plan-board__back" type="button" @click="exitWizard">返回计划列表</button>
       </section>
 
-      <div class="plan-board__chat">
+      <!-- 对话消息区：首条消息发出后才渲染，避免空态时显示一个无法输入的空框 -->
+      <div v-if="wizardMessages.length > 0" class="plan-board__chat">
         <div
           v-for="(msg, index) in wizardMessages"
           :key="index"

@@ -88,6 +88,13 @@ describe('PlanBoard 列表模式', () => {
     await wrapper.find('.plan-board__cta').trigger('click')
     expect(wrapper.text()).toContain('制定学习计划')
     expect(wrapper.find('form.plan-board__composer').exists()).toBe(true)
+    // 空向导不渲染对话容器（避免出现无法输入的空框），首条消息发出后才出现
+    expect(wrapper.find('.plan-board__chat').exists()).toBe(false)
+    providerChat.mockImplementation(async function* () {})
+    await wrapper.find('textarea.plan-board__input').setValue('想学 Rust')
+    await wrapper.find('form.plan-board__composer').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('.plan-board__chat').exists()).toBe(true)
   })
 
   it('今日任务按计划分组渲染，勾选写回 plan store', async () => {
