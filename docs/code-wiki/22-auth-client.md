@@ -88,12 +88,14 @@ Rust 后端
 
 [settings.ts](../study-thread/src/stores/settings.ts) `getProviderConfig()`：`officialApiEnabled` 时返回 `{ type: 'openai-compat', apiKey: authStore.apiKey（内存，来自钥匙串）, baseUrl: officialApiBaseUrl, model: officialModel }`。既有 `createProvider` 消费链（chat-loop / skills / vision）**零改动**。
 
-## OfficialModelPage / UserSettingsPanel 登录注册流
+## OfficialModelPage 登录注册流（唯一账号页）
 
-- **登录**（用户名 + 密码）：anonymous 显示表单（用户名/密码，含格式占位提示）；authenticating 按钮 loading；成功进入已登录态（用户名 / 绑定邮箱 / 套餐 / 剩余额度，来自 `/api/me`）+ 「退出登录」。
+> 历史注记：早期「用户」栏目（UserSettingsPanel）与官方 API 页各有一套登录/注册 UI，已合并——**`settings-user` 路由直接复用 [OfficialModelPage](../study-thread/src/views/OfficialModelPage.vue)**（功能超集：登录/注册/忘记密码/注销 + 套餐中心 + 兑换码 + 用量汇总），UserSettingsPanel 已删除。该页在「用户」栏目下隐藏自有头部（由 SettingsPage 提供「用户」标题），避免双头部。
+
+- **登录**（用户名 + 密码）：anonymous 显示表单（用户名/密码 + 记住密码复选框）；authenticating 按钮 loading；成功进入已登录态（用户名 / 绑定邮箱 / 套餐 / 剩余额度，来自 `/api/me`）+ 「退出登录」。
 - **注册**（两步）：模式切换至「注册」→ ① 邮箱 + 验证码（「获取验证码」60s 倒计时，`cooldown_seconds`）→ ② 设置用户名 + 密码 + 确认密码（客户端校验：邮箱格式、验证码 6 位、用户名 `[A-Za-z0-9]{3,32}`、密码 `[A-Za-z0-9]{6,64}`、两次一致）→ `authStore.register()` 自动登录。
 - 错误 toast：401（验证码错误 / 用户名或密码错误）、409（用户名/邮箱已占用）、429（限频）、网络。
-- 设置页「用户」栏目（UserSettingsPanel）与 OfficialModelPage 提供相同的登录/注册 UI，共用同一 `authStore`。
+- 入口：设置页侧边栏「用户」（`settings-user`）与模型配置 → 官方 API 卡片「去登录」（`settings-models-official`）指向**同一个页面组件**。
 - 套餐卡片仍为预览（Phase 2 支付接入前保留"未上线"提示）。
 
 ## 服务端配套（CORS）
@@ -108,10 +110,9 @@ Rust 后端
 | 文件 | 覆盖 |
 |---|---|
 | `src/api/zhizhi-api.test.ts` | login（用户名密码）请求与解析、register 请求、不安全 baseUrl 拒绝（不发请求）、网络错误 NETWORK、429 冷却秒数、**并发 401 只刷新一次并重放**、刷新失败清凭据抛 SESSION_EXPIRED、refreshSession 成功/无凭据 |
-| `src/stores/auth.test.ts` | sendCode 冷却、login（用户名密码）成功/失败、login 默认写 remember 偏好与用户名（getLastUsername 可读取）、login(remember=false) 重启后 restore 清凭据不自动登录、register 成功自动登录（api_key 写钥匙串）/失败回匿名、restore 四分支（无凭据/刷新成功/刷新失败/缺 Key）+ remember=false 分支、logout 清凭据、fetchMe 额度同步 |
-| `src/components/settings/UserSettingsPanel.test.ts` | 登录/注册模式切换、发码倒计时（fake timers）、用户名/密码格式与两次密码一致校验、注册成功自动登录、登出回表单 |
-| `src/views/OfficialModelPage.test.ts` | 表单渲染、空提交提示、发码倒计时（fake timers）、登录成功进已登录态（remember=true 三参）、登录表单预填上次用户名、记住密码复选框默认随偏好且 remember=false 透传、注册成功提示、登录失败保持表单、登出回表单、套餐未上线提示、返回跳转 |
-| `src/views/SettingsPage.test.ts` | 侧边栏切换 + 用户面板登录成功（mock auth store） |
+| `src/stores/auth.test.ts` | sendCode 冷却、login（用户名密码）成功/失败、login 默认写 remember 偏好与用户名（getLastUsername 可读取）、login(remember=false) 重启后 restore 清凭据不自动登录、login/restore 缺 Key 自愈（createApiKey 补发/失败回匿名）、register 成功自动登录（api_key 写钥匙串）/失败回匿名、restore 分支（无凭据/刷新成功/刷新失败/缺 Key 自愈）+ remember=false 分支、logout 清凭据、fetchMe 额度同步 |
+| `src/views/OfficialModelPage.test.ts` | 表单渲染、空提交提示、发码倒计时（fake timers）、登录成功进已登录态（remember=true 三参）、登录表单预填上次用户名、记住密码复选框默认随偏好且 remember=false 透传、注册成功提示、登录失败保持表单、登出回表单、套餐中心与兑换、忘记密码/重置、注销账号、返回跳转 |
+| `src/views/SettingsPage.test.ts` | 侧边栏切换 + 「用户」栏目复用官方账号页登录成功（mock auth store） |
 | `src/App.test.ts` | 新增 auth store mock（App.vue 挂载 restore） |
 
 ## 关键坑位

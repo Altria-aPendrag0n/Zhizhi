@@ -74,7 +74,8 @@ const router = createRouter({
         {
           path: 'user',
           name: 'settings-user',
-          component: () => import('../components/settings/UserSettingsPanel.vue'),
+          // 与「模型配置 → 官方 API」同一页面（官方账号中心：登录/注册/套餐/兑换），避免两套登录 UI
+          component: () => import('../views/OfficialModelPage.vue'),
         },
       ],
     },

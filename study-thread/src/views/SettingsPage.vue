@@ -75,7 +75,7 @@ const sectionMeta = computed<{ eyebrow: string; title: string; subtitle: string 
       return {
         eyebrow: 'Account',
         title: '用户',
-        subtitle: '登录知枝账号以启用官方 API，或注册新账号（首次登录即自动注册）',
+        subtitle: '登录知枝账号以启用官方 API，管理套餐、兑换码与用量',
       }
     default:
       return {

@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: state.push }),
+  useRoute: () => ({ name: 'settings-models-official' }),
 }))
 
 vi.mock('../composables/useToast', () => ({

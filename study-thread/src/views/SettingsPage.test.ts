@@ -5,7 +5,6 @@ import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import * as authModule from '../stores/auth'
 import SettingsPage from './SettingsPage.vue'
 import GeneralSettingsPanel from '../components/settings/GeneralSettingsPanel.vue'
-import UserSettingsPanel from '../components/settings/UserSettingsPanel.vue'
 import ModelConfigPage from '../views/ModelConfigPage.vue'
 import OfficialModelPage from '../views/OfficialModelPage.vue'
 import CustomModelPage from '../views/CustomModelPage.vue'
@@ -37,6 +36,12 @@ const state = vi.hoisted(() => ({
   sendCode: vi.fn(),
   login: vi.fn(),
   logout: vi.fn(),
+  fetchPlans: vi.fn(),
+  fetchUsageSummary: vi.fn(),
+  redeemPlan: vi.fn(),
+  forgotPassword: vi.fn(),
+  resetPassword: vi.fn(),
+  deleteAccount: vi.fn(),
 }))
 
 vi.mock('../composables/useToast', () => ({
@@ -45,6 +50,12 @@ vi.mock('../composables/useToast', () => ({
 
 vi.mock('../api/zhizhi-api', () => ({
   ZhizhiApiError: class ZhizhiApiError extends Error {},
+  fetchPlans: (...args: unknown[]) => state.fetchPlans(...args),
+  fetchUsageSummary: (...args: unknown[]) => state.fetchUsageSummary(...args),
+  redeemPlan: (...args: unknown[]) => state.redeemPlan(...args),
+  forgotPassword: (...args: unknown[]) => state.forgotPassword(...args),
+  resetPassword: (...args: unknown[]) => state.resetPassword(...args),
+  deleteAccount: (...args: unknown[]) => state.deleteAccount(...args),
 }))
 
 vi.mock('../stores/auth', async () => {
@@ -60,10 +71,10 @@ vi.mock('../stores/auth', async () => {
       state.sendCode()
       return 60
     },
-    login: async (identifier: string, code?: string) => {
-      await state.login(identifier, code)
+    login: async (username: string, password?: string, remember?: boolean) => {
+      await state.login(username, password, remember)
       status.value = 'authenticated'
-      user.value = { identifier, plan: { name: '标准' }, quota_tokens: 5000000 }
+      user.value = { username, identifier: 'a@b.com', plan: { name: '标准' }, quota_tokens: 5000000 }
     },
     logout: async () => {
       await state.logout()
@@ -77,6 +88,8 @@ vi.mock('../stores/auth', async () => {
       user.value = null
     },
     useAuthStore: () => store,
+    getLastUsername: () => '',
+    getRememberPreference: () => true,
   }
 })
 
@@ -144,7 +157,7 @@ function createSettingsRouter() {
           {
             path: 'user',
             name: 'settings-user',
-            component: UserSettingsPanel,
+            component: OfficialModelPage,
           },
         ],
       },
@@ -177,6 +190,12 @@ describe('SettingsPage 设置页（侧边栏常驻嵌套路由布局）', () => 
     state.sendCode.mockReset()
     state.login.mockReset()
     state.logout.mockReset()
+    state.fetchPlans.mockReset()
+    state.fetchUsageSummary.mockReset()
+    state.redeemPlan.mockReset()
+    state.forgotPassword.mockReset()
+    state.resetPassword.mockReset()
+    state.deleteAccount.mockReset()
   })
 
   it('渲染左侧导航栏（常规设置/模型配置/用户）并默认进入常规设置面板', async () => {
@@ -257,16 +276,25 @@ describe('SettingsPage 设置页（侧边栏常驻嵌套路由布局）', () => 
 
   it('用户面板登录成功后展示已登录态', async () => {
     state.login.mockResolvedValue(undefined)
+    state.fetchPlans.mockResolvedValue({ plans: [] })
+    state.fetchUsageSummary.mockResolvedValue({
+      days: 30,
+      quota_tokens: 5_000_000,
+      totals: { requests: 0, prompt_tokens: 0, completion_tokens: 0, cost_cents: 0 },
+      daily: [],
+      models: [],
+    })
     const wrapper = await mountSettings()
 
     await wrapper.findAll('.settings-nav__item')[2].trigger('click')
     await flushPromises()
 
-    await wrapper.find('#user-username').setValue('Alice2026')
-    await wrapper.find('#user-password').setValue('Passw0rd')
+    await wrapper.find('#account-username').setValue('Alice2026')
+    await wrapper.find('#account-password').setValue('Passw0rd')
     await wrapper.find('form').trigger('submit')
+    await flushPromises()
 
-    expect(state.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd')
+    expect(state.login).toHaveBeenCalledWith('Alice2026', 'Passw0rd', true)
     expect(wrapper.text()).toContain('Alice2026')
     expect(wrapper.text()).toContain('退出登录')
   })

@@ -1,6 +1,7 @@
 <template>
   <div class="official-model-page">
-    <div class="settings-page__header">
+    <!-- 「模型配置 → 官方 API」入口显示自有头部；「用户」栏目下由 SettingsPage 提供标题，避免双头部 -->
+    <div v-if="!isUserSection" class="settings-page__header">
       <button type="button" class="back-link" @click="goBack">
         <ArrowLeft :size="14" />
         返回模型配置
@@ -239,7 +240,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@lucide/vue'
 import { useToast } from '../composables/useToast'
 import { useAuthStore, getLastUsername, getRememberPreference } from '../stores/auth'
@@ -255,8 +256,12 @@ import {
 import type { OfficialPlan } from '../types'
 
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const authStore = useAuthStore()
+
+/** 「用户」栏目（settings-user）复用本页：隐藏自有头部，由 SettingsPage 提供标题 */
+const isUserSection = computed(() => route.name === 'settings-user')
 
 type AuthMode = 'login' | 'register' | 'reset'
 
