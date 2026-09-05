@@ -87,6 +87,27 @@ describe('branchFollowupStream', () => {
     expect(systemPrompt.endsWith('知识库内容')).toBe(true)
   })
 
+  it('开启引导模式时 systemPrompt 注入引导策略段', async () => {
+    for await (const _ of branchFollowupStream('追问', forkContext, [], [], {} as never, undefined, true)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs()
+    expect(systemPrompt).toContain('引导模式（当前会话已开启）')
+    expect(systemPrompt).toContain('诊断起点')
+    expect(systemPrompt).toContain('立即切换为直接、完整的讲解')
+  })
+
+  it('未开启引导模式时不注入引导策略段，且无残留占位符', async () => {
+    for await (const _ of branchFollowupStream('追问', forkContext, [], [], {} as never)) {
+      // 消费迭代器
+    }
+
+    const { systemPrompt } = lastChatArgs()
+    expect(systemPrompt).not.toContain('引导模式（当前会话已开启）')
+    expect(systemPrompt).not.toContain('{guide_mode}')
+  })
+
   it('chatWithTools 抛错时转换为 error chunk', async () => {
     chatWithTools.mockImplementationOnce(async function* () {
       throw new Error('provider down')

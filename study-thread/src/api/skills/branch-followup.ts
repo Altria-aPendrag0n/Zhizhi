@@ -10,6 +10,7 @@ import type { Note } from '../../types'
 import { parseSkill, buildPrompt } from '../../skills/loader'
 import { chatWithTools } from '../chat-loop'
 import { CLIENT_TOOLS, type ToolContext } from '../tools'
+import { GUIDE_PROMPT_SECTION } from '../../utils/chat-prompts'
 
 // SKILL.md 内容（构建时内联）
 import skillRaw from '../../skills/branch-followup/SKILL.md?raw'
@@ -61,6 +62,7 @@ function serializeNotes(notes: Note[]): string {
  * @param relatedNotes - 相关的笔记列表
  * @param provider - LLM 提供商
  * @param knowledgeContext - 可选的知识检索上下文（非空时拼接到 systemPrompt 之后）
+ * @param guideMode - 可选的引导模式开关（v0.3.1：开启时在 SKILL 模板注入引导策略段）
  * @param toolContext - 工具执行上下文（vault 路径），支持 AI 按需读取参考资料全文
  * @param signal - 可选的中止信号（停止按钮/切换会话时后台中止由 chat-runner 管理）
  * @returns 流式响应迭代器
@@ -72,6 +74,7 @@ export async function* branchFollowupStream(
   relatedNotes: Note[],
   provider: LLMProvider,
   knowledgeContext?: string,
+  guideMode?: boolean,
   toolContext?: ToolContext,
   signal?: AbortSignal,
 ): AsyncIterable<StreamChunk> {
@@ -80,6 +83,8 @@ export async function* branchFollowupStream(
     fork_context: serializeMessages(forkContext),
     user_question: question,
     related_notes: serializeNotes(relatedNotes),
+    // 引导模式：注入引导策略段；关闭时替换为空串（占位符必须显式解析，避免 DEV 残留报错）
+    guide_mode: guideMode ? GUIDE_PROMPT_SECTION : '',
   })
   if (knowledgeContext) {
     systemPrompt = `${systemPrompt}\n\n${knowledgeContext}`

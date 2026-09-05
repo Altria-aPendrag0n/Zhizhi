@@ -29,6 +29,21 @@
       />
     </div>
 
+    <div class="guide-bar">
+      <button
+        class="guide-bar__toggle"
+        :class="{ 'is-active': guideMode }"
+        :title="guideMode
+          ? '引导模式已开启：AI 先诊断起点、小步讲解、引导你产出（点击关闭）'
+          : '开启引导模式：AI 先了解你的基础，小步讲解并引导你思考，而不是直接给完整答案'"
+        @click="toggleGuideMode"
+      >
+        <GraduationCap :size="14" />
+        引导模式
+      </button>
+      <span v-if="guideMode" class="guide-bar__hint">多轮引导讲解，token 消耗更高；说「直接告诉我」可跳过引导</span>
+    </div>
+
     <Composer
       :is-streaming="isStreaming"
       :disabled="isStreaming"
@@ -71,6 +86,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, reactive, nextTick } from 'vue'
 import { marked } from 'marked'
 import { useRoute, useRouter } from 'vue-router'
+import { GraduationCap } from '@lucide/vue'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
 import { useSessionStore } from '../stores/session'
@@ -141,6 +157,13 @@ const forkContextRef = ref<HTMLElement | null>(null)
 const forkHighlight = ref<string>('')
 /** 划线文本在消息中的出现序号（frontmatter fork_highlight_occ），重复文本时按序号定位 */
 const forkHighlightOcc = ref(1)
+/** 引导模式（会话级）：加载分支时从 frontmatter 恢复，新分支取设置页全局默认（v0.3.1） */
+const guideMode = ref(settingsStore.guideModeDefault)
+
+/** 切换引导模式：状态随下次会话落盘写入 frontmatter */
+function toggleGuideMode() {
+  guideMode.value = !guideMode.value
+}
 
 /** 追加笔记引用（有活跃 job 时写入 job，否则写入本地加载列表） */
 function pushNoteRef(noteRef: NoteReference) {
@@ -240,12 +263,15 @@ async function loadContext() {
     const storedOcc = Number(meta.fork_highlight_occ)
     forkHighlightOcc.value = storedOcc > 1 ? storedOcc : 1
     forkContextFromFile = extractForkContext(body)
+    // 引导模式：frontmatter 显式记录时恢复，否则取设置页全局默认
+    guideMode.value = typeof meta.guide === 'boolean' ? meta.guide : settingsStore.guideModeDefault
     // 用带时间戳的消息解析器加载分支自身对话：重存会话时不丢失消息级时间戳（主界面统计依赖）
     savedMessages = parseSessionMessages(body)
   } catch {
     // 新分支：下方为干净的新对话界面，不显示主会话历史
     currentRaw = ''
     savedMessages = []
+    guideMode.value = settingsStore.guideModeDefault
   }
 
   const context = await loadBranchContext(parentFile, forkIndex.value)
@@ -301,6 +327,7 @@ function getCurrentSession(): Session {
     // 分叉点上下文随分支文件持久化，重新进入分支会话时前端识别渲染
     fork_context: forkContext.value || undefined,
     fork_highlight: forkHighlight.value || undefined,
+    guide: guideMode.value,
   }
 }
 
@@ -324,6 +351,8 @@ function getCurrentSessionFor(msgs: Message[]): Session {
     messages: msgs.map((message) => ({ ...message })),
     fork_context: forkContext.value || undefined,
     fork_highlight: forkHighlight.value || undefined,
+    // 引导模式开关随分支文件持久化（显式 true/false，与全局默认区分）
+    guide: guideMode.value,
   }
 }
 
@@ -407,6 +436,7 @@ async function handleSend(content: string) {
         [],
         provider,
         knowledgeContext,
+        guideMode.value,
         { vaultPath: vaultStore.vaultPath || '' },
         signal,
       )) {
@@ -648,6 +678,46 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   background: var(--surface);
+}
+
+/* 引导模式开关栏：会话级切换，位于对话区与输入框之间 */
+.guide-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px 0;
+}
+
+.guide-bar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.guide-bar__toggle:hover {
+  color: var(--brand-strong);
+  border-color: var(--brand);
+}
+
+.guide-bar__toggle.is-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-weight: 650;
+}
+
+.guide-bar__hint {
+  color: var(--ink-2);
+  font-size: 11px;
+  opacity: 0.85;
 }
 
 .fork-context {
