@@ -29,20 +29,17 @@
       />
     </div>
 
-    <div class="guide-bar">
-      <button
-        class="guide-bar__toggle"
-        :class="{ 'is-active': guideMode }"
-        :title="guideMode
-          ? '引导模式已开启：AI 先诊断起点、小步讲解、引导你产出（点击关闭）'
-          : '开启引导模式：AI 先了解你的基础，小步讲解并引导你思考，而不是直接给完整答案'"
-        @click="toggleGuideMode"
-      >
-        <GraduationCap :size="14" />
-        引导模式
-      </button>
-      <span v-if="guideMode" class="guide-bar__hint">多轮引导讲解，token 消耗更高；说「直接告诉我」可跳过引导</span>
-    </div>
+    <button
+      class="guide-chip"
+      :class="{ 'is-active': guideMode }"
+      :title="guideMode
+        ? '引导模式已开启：AI 先诊断起点、小步讲解、引导你产出（点击关闭）'
+        : '开启引导模式：AI 先了解你的基础，小步讲解并引导你思考，而不是直接给完整答案'"
+      @click="toggleGuideMode"
+    >
+      <GraduationCap :size="14" />
+      <span class="guide-chip__text">引导模式</span>
+    </button>
 
     <Composer
       :is-streaming="isStreaming"
@@ -680,19 +677,16 @@ onUnmounted(() => {
   background: var(--surface);
 }
 
-/* 引导模式开关栏：会话级切换，位于对话区与输入框之间 */
-.guide-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 16px 0;
-}
-
-.guide-bar__toggle {
+/* 引导模式开关：固定在输入框左侧空隙，与输入框垂直居中（Composer 为 fixed 定位，此处对齐其坐标） */
+.guide-chip {
+  position: fixed;
+  z-index: 2;
+  bottom: 32px;
+  left: calc(76px + 244px + 8px);
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 11px;
+  padding: 6px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface-2);
@@ -702,22 +696,32 @@ onUnmounted(() => {
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.guide-bar__toggle:hover {
+.guide-chip:hover {
   color: var(--brand-strong);
   border-color: var(--brand);
 }
 
-.guide-bar__toggle.is-active {
+.guide-chip.is-active {
   border-color: var(--brand);
   background: var(--brand-soft);
   color: var(--brand-strong);
   font-weight: 650;
 }
 
-.guide-bar__hint {
-  color: var(--ink-2);
-  font-size: 11px;
-  opacity: 0.85;
+.guide-chip__text {
+  white-space: nowrap;
+}
+
+/* 窄屏：会话栏与输入框之间的空隙变小，按钮收缩为纯图标 */
+@media (max-width: 1100px) {
+  .guide-chip {
+    left: calc(64px + 218px + 4px);
+    padding: 6px;
+  }
+
+  .guide-chip__text {
+    display: none;
+  }
 }
 
 .fork-context {
