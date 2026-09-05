@@ -107,14 +107,6 @@ const threadId = computed(() => (typeof route.query.thread === 'string' ? route.
 const currentJobThreadId = ref('')
 const activeThreadId = computed(() => currentJobThreadId.value || threadId.value)
 
-// 后台化恢复：组件卸载会丢失 currentJobThreadId 桥接（组件局部 ref），
-// 但 runner 里的 job（含正在后台进行的回答）仍在。重新进入空白 /chat 时
-// 找回最近的 new_* job，保证「切走再切回」能看到后台回答（v0.3.1 修复）。
-if (!threadId.value) {
-  const recovered = chatRunner.findLatestAutoJob()
-  if (recovered) currentJobThreadId.value = recovered.threadId
-}
-
 /**
  * 消息/流式状态来源：
  * - 有活跃 job（chat-runner，回答进行中或已完成保留）→ 从 job 读取（后台回答不受组件生命周期影响）；
@@ -129,9 +121,10 @@ const loadedSessionPlanId = ref<string | undefined>(undefined)
 /** 引导模式（会话级）：加载会话时从 frontmatter 恢复，新会话取设置页全局默认（v0.3.1） */
 const guideMode = ref(settingsStore.guideModeDefault)
 
-/** 切换引导模式：状态随下次会话落盘写入 frontmatter */
+/** 切换引导模式：立即写回会话文件 frontmatter（不等下一条消息，切走再切回保持不变） */
 function toggleGuideMode() {
   guideMode.value = !guideMode.value
+  void persistGuideState()
 }
 const messages = computed(() => activeJob.value?.messages ?? loadedMessages.value)
 const isStreaming = computed(() => activeJob.value?.isStreaming ?? false)
@@ -163,10 +156,14 @@ function pushNoteRef(noteRef: NoteReference) {
 /**
  * 从磁盘加载会话消息（仓库即真相：会话以 md 保存在 vault，无本地缓存）。
  * 会话文件缺失（新会话尚未落盘）时为空列表。
- * 有活跃 job（后台回答进行中/已完成）时跳过磁盘加载，由 job 提供消息。
+ * 有活跃 job（后台回答进行中/已完成）时跳过磁盘加载，由 job 提供消息；
+ * 但引导开关以磁盘 frontmatter 为准（切换即持久化），仍需恢复。
  */
 async function loadThreadMessages(threadId: string) {
-  if (chatRunner.hasJob(threadId)) return
+  if (chatRunner.hasJob(threadId)) {
+    await restoreGuideFromDisk(threadId)
+    return
+  }
   if (!vaultStore.vaultPath) {
     loadedMessages.value = []
     loadedNoteRefs.value = []
@@ -203,6 +200,51 @@ async function refreshNoteRefs(threadId: string) {
     loadedNoteRefs.value = await filterExistingNoteRefs(extractNoteRefsFromSession(await readFile(sessionPath)))
   } catch {
     loadedNoteRefs.value = []
+  }
+}
+
+/**
+ * 引导开关即时持久化：切换后立即写回会话文件 frontmatter。
+ * 会话文件尚不存在（首条消息未发送）时跳过——届时随首条消息一并落盘。
+ */
+async function persistGuideState() {
+  if (!vaultStore.vaultPath || !threadId.value) return
+  try {
+    const sessionPath = await resolveSessionFile(vaultStore.vaultPath, threadId.value)
+      ?? getSessionFilePath(vaultStore.vaultPath, threadId.value)
+    const raw = await readFile(sessionPath)
+    const session = parseSessionFile(raw, sessionPath)
+    session.guide = guideMode.value
+    const refs = await filterExistingNoteRefs(extractNoteRefsFromSession(raw))
+    await vaultStore.saveCurrentSession(session, false, refs)
+  } catch {
+    // 会话文件尚未创建：状态保留在内存，随首条消息落盘
+  }
+}
+
+/** 仅从磁盘恢复引导开关（存在 job 时消息以 job 为准，不读磁盘消息） */
+async function restoreGuideFromDisk(threadId: string) {
+  if (!vaultStore.vaultPath) return
+  try {
+    const sessionPath = await resolveSessionFile(vaultStore.vaultPath, threadId)
+      ?? getSessionFilePath(vaultStore.vaultPath, threadId)
+    const session = parseSessionFile(await readFile(sessionPath), sessionPath)
+    guideMode.value = session.guide ?? settingsStore.guideModeDefault
+  } catch {
+    guideMode.value = settingsStore.guideModeDefault
+  }
+}
+
+// 后台化恢复：组件卸载会丢失 currentJobThreadId 桥接（组件局部 ref），
+// 但 runner 里的 job（含正在后台进行的回答）仍在。重新进入空白 /chat 时
+// 找回最近的 new_* job，保证「切走再切回」能看到后台回答（v0.3.1 修复）。
+// 注意：须在 guideMode 声明之后执行（restoreGuideFromDisk 会写 guideMode）。
+if (!threadId.value) {
+  const recovered = chatRunner.findLatestAutoJob()
+  if (recovered) {
+    currentJobThreadId.value = recovered.threadId
+    // 引导开关：job 存在时 loadThreadMessages 不会执行，从磁盘恢复开关状态
+    void restoreGuideFromDisk(recovered.threadId)
   }
 }
 

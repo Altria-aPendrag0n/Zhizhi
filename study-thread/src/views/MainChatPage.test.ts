@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import MainChatPage from './MainChatPage.vue'
 import { useChatRunner } from '../stores/chat-runner'
+import { readFile } from '../utils/vault-fs'
 
 const { route, saveCurrentSession, chat, retrieveKnowledgeContext, routerReplace } = vi.hoisted(() => ({
   route: { name: 'chat', query: { thread: 'new_test' } },
@@ -44,11 +45,17 @@ vi.mock('../utils/session-linker', () => ({
   filterExistingNoteRefs: vi.fn(async () => []),
 }))
 vi.mock('../composables/useToast', () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn() }) }))
-vi.mock('../utils/session-serializer', () => ({
+vi.mock('../utils/session-serializer', async (importOriginal) => ({
+  // 保留真实的 parseSessionFile/resolveSessionFile（引导开关即时持久化与恢复依赖），
+  // 仅覆盖标题生成与路径生成
+  ...(await importOriginal<typeof import('../utils/session-serializer')>()),
   generateSessionTitle: vi.fn(() => '测试会话'),
-  getSessionFilePath: vi.fn(),
+  getSessionFilePath: vi.fn(() => '/vault/sessions/mock-session.md'),
 }))
-vi.mock('../utils/vault-fs', () => ({ readFile: vi.fn().mockRejectedValue(new Error('会话文件不存在')) }))
+vi.mock('../utils/vault-fs', () => ({
+  readFile: vi.fn().mockRejectedValue(new Error('会话文件不存在')),
+  listDir: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('../utils/knowledge-retrieval', () => ({ retrieveKnowledgeContext }))
 vi.mock('../stores/session', () => ({
   useSessionStore: () => ({ loadSessionsFromVault: vi.fn().mockResolvedValue(undefined) }),
@@ -232,5 +239,78 @@ describe('MainChatPage', () => {
     )
     expect(routerReplace).not.toHaveBeenCalled()
     route.name = 'chat'
+  })
+
+  it('点击引导模式立即写回会话 frontmatter（不等下一条消息）', async () => {
+    route.query.thread = 'new_test'
+    const sessionMd = [
+      '---',
+      'session_id: new_test',
+      'title: 测试会话',
+      'created: 2026-01-01T00:00:00Z',
+      '---',
+      '',
+      '## 用户',
+      '',
+      '你好',
+    ].join('\n')
+    vi.mocked(readFile).mockResolvedValue(sessionMd)
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    // 初始未开启
+    expect(wrapper.find('.guide-chip').classes()).not.toContain('is-active')
+    await wrapper.find('.guide-chip').trigger('click')
+    await flushPromises()
+
+    expect(saveCurrentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'new_test', guide: true }),
+      false,
+      expect.any(Array),
+    )
+    vi.mocked(readFile).mockRejectedValue(new Error('会话文件不存在'))
+  })
+
+  it('存在后台 job 时切回：引导开关仍从磁盘 frontmatter 恢复', async () => {
+    route.query.thread = 'new_test'
+    const runner = useChatRunner()
+    runner.startChat({
+      threadId: 'new_test',
+      messages: [
+        { role: 'user', content: 'job 中的问题', timestamp: '2026-01-01T00:00:00Z' },
+        { role: 'assistant', content: '' },
+      ],
+      noteRefs: [],
+      onFinalize: vi.fn(),
+      run: async () => {
+        await new Promise(() => {}) // 挂起模拟长回答
+      },
+    })
+    const sessionMd = [
+      '---',
+      'session_id: new_test',
+      'title: 测试会话',
+      'created: 2026-01-01T00:00:00Z',
+      'guide: true',
+      '---',
+      '',
+      '## 用户',
+      '',
+      '你好',
+    ].join('\n')
+    vi.mocked(readFile).mockResolvedValue(sessionMd)
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    // 开关从磁盘恢复为开启；消息仍以 job 为准（不读磁盘消息）
+    expect(wrapper.find('.guide-chip').classes()).toContain('is-active')
+    const chatView = wrapper.findComponent({ name: 'ChatView' })
+    expect(chatView.props('messages')).toEqual([
+      { role: 'user', content: 'job 中的问题', timestamp: '2026-01-01T00:00:00Z' },
+      { role: 'assistant', content: '' },
+    ])
+    vi.mocked(readFile).mockRejectedValue(new Error('会话文件不存在'))
   })
 })

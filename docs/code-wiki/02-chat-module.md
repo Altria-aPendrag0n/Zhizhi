@@ -183,7 +183,7 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 
 - **开关层级**：会话级（对话区与输入框之间的「引导模式」胶囊按钮，主/分支页均有）+ 设置页「引导模式默认开启」全局默认（`settings.guideModeDefault`）。
 - **提示词**：`buildSystemPrompt(guideMode)`（`src/utils/chat-prompts.ts`）——基础 `SYSTEM_PROMPT` + 引导策略段（`GUIDE_PROMPT_SECTION`）：诊断起点 → 小步讲解 → 检查点 → 让用户产出 → 逃生约定（用户明确要直接答案时立即切直讲）。分支会话经 SKILL.md 的 `{guide_mode}` 占位符注入同一策略段（见 09 号文档）。
-- **持久化**：`Session.guide` 写入会话 frontmatter（显式 true/false），加载会话/分支时恢复；未记录时回退全局默认。
+- **持久化**：`Session.guide` 写入会话 frontmatter（显式 true/false），加载会话/分支时恢复；未记录时回退全局默认。**开关即时写回**：点击切换按钮立刻序列化会话文件（不必等下一条消息），切走再切回保持不变；存在后台 job 时消息以 job 为准，但开关仍从磁盘 frontmatter 恢复（`restoreGuideFromDisk`）。
 - **与来源锚定共存**：引导模式下回答同样带 `[n]` 角标与来源列表，无需额外处理。
 
 ## 4. 与其他模块的协作

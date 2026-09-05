@@ -100,7 +100,7 @@ import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
 import { resolveMessageIndex } from '../utils/message-locator'
-import { generateSessionTitle, getSessionFilePath, resolveSessionFile } from '../utils/session-serializer'
+import { generateSessionTitle, getSessionFilePath, resolveSessionFile, parseSessionFile } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
 import { wrapHighlightInDOM, unwrapHighlight, isTableHighlight, wrapTableInDOM } from '../utils/highlight-dom'
@@ -157,9 +157,29 @@ const forkHighlightOcc = ref(1)
 /** 引导模式（会话级）：加载分支时从 frontmatter 恢复，新分支取设置页全局默认（v0.3.1） */
 const guideMode = ref(settingsStore.guideModeDefault)
 
-/** 切换引导模式：状态随下次会话落盘写入 frontmatter */
+/** 切换引导模式：立即写回分支文件 frontmatter（切走再切回保持不变） */
 function toggleGuideMode() {
   guideMode.value = !guideMode.value
+  void persistGuideState()
+}
+
+/**
+ * 引导开关即时持久化：切换后立即写回分支文件 frontmatter。
+ * 分支文件在创建时已落盘；读取失败（异常情况）时状态保留在内存，随下次保存写回。
+ */
+async function persistGuideState() {
+  if (!vaultStore.vaultPath) return
+  try {
+    const currentFile = await resolveSessionFile(vaultStore.vaultPath, branchId.value)
+      ?? getSessionFilePath(vaultStore.vaultPath, branchId.value, true)
+    const raw = await readFile(currentFile)
+    const session = parseSessionFile(raw, currentFile)
+    session.guide = guideMode.value
+    const refs = await filterExistingNoteRefs(extractNoteRefsFromSession(raw))
+    await vaultStore.saveCurrentSession(session, true, refs)
+  } catch {
+    // 分支文件尚未落盘：状态保留在内存，随下次保存写回
+  }
 }
 
 /** 追加笔记引用（有活跃 job 时写入 job，否则写入本地加载列表） */
