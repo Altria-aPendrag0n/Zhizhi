@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { OpenAICompatProvider } from './openai-compat'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { OpenAICompatProvider, webSearchUnsupportedChannels } from './openai-compat'
 import type { Message, ToolDefinition } from './llm-provider'
 
 /** 构造一个 SSE 响应体（data: 行序列） */
@@ -30,6 +30,11 @@ async function collect(provider: OpenAICompatProvider, messages: Message[], opti
 }
 
 const messages: Message[] = [{ role: 'user', content: '你好' }]
+
+beforeEach(() => {
+  // 模块级降级记忆按用例重置，保证用例间互不影响
+  webSearchUnsupportedChannels.clear()
+})
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -127,6 +132,41 @@ describe('OpenAICompatProvider', () => {
     expect(secondBody.tools).toBeUndefined()
     expect(chunks).toContain('text:降级回答')
     expect(chunks).toContain('stop:')
+  })
+
+  it('联网搜索降级时注入可见提示，且运行期内该通道不再尝试联网', async () => {
+    const fetchMock = vi.fn()
+      // 第一次：web_search 尝试失败（如官方通道上游为智谱等不支持该工具格式的服务商）
+      .mockResolvedValueOnce(new Response('tools unsupported', { status: 400 }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, sseBody([
+          JSON.stringify({ choices: [{ delta: { content: '降级回答' } }] }),
+          JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          '[DONE]',
+        ])),
+      )
+      // 第二次调用：应跳过联网尝试，直接一次成功
+      .mockResolvedValueOnce(
+        jsonResponse(200, sseBody([
+          JSON.stringify({ choices: [{ delta: { content: '第二次回答' } }] }),
+          JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          '[DONE]',
+        ])),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new OpenAICompatProvider('key', 'https://api.deepseek.com', 'deepseek-v4-flash')
+    const chunks = await collect(provider, messages, { enableWebSearch: true })
+
+    // 降级可见化：思考块提示「本次回答未联网」
+    expect(chunks.some((c) => c.startsWith('thinking:') && c.includes('联网搜索不可用'))).toBe(true)
+    expect(chunks).toContain('text:降级回答')
+    // 运行期记忆：同通道再次调用不再附带联网尝试
+    const chunks2 = await collect(provider, messages, { enableWebSearch: true })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(chunks2).toContain('text:第二次回答')
+    const thirdBody = JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)
+    expect(thirdBody.tools).toBeUndefined()
   })
 
   it('SSE 解析：web_search tool_calls 被忽略且 content 正常输出', async () => {

@@ -24,6 +24,15 @@ interface AttemptConfig {
   withClientTools: boolean
 }
 
+/**
+ * 已知不支持 web_search 工具的通道（`baseUrl|model`）。
+ *
+ * web_search 是 DeepSeek 私有工具格式，多数 OpenAI 兼容服务商（智谱/通义/OpenAI 等）
+ * 会返回 400/404。发生过一次降级后，本次应用运行期内该通道不再附带联网尝试，
+ * 避免每条消息都多一轮「失败→重发」的往返（重启后重置，给服务商变更留机会）。
+ */
+export const webSearchUnsupportedChannels = new Set<string>()
+
 /** 将内部消息转换为 OpenAI Chat Completions 格式 */
 function toApiMessages(
   messages: Message[],
@@ -122,7 +131,10 @@ export class OpenAICompatProvider implements LLMProvider {
     const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch = false, tools = [], disableThinking = false } = options || {}
 
     const apiMessages = toApiMessages(messages, systemPrompt)
-    const attempts = buildAttempts(enableWebSearch, tools)
+    // 服务商已发生过降级（不支持 web_search 工具）时跳过联网尝试，避免每条消息多一轮失败往返
+    const channelKey = `${this.baseUrl}|${model}`
+    const effectiveWebSearch = enableWebSearch && !webSearchUnsupportedChannels.has(channelKey)
+    const attempts = buildAttempts(effectiveWebSearch, tools)
     let lastError = ''
 
     for (const attempt of attempts) {
@@ -161,6 +173,15 @@ export class OpenAICompatProvider implements LLMProvider {
           if ((attempt.withWebSearch || attempt.withClientTools) && (response.status === 400 || response.status === 404)) {
             lastError = errorText
             console.warn(`[openai-compat] 工具请求不被支持（${response.status}），降级为更简单的请求重试`)
+            if (attempt.withWebSearch) {
+              // 降级可见化：web_search 是 DeepSeek 私有格式，多数服务商不支持——
+              // 注入思考块告知用户「本次回答未联网」，并记住该通道运行期内不再尝试
+              webSearchUnsupportedChannels.add(channelKey)
+              yield {
+                type: 'thinking',
+                content: '【联网搜索不可用】当前模型服务商不支持 web_search 工具，本次回答未联网。如需联网，请更换支持该能力的模型服务商（如 DeepSeek 官方 API）。',
+              }
+            }
             continue
           }
           // 常见失败状态友好化：额度耗尽 / 鉴权失败 / 限流（状态码保留在文案中便于排查）
