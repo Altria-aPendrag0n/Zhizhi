@@ -138,6 +138,12 @@ export async function executeClientTool(name, args, context): Promise<string>
   4. `formatRangeResult` 输出：`Showing lines X-Y of Z total lines (约 N 字).` + 内容 + 截断提示。
 - 借鉴 qwen-code 的 ReadFile 分页思路：模型需要更多内容时用 `offset` 继续读取。
 
+### 6.3 来源引用编号注入（v0.3.1）
+
+- `buildKnowledgeContext(hits)`（`utils/knowledge-retrieval.ts`）从返回 `string` 升级为 `KnowledgeContext { context, sources }`：来源条目按注入顺序编号（`### [1] [笔记] 标题`），`sources: CitationSource[]` 携带 `index/kind/path/title/snippet/sectionTitle/pageFrom/pageTo`。
+- 注入文本头部追加「引用要求」段：引用来源内容时在句末标注 `[n]`，未列出的来源不得标注或编造编号；前端 `applyCitationMarkers`（[02 号文档 3.8](./02-chat-module.md)）只渲染编号合法的角标——提示词约定 + 前端校验双保险，最坏表现为「该标没标」，不会「错误指向」。
+- 消费方：MainChatPage / BranchChatPage 取 `.context` 拼 systemPrompt、`.sources` 挂到 AI 消息 `citations`；`CitationSourceViewer` 用 `executeReadReference` 按页展示原文。
+
 ## 7. 协作链路
 
 ```

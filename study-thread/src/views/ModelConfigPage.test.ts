@@ -28,6 +28,8 @@ vi.mock('../stores/settings', () => ({
     set officialApiEnabled(value: boolean) {
       state.officialApiEnabled = value
     },
+    // 模型配置一键切换后即时持久化（officialApiEnabled 与登录态强一致），mock 需提供
+    saveSettings: vi.fn(),
   }),
 }))
 

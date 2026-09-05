@@ -1,6 +1,6 @@
 [package]
 name = "study-thread"
-version = "0.3.0"
+version = "0.3.1"
 description = "知枝 (Study Thread)——本地优先的 AI 伴读桌面应用：对话式学习、原子笔记、间隔复习与本地知识检索"
 authors = ["Asahiiiasd"]
 edition = "2021"

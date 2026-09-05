@@ -56,16 +56,17 @@ extractNote(highlightedText, sessionContext, provider, userTitle?): Promise<Extr
 ### 4.2 `branch-followup.ts` — 分支深度追问
 
 ```ts
-branchFollowupStream(question, forkContext, history, relatedNotes, provider, knowledgeContext?, toolContext?): AsyncIterable<StreamChunk>
+branchFollowupStream(question, forkContext, history, relatedNotes, provider, knowledgeContext?, guideMode?, toolContext?): AsyncIterable<StreamChunk>
 ```
 
 流程：
 1. `buildPrompt` 注入：`fork_context`（分叉点前消息，`serializeMessages` 序列化为 `## 用户/知枝` 文本）、`user_question`、`related_notes`（`serializeNotes`：标题/类型/标签/内容前 200 字）。
 2. 可选 `knowledgeContext`（RAG 检索结果）拼接到 systemPrompt 之后。
-3. `messages = [...history, {role:'user', content:question}]`。
-4. 走 `chatWithTools`（含 `CLIENT_TOOLS`，支持模型按需读取参考资料全文），temperature 0.7，maxTokens 4096；异常包装为 `error` chunk。
+3. 可选 `guideMode`（v0.3.1）：开启时把 `GUIDE_PROMPT_SECTION`（`utils/chat-prompts.ts`，与主会话共用）注入 SKILL 模板的 `{guide_mode}` 占位符；关闭时替换为空串——占位符必须显式解析，避免 loader 的 DEV 残留校验报错。
+4. `messages = [...history, {role:'user', content:question}]`。
+5. 走 `chatWithTools`（含 `CLIENT_TOOLS`，支持模型按需读取参考资料全文），temperature 0.7，maxTokens 4096；异常包装为 `error` chunk。
 
-**SKILL.md 要点**（version 1.0.0）：深度追问伴读角色，比主对话更深入、不重复基础概念、优先引用已有笔记；输出固定结构 `## 回顾` → `## 深入解答` → `## 延伸思考`（1-2 个问题）。
+**SKILL.md 要点**（version 1.1.0）：深度追问伴读角色，比主对话更深入、不重复基础概念、优先引用已有笔记；输出固定结构 `## 回顾` → `## 深入解答` → `## 延伸思考`（1-2 个问题）；末尾 `{guide_mode}` 占位符承载引导策略段（v0.3.1，见 [02 号文档 3.9](./02-chat-module.md)）。
 
 ### 4.3 `update-learner.ts` — 学习者画像更新
 

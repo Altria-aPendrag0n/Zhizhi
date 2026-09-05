@@ -167,6 +167,24 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 |------|------|
 | `BranchBreadcrumb.vue` | 分支页面包屑；props `breadcrumbs: BreadcrumbItem[]`；emits `navigate(target)`；含"← 返回主对话" |
 
+### 3.8 来源锚定（引用回溯，v0.3.1）
+
+借鉴 NotebookLM：回答中引用检索来源处带可点击角标，消息末尾附来源列表。
+
+- **注入侧**（[10 Embedding] 的 `knowledge-retrieval.ts`）：`buildKnowledgeContext` 为来源条目编号（`### [1] [笔记] 标题`），返回 `{ context, sources }`（`KnowledgeContext`）；注入文本含「引用要求」段（引用来源内容时标注 `[n]`，不得编造编号）。`CitationSource` 类型定义在 `types/index.ts`。
+- **持久化**：AI 消息的 `citations` 以 `<!-- citations -->` 区块（JSON 单行）随会话落盘（session-serializer，见 11 号文档）；JSON 损坏/旧文件无区块时解析容错。
+- **渲染**：`ChatMessage.vue` 渲染后处理阶段（Mermaid 与 `applyMarkLinks` 之后）调用 `applyCitationMarkers`（`src/utils/citation-dom.ts`）——TreeWalker 遍历文本节点，把合法 `[n]`（编号 ∈ 本消息 sources，编造/越界保留原样）替换为 `sup.zhizhi-citation`，跳过 `pre/code/a/.zhizhi-mermaid` 内部；幂等。
+- **组件**：`CitationList.vue`（消息末尾来源列表，编号 + 图标 + 标题 + 页码/章节）、`CitationPopover.vue`（点击角标/条目的浮层：类型徽章、命中片段、位置、「打开原文」）、`CitationSourceViewer.vue`（参考资料来源的按页原文查看浮层，复用 `read_reference` 管线：pdf 分块按 `pageFrom/pageTo` 读取，md 读全文）。
+- **跳转**：笔记来源 → 复用 `navigate-link({kind:'note'})` 链路跳笔记详情；参考资料来源 → 原文查看浮层。
+- **覆盖**：主会话（MainChatPage 把 `knowledge.sources` 挂到 `aiMessage.citations`）与分支会话（BranchChatPage 同构接入）。
+
+### 3.9 引导模式（Khanmigo 式伴读，v0.3.1）
+
+- **开关层级**：会话级（对话区与输入框之间的「引导模式」胶囊按钮，主/分支页均有）+ 设置页「引导模式默认开启」全局默认（`settings.guideModeDefault`）。
+- **提示词**：`buildSystemPrompt(guideMode)`（`src/utils/chat-prompts.ts`）——基础 `SYSTEM_PROMPT` + 引导策略段（`GUIDE_PROMPT_SECTION`）：诊断起点 → 小步讲解 → 检查点 → 让用户产出 → 逃生约定（用户明确要直接答案时立即切直讲）。分支会话经 SKILL.md 的 `{guide_mode}` 占位符注入同一策略段（见 09 号文档）。
+- **持久化**：`Session.guide` 写入会话 frontmatter（显式 true/false），加载会话/分支时恢复；未记录时回退全局默认。
+- **与来源锚定共存**：引导模式下回答同样带 `[n]` 角标与来源列表，无需额外处理。
+
 ## 4. 与其他模块的协作
 
 ```
@@ -181,8 +199,8 @@ MainChatPage / BranchChatPage
 
 ## 5. 相关测试
 
-- `src/components/chat/ChatMessage.test.ts`、`ThinkingBlock.test.ts`
-- `src/utils/mermaid-render.test.ts`
+- `src/components/chat/ChatMessage.test.ts`、`ThinkingBlock.test.ts`、`CitationList.test.ts`
+- `src/utils/mermaid-render.test.ts`、`src/utils/citation-dom.test.ts`、`src/utils/chat-prompts.test.ts`
 - `src/views/MainChatPage.test.ts`
 - `src/stores/chat-runner.test.ts`（全局后台回答运行器）
 - `src/api/chat-loop.test.ts`、`src/api/skills/branch-followup.test.ts`
