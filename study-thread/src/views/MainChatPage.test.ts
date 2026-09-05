@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import MainChatPage from './MainChatPage.vue'
+import { useChatRunner } from '../stores/chat-runner'
 
 const { route, saveCurrentSession, chat, retrieveKnowledgeContext, routerReplace } = vi.hoisted(() => ({
-  route: { query: { thread: 'new_test' } },
+  route: { name: 'chat', query: { thread: 'new_test' } },
   saveCurrentSession: vi.fn().mockResolvedValue('session-path'),
   chat: vi.fn(),
   retrieveKnowledgeContext: vi.fn(),
@@ -176,5 +177,60 @@ describe('MainChatPage', () => {
       path: '/chat',
       query: { thread: expect.stringMatching(/^new_\d+$/) },
     })
+  })
+
+  it('重新进入空白聊天页时找回后台回答 job（切走再切回不丢失）', async () => {
+    route.query.thread = ''
+    // 真实 chat-runner：模拟一个仍在后台流式进行的 new_* job
+    const runner = useChatRunner()
+    runner.startChat({
+      threadId: 'new_999',
+      messages: [
+        { role: 'user', content: '后台进行中的问题', timestamp: '2026-01-01T00:00:00Z' },
+        { role: 'assistant', content: '' },
+      ],
+      noteRefs: [],
+      onFinalize: vi.fn(),
+      run: async () => {
+        await new Promise(() => {}) // 挂起模拟长回答
+      },
+    })
+
+    const wrapper = mount(MainChatPage, {
+      global: {
+        stubs: {
+          ChatView: { name: 'ChatView', props: ['messages', 'isStreaming', 'streamingText', 'streamingThinking'], template: '<div />' },
+          Composer: { name: 'Composer', template: '<div />' },
+        },
+      },
+    })
+    await flushPromises()
+
+    const chatView = wrapper.findComponent({ name: 'ChatView' })
+    expect(chatView.props('messages')).toEqual([
+      { role: 'user', content: '后台进行中的问题', timestamp: '2026-01-01T00:00:00Z' },
+      { role: 'assistant', content: '' },
+    ])
+    expect(chatView.props('isStreaming')).toBe(true)
+  })
+
+  it('回答完成时用户已离开聊天页：只落盘不劫持导航', async () => {
+    route.query.thread = ''
+    route.name = 'home' // 用户已切到其他页面
+    chat.mockReturnValue((async function* () {
+      yield { type: 'text' as const, content: '后台完成的回答' }
+      yield { type: 'stop' as const }
+    })())
+
+    await sendMessage(createWrapper())
+
+    // 落盘照常，但不把用户拽回聊天页
+    expect(saveCurrentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.stringMatching(/^new_\d+$/) }),
+      false,
+      expect.any(Array),
+    )
+    expect(routerReplace).not.toHaveBeenCalled()
+    route.name = 'chat'
   })
 })

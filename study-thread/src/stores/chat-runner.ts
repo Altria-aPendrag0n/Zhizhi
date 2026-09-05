@@ -66,6 +66,21 @@ export const useChatRunner = defineStore('chat-runner', () => {
     return jobs.has(threadId)
   }
 
+  /**
+   * 找回最近的自动新建会话 job（id 以 new_ 开头，Map 迭代序 = 创建序）。
+   *
+   * 空白聊天页发起提问时 job 挂在 new_* 临时 id 下，切走页面组件卸载后
+   * 「threadId → job」的桥接丢失；重新进入聊天页时用它恢复桥接，
+   * 保证后台回答切走再切回仍可见（v0.3.1 后台化修复）。
+   */
+  function findLatestAutoJob(): ChatJob | null {
+    let latest: ChatJobInternal | null = null
+    for (const [key, job] of jobs) {
+      if (key.startsWith('new_')) latest = job
+    }
+    return latest
+  }
+
   /** 中止会话的回答（已流式的内容保留并落盘） */
   function abort(threadId: string): void {
     jobs.get(threadId)?.controller?.abort()
@@ -176,5 +191,5 @@ export const useChatRunner = defineStore('chat-runner', () => {
     }
   }
 
-  return { jobs, getJob, hasJob, abort, cleanupIdleJob, startChat }
+  return { jobs, getJob, hasJob, findLatestAutoJob, abort, cleanupIdleJob, startChat }
 })

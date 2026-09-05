@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useChatRunner } from './chat-runner'
 import type { Message } from '../types'
@@ -238,5 +238,76 @@ describe('useChatRunner', () => {
     await vi.waitFor(() => {
       expect(firstRunAborted).toBe(true)
     })
+  })
+
+  it('findLatestAutoJob：无 new_* job 时返回 null（普通会话 job 不算）', async () => {
+    const runner = useChatRunner()
+    expect(runner.findLatestAutoJob()).toBeNull()
+
+    runner.startChat({
+      threadId: 'sess-1',
+      messages,
+      noteRefs: [],
+      onFinalize: vi.fn().mockResolvedValue(undefined),
+      run: streamWith([{ type: 'stop', content: '' }]),
+    })
+    await vi.waitFor(() => {
+      expect(runner.getJob('sess-1')?.isStreaming).toBe(false)
+    })
+    expect(runner.findLatestAutoJob()).toBeNull()
+  })
+
+  it('findLatestAutoJob：返回最近创建的 new_* job（后台化切回恢复用）', async () => {
+    const runner = useChatRunner()
+    let release1!: () => void
+    const gate1 = new Promise<void>((resolve) => { release1 = resolve })
+    let release2!: () => void
+    const gate2 = new Promise<void>((resolve) => { release2 = resolve })
+
+    runner.startChat({
+      threadId: 'new_1',
+      messages,
+      noteRefs: [],
+      onFinalize: vi.fn(),
+      run: async (_signal, emit) => {
+        emit({ type: 'text', content: '第一问的回答' })
+        await gate1
+        emit({ type: 'stop', content: '' })
+      },
+    })
+    await vi.waitFor(() => {
+      expect(runner.getJob('new_1')?.isStreaming).toBe(true)
+    })
+
+    // 中间穿插一个普通会话 job（会正常结束），不应影响 new_* 的判定
+    runner.startChat({
+      threadId: 'sess-9',
+      messages,
+      noteRefs: [],
+      onFinalize: vi.fn().mockResolvedValue(undefined),
+      run: streamWith([{ type: 'stop', content: '' }]),
+    })
+    await vi.waitFor(() => {
+      expect(runner.getJob('sess-9')?.isStreaming).toBe(false)
+    })
+
+    runner.startChat({
+      threadId: 'new_2',
+      messages,
+      noteRefs: [],
+      onFinalize: vi.fn(),
+      run: async (_signal, emit) => {
+        emit({ type: 'text', content: '第二问的回答' })
+        await gate2
+        emit({ type: 'stop', content: '' })
+      },
+    })
+    await vi.waitFor(() => {
+      expect(runner.getJob('new_2')?.isStreaming).toBe(true)
+    })
+
+    expect(runner.findLatestAutoJob()?.threadId).toBe('new_2')
+    release1()
+    release2()
   })
 })

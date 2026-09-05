@@ -107,6 +107,14 @@ const threadId = computed(() => (typeof route.query.thread === 'string' ? route.
 const currentJobThreadId = ref('')
 const activeThreadId = computed(() => currentJobThreadId.value || threadId.value)
 
+// 后台化恢复：组件卸载会丢失 currentJobThreadId 桥接（组件局部 ref），
+// 但 runner 里的 job（含正在后台进行的回答）仍在。重新进入空白 /chat 时
+// 找回最近的 new_* job，保证「切走再切回」能看到后台回答（v0.3.1 修复）。
+if (!threadId.value) {
+  const recovered = chatRunner.findLatestAutoJob()
+  if (recovered) currentJobThreadId.value = recovered.threadId
+}
+
 /**
  * 消息/流式状态来源：
  * - 有活跃 job（chat-runner，回答进行中或已完成保留）→ 从 job 读取（后台回答不受组件生命周期影响）；
@@ -282,9 +290,10 @@ async function handleSend(content: string) {
       await saveCurrentSession(threadId, finalMessages, finalRefs)
       // 回答完成后触发学习者画像更新建议（每会话一次，P3）
       void maybeTriggerLearnerUpdate(threadId, finalMessages, finalRefs)
-      // 自动新建的会话：回答结束后跳转到该会话路由（会话 id 进入 URL，后续追问复用）；
-      // 若用户中途已切换到其他会话/页面，则不再强制跳转
-      if (isAutoNewThread && !route.query.thread) {
+      // 自动新建的会话：回答结束后跳转到该会话路由（会话 id 进入 URL，后续追问复用）。
+      // 仅当用户仍停留在聊天页时才跳：若已切到其他页面/会话，只落盘不劫持导航（v0.3.1 修复）；
+      // 用户切回空白 /chat 时由 findLatestAutoJob 恢复桥接看到该会话。
+      if (isAutoNewThread && route.name === 'chat' && !route.query.thread) {
         await router.replace({ path: '/chat', query: { thread: threadId } })
       }
     },

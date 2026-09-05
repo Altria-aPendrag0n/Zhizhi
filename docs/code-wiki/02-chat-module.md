@@ -95,9 +95,10 @@ fork_highlight: "划线文本（DOM 选择，JSON 字符串）"
 - **`startChat({ threadId, messages, noteRefs, onFinalize, run })`**：按会话/分支 id 注册一个后台 job。`messages` 初始含空 assistant 占位；`run(signal, emit)` 由调用方提供各自的流来源（主会话 `chatWithTools` / 分支 `branchFollowupStream`），chunk 经 `emit` 统一更新 job 状态（`streamingText` / `streamingThinking` / `toolStatus` / `error`）。
 - **job 生命周期**：回答完成/中止/出错后统一 `finalize`——填充占位消息（出错则移除占位）、`onFinalize` 回调（落盘会话文件 + 学习者画像 + 新会话路由跳转），**job 保留在 map 中**（组件可继续读取内容与错误）；`cleanupIdleJob(threadId)` 在组件卸载时清理**已完成**的 job（进行中的 job 保留，回答继续后台跑完）。
 - **`getJob(threadId)` / `hasJob(threadId)` / `abort(threadId)`**：组件读取响应式 job 状态（`messages`/`isStreaming`/`streamingText`/`error` 等）；中止保留已流式内容并落盘。
+- **`findLatestAutoJob()`（v0.3.1 后台化修复）**：空白 `/chat` 发起提问时 job 挂在 `new_*` 临时 id 下，组件卸载（`router-view :key` 重挂载）会丢失 `currentJobThreadId` 桥接——切回空白聊天页时 `activeThreadId` 为空、看不到后台回答。该函数按 Map 迭代序返回最近的 `new_*` job，MainChatPage 挂载时（无 thread query）调用它恢复桥接。配套修复：自动新建会话 finalize 的 `router.replace` 加 `route.name === 'chat'` 守卫——用户已切到其他页面时只落盘、不再劫持导航。
 - **组件侧**：消息/流式状态改为 `activeJob?.xxx ?? 磁盘加载` 的 computed；`pushNoteRef` 在回答期间把笔记/分支引用写入 job（最终随 onFinalize 一起落盘）。`loadThreadMessages` 对存在 job 的会话跳过磁盘加载（回答未落盘，job 才是权威）。
 - **多会话并发**：不同 threadId 的 job 相互独立，用户可在会话 A 回答时切到会话 B 继续提问（后台可同时跑多个回答）。
-- 测试：`src/stores/chat-runner.test.ts`（流式累积/进行中可见/abort 保留/错误/cleanup/重复 startChat 中止旧 job）。
+- 测试：`src/stores/chat-runner.test.ts`（流式累积/进行中可见/abort 保留/错误/cleanup/重复 startChat 中止旧 job/findLatestAutoJob）。
 
 ## 3. 组件层（`src/components/chat/`）
 
