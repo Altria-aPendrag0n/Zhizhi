@@ -176,6 +176,44 @@ describe('OpenAICompatProvider', () => {
     expect(chunks.some((c) => c.startsWith('error:') && c.includes('401'))).toBe(true)
   })
 
+  it('402 额度耗尽返回友好指引而非原始 JSON', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('{"error":{"message":"Quota exhausted, please top up","type":"insufficient_quota","code":"quota_exhausted"}}', { status: 402 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new OpenAICompatProvider('key', 'https://api.zhizhi.app', 'glm-4.7-flash')
+    const chunks = await collect(provider, messages)
+
+    const errorChunk = chunks.find((c) => c.startsWith('error:'))
+    expect(errorChunk).toBeDefined()
+    expect(errorChunk).toContain('额度已用完')
+    expect(errorChunk).toContain('设置 → 账户')
+    expect(errorChunk!.includes('quota_exhausted')).toBe(false)
+  })
+
+  it('响应体含 quota_exhausted 关键词（任意状态码）同样按额度耗尽处理', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('{"error":{"code":"quota_exhausted"}}', { status: 403 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new OpenAICompatProvider('key', 'https://api.zhizhi.app', 'glm-4.7-flash')
+    const chunks = await collect(provider, messages)
+
+    expect(chunks.some((c) => c.startsWith('error:') && c.includes('额度已用完'))).toBe(true)
+  })
+
+  it('429 限流返回友好提示', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('rate limited', { status: 429 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = new OpenAICompatProvider('key', 'https://api.deepseek.com', 'deepseek-v4-flash')
+    const chunks = await collect(provider, messages)
+
+    expect(chunks.some((c) => c.startsWith('error:') && c.includes('请求过于频繁'))).toBe(true)
+  })
+
   it('传 tools 时请求体附带 function 工具', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(200, sseBody([

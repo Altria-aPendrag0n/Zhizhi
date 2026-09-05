@@ -163,6 +163,28 @@ export class OpenAICompatProvider implements LLMProvider {
             console.warn(`[openai-compat] 工具请求不被支持（${response.status}），降级为更简单的请求重试`)
             continue
           }
+          // 常见失败状态友好化：额度耗尽 / 鉴权失败 / 限流（状态码保留在文案中便于排查）
+          if (response.status === 402 || /insufficient_quota|quota_exhausted/i.test(errorText)) {
+            yield {
+              type: 'error',
+              content: '额度已用完（402 insufficient_quota）：当前模型通道的账户余额/配额不足。官方通道用户请前往「设置 → 账户」兑换或充值套餐；自定义通道请前往对应服务商充值，或一键切换到其他可用通道。',
+            }
+            return
+          }
+          if (response.status === 401) {
+            yield {
+              type: 'error',
+              content: '鉴权失败（401）：API Key 无效或已过期。请检查「设置 → 模型配置」中的 Key；官方通道用户可尝试退出后重新登录。',
+            }
+            return
+          }
+          if (response.status === 429) {
+            yield {
+              type: 'error',
+              content: '请求过于频繁（429）：已触发服务商限流，请稍候重试。',
+            }
+            return
+          }
           yield { type: 'error', content: `API 错误 (${response.status}): ${errorText}` }
           return
         }
