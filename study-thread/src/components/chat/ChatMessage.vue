@@ -18,11 +18,27 @@
         <p class="chat-message__label">知枝 · 学习伴读</p>
         <ThinkingBlock v-if="message.thinking" :text="message.thinking" />
         <div ref="bodyRef" class="chat-message__body" data-highlightable="true" v-html="renderedContent" @click="handleBodyClick" />
+        <CitationList
+          :sources="message.citations ?? []"
+          @open="handleCitationListOpen"
+        />
         <div v-if="noteCount > 0" class="chat-message__source">
           <span class="chat-message__source-dot"></span>
           本次回答已生成 {{ noteCount }} 张原子笔记
         </div>
       </div>
+      <CitationPopover
+        v-if="activeCitation"
+        :source="activeCitation"
+        :position="popoverPosition"
+        @close="activeCitation = null"
+        @open-source="handleCitationOpen"
+      />
+      <CitationSourceViewer
+        v-if="viewingSource"
+        :source="viewingSource"
+        @close="viewingSource = null"
+      />
     </template>
 
     <!-- System 消息 -->
@@ -37,12 +53,16 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
-import type { Message } from '../../types'
+import type { Message, CitationSource } from '../../types'
 import type { NoteReference } from '../../utils/session-linker'
 import { wrapHighlightInDOM, unwrapHighlight, isTableHighlight, wrapTableInDOM } from '../../utils/highlight-dom'
 import { preprocessMarkdownForRendering } from '../../utils/markdown-preprocess'
 import { renderMermaidBlocks } from '../../utils/mermaid-render'
+import { applyCitationMarkers } from '../../utils/citation-dom'
 import ThinkingBlock from './ThinkingBlock.vue'
+import CitationList from './CitationList.vue'
+import CitationPopover from './CitationPopover.vue'
+import CitationSourceViewer from './CitationSourceViewer.vue'
 
 const props = defineProps<{
   message: Message
@@ -101,14 +121,16 @@ function applyMarkLinks() {
   }
 }
 
-// v-html 更新后（nextTick）先渲染 mermaid 代码块，再在 DOM 上应用划线标记。
+// v-html 更新后（nextTick）先渲染 mermaid 代码块，再在 DOM 上应用划线标记与引用角标。
 // onMounted 兜底保证首次挂载后一定执行（此时 bodyRef 与 v-html 内容均已就绪）；
-// watch 处理内容或划线引用后续变化。applyMarkLinks 内部对 bodyRef 空值做了守卫，幂等。
+// watch 处理内容或划线引用后续变化。applyMarkLinks / applyCitationMarkers 内部
+// 对 bodyRef 空值做了守卫，幂等。
 async function applyPostRenderEffects() {
   const body = bodyRef.value
   if (!body) return
   await renderMermaidBlocks(body)
   applyMarkLinks()
+  applyCitationMarkers(body, props.message.citations ?? [])
 }
 
 function scheduleApplyMarkLinks() {
@@ -117,12 +139,56 @@ function scheduleApplyMarkLinks() {
 
 onMounted(scheduleApplyMarkLinks)
 watch(
-  [renderedContent, () => props.marks],
+  [renderedContent, () => props.marks, () => props.message.citations],
   scheduleApplyMarkLinks,
   { immediate: true },
 )
 
+// ---- 来源锚定：角标点击 → 浮层预览 → 打开原文 ----
+const activeCitation = ref<CitationSource | null>(null)
+const popoverPosition = ref({ x: 0, y: 0 })
+const viewingSource = ref<CitationSource | null>(null)
+
+function openCitationPopover(source: CitationSource, x: number, y: number) {
+  // 边界收敛：浮层宽约 320px、高约 200px，避免溢出视口
+  popoverPosition.value = {
+    x: Math.max(8, Math.min(x, window.innerWidth - 336)),
+    y: Math.max(8, Math.min(y + 10, window.innerHeight - 210)),
+  }
+  activeCitation.value = source
+}
+
+function handleCitationListOpen(source: CitationSource, event: MouseEvent) {
+  openCitationPopover(source, event.clientX, event.clientY)
+}
+
+/** 正文角标点击：命中返回 true（事件已消费），未命中走原有划线链接逻辑 */
+function handleCitationClick(event: MouseEvent): boolean {
+  const sup = (event.target as Element).closest?.<HTMLElement>('sup.zhizhi-citation')
+  if (!sup) return false
+  const index = Number(sup.dataset.citationIndex)
+  const source = (props.message.citations ?? []).find((s) => s.index === index)
+  if (!source) return false
+  openCitationPopover(source, event.clientX, event.clientY)
+  return true
+}
+
+function handleCitationOpen(source: CitationSource) {
+  activeCitation.value = null
+  if (source.kind === 'note') {
+    // 笔记来源：复用划线链接的导航链路，跳转笔记详情
+    emit('navigate-link', { kind: 'note', id: source.path })
+  } else {
+    // 参考资料来源：打开按页原文查看浮层
+    viewingSource.value = source
+  }
+}
+
 function handleBodyClick(event: MouseEvent) {
+  if (handleCitationClick(event)) {
+    event.preventDefault()
+    return
+  }
   const anchor = (event.target as Element).closest?.<HTMLAnchorElement>('a.zhizhi-mark')
   if (!anchor) return
   event.preventDefault()
@@ -372,6 +438,21 @@ function handleBodyClick(event: MouseEvent) {
 
 .chat-message__body :deep(a.zhizhi-mark:hover) {
   color: var(--brand);
+}
+
+/* 来源引用角标：可点击的 [n] 上标，点击弹出来源浮层 */
+.chat-message__body :deep(sup.zhizhi-citation) {
+  padding: 0 3px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-message__body :deep(sup.zhizhi-citation:hover) {
+  color: var(--brand-strong);
+  text-decoration: underline;
 }
 
 .chat-message__body :deep(a:hover) {

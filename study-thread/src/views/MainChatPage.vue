@@ -251,7 +251,12 @@ async function handleSend(content: string) {
   // 检索知识库内容注入系统提示（失败不影响聊天）
   let knowledgeContext = ''
   try {
-    knowledgeContext = (await retrieveKnowledgeContext(content)).context
+    const knowledge = await retrieveKnowledgeContext(content)
+    knowledgeContext = knowledge.context
+    // 来源锚定：来源映射挂到本条 AI 消息（正文 [n] 角标与末尾来源列表使用，随会话持久化）
+    if (knowledge.sources.length > 0) {
+      aiMessage.citations = knowledge.sources
+    }
   } catch {
     knowledgeContext = ''
   }
