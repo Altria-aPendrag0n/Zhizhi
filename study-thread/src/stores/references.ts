@@ -328,7 +328,9 @@ export const useReferenceStore = defineStore('references', () => {
     await persistMeta(parsing)
 
     try {
-      const config = useSettingsStore().getVisionProviderConfig()
+      // 图转文字模型优先级：官方专用模型（officialVisionModel）> 自定义转笔记模型 > 主模型
+      const settings = useSettingsStore()
+      const config = settings.getOfficialVisionProviderConfig() ?? settings.getVisionProviderConfig()
       if (!config) {
         const failed: ReferenceMeta = { ...parsing, parseStatus: 'failed', parseError: '尚未配置图片转笔记模型' }
         await persistMeta(failed)

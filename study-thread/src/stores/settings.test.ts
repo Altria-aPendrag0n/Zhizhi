@@ -179,4 +179,33 @@ describe('settings store', () => {
       model: 'glm-4v-flash',
     })
   })
+
+  it('官方专用模型配置：officialVisionModel/officialSearchModel 持久化与按需返回', () => {
+    const store = useSettingsStore()
+    store.officialApiEnabled = true
+    store.officialModel = 'glm-4.7-flash'
+    // 空串 = 跟随对话模型 → 返回 null
+    expect(store.officialVisionModel).toBe('')
+    expect(store.getOfficialVisionProviderConfig()).toBeNull()
+    expect(store.getOfficialSearchProviderConfig()).toBeNull()
+
+    store.officialVisionModel = 'glm-4v-flash'
+    store.officialSearchModel = 'deepseek-chat'
+    store.saveSettings()
+
+    const vision = store.getOfficialVisionProviderConfig()
+    expect(vision).toMatchObject({ type: 'openai-compat', model: 'glm-4v-flash' })
+    const search = store.getOfficialSearchProviderConfig()
+    expect(search).toMatchObject({ type: 'openai-compat', model: 'deepseek-chat' })
+
+    // 重启恢复：从 localStorage 读回
+    const restored = useSettingsStore()
+    expect(restored.officialVisionModel).toBe('glm-4v-flash')
+    expect(restored.officialSearchModel).toBe('deepseek-chat')
+
+    // 官方通道未启用时返回 null
+    restored.officialApiEnabled = false
+    expect(restored.getOfficialVisionProviderConfig()).toBeNull()
+    expect(restored.getOfficialSearchProviderConfig()).toBeNull()
+  })
 })

@@ -173,17 +173,49 @@
       </template>
     </section>
 
-    <!-- 对话模型选择：列表来自服务端已配置上游 Key 的渠道（GET /v1/models，Bearer 官方 Key） -->
+    <!-- 模型选择：列表来自服务端已配置上游 Key 的渠道（GET /v1/models，Bearer 官方 Key）。
+         对话模型全局生效；图转文字与联网搜索子代理模型按用途选择（未选择时回退对话模型） -->
     <section v-if="authStore.isOfficialActive" class="card-block">
-      <h3 class="card-block__title">对话模型</h3>
-      <p class="form-hint">选择官方 API 使用的模型。列表由服务端下发（仅含已配置上游 Key 的渠道），选择即保存并在所有 AI 能力中生效。</p>
+      <h3 class="card-block__title">模型选择</h3>
+      <p class="form-hint">列表由服务端下发（仅含已配置上游 Key 的渠道），选择即保存。图转文字与联网搜索子代理未单独选择时，回退使用对话模型。</p>
       <div v-if="modelsLoading" class="form-hint">模型列表加载中…</div>
       <template v-else>
-        <select v-model="selectedModel" class="form-input" :disabled="models.length === 0" aria-label="对话模型" @change="autoSwitchedFrom = ''">
-          <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-        </select>
-        <p v-if="!models.length" class="form-hint">暂无可用模型：服务端渠道尚未配置上游 API Key（管理台 → 渠道页填写后刷新）。</p>
-        <p v-else-if="autoSwitchedFrom" class="form-hint">默认模型 {{ autoSwitchedFrom }} 不在可用列表中，已切换为 {{ selectedModel }}。</p>
+        <div class="form-group">
+          <label class="form-label" for="official-chat-model">对话模型</label>
+          <select v-model="selectedModel" class="form-input" :disabled="models.length === 0" aria-label="对话模型" @change="autoSwitchedFrom = ''">
+            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+          </select>
+          <p v-if="!models.length" class="form-hint">暂无可用模型：服务端渠道尚未配置上游 API Key（管理台 → 渠道页填写后刷新）。</p>
+          <p v-else-if="autoSwitchedFrom" class="form-hint">默认模型 {{ autoSwitchedFrom }} 不在可用列表中，已切换为 {{ selectedModel }}。</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="official-vision-model">图转文字模型</label>
+          <select v-model="selectedVisionModel" class="form-input" :disabled="models.length === 0" aria-label="图转文字模型">
+            <option value="">跟随对话模型</option>
+            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+          </select>
+          <p class="form-hint">用于图片转笔记 / 参考资料识别（OCR + 表格还原）。需支持多模态图片输入（如 glm-4v 系列），否则识别会失败。</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="official-search-model">联网搜索模型（子代理）</label>
+          <select v-model="selectedSearchModel" class="form-input" :disabled="models.length === 0" aria-label="联网搜索模型">
+            <option value="">跟随对话模型</option>
+            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+          </select>
+          <p class="form-hint">联网搜索子代理使用的模型：子代理请求由网关路由到「用途=web_search」的联网渠道；所选模型需具备联网搜索能力（服务端渠道的模型列表须包含它）。</p>
+        </div>
+        <div class="form-group form-group--toggle">
+          <div class="toggle-row">
+            <label class="form-label" for="official-search-agent">启用联网搜索子代理</label>
+            <label class="toggle">
+              <input id="official-search-agent" type="checkbox" :checked="searchAgentOn" @change="toggleSearchAgent" />
+              <span class="toggle__slider"></span>
+            </label>
+          </div>
+          <p class="form-hint">开启后，会话中需要联网时主模型会把检索委托给联网搜索子代理（请求路由到「用途=web_search」的联网渠道），主模型本身无需支持联网。联网搜索模型默认跟随对话模型，可在上方单独指定。</p>
+        </div>
       </template>
     </section>
 
@@ -294,6 +326,32 @@ const selectedModel = computed({
     settingsStore.saveSettings()
   },
 })
+
+/** 图转文字模型（官方）：空串 = 跟随对话模型 */
+const selectedVisionModel = computed({
+  get: () => settingsStore.officialVisionModel,
+  set: (value: string) => {
+    settingsStore.officialVisionModel = value
+    settingsStore.saveSettings()
+  },
+})
+
+/** 联网搜索子代理模型（官方）：空串 = 跟随对话模型 */
+const selectedSearchModel = computed({
+  get: () => settingsStore.officialSearchModel,
+  set: (value: string) => {
+    settingsStore.officialSearchModel = value
+    settingsStore.saveSettings()
+  },
+})
+
+/** 联网搜索子代理开关：官方页启用即 searchAgentMode = 'official'（自定义页不再提供该选项） */
+const searchAgentOn = computed(() => settingsStore.searchAgentMode === 'official')
+
+function toggleSearchAgent() {
+  settingsStore.searchAgentMode = searchAgentOn.value ? 'direct' : 'official'
+  settingsStore.saveSettings()
+}
 
 /** 拉取网关可用模型（只含已配置上游 Key 的渠道）；当前模型失效时自动落到第一项 */
 async function loadModels() {
@@ -790,6 +848,57 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* 开关行（联网搜索子代理等） */
+.form-group--toggle .toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle__slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 0.18s;
+}
+
+.toggle__slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s;
+}
+
+.toggle input:checked + .toggle__slider {
+  background: var(--brand);
+}
+
+.toggle input:checked + .toggle__slider::before {
+  transform: translateX(16px);
 }
 
 .form-label {

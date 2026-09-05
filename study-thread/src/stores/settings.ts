@@ -40,6 +40,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const officialApiEnabled = ref(false)
   /** 官方 API 使用的模型（Phase 2 网关定档后随套餐/配置动态下发） */
   const officialModel = ref('glm-4.7-flash')
+  /** 官方 API 图转文字模型（空串 = 跟随 officialModel；多模态模型，如 glm-4v 系列） */
+  const officialVisionModel = ref('')
+  /** 官方 API 联网搜索子代理模型（空串 = 跟随 officialModel；网关路由到用途=web_search 渠道） */
+  const officialSearchModel = ref('')
 
   function saveSettings() {
     const data = {
@@ -62,6 +66,8 @@ export const useSettingsStore = defineStore('settings', () => {
       searchAgentModel: searchAgentModel.value,
       officialApiBaseUrl: officialApiBaseUrl.value,
       officialModel: officialModel.value,
+      officialVisionModel: officialVisionModel.value,
+      officialSearchModel: officialSearchModel.value,
       officialApiEnabled: officialApiEnabled.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
@@ -139,6 +145,36 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   /**
+   * 官方 API 图转文字模型配置：officialVisionModel 非空时返回专用配置（model 用官方选择的值），
+   * 空串 = 跟随对话模型（返回 null，调用方走 getProviderConfig）。
+   * 官方通道未启用时返回 null（图转文字走自定义通道配置）。
+   */
+  function getOfficialVisionProviderConfig(): ProviderConfig | null {
+    if (!officialApiEnabled.value || !officialVisionModel.value) return null
+    return {
+      type: 'openai-compat',
+      apiKey: useAuthStore().apiKey,
+      baseUrl: officialApiBaseUrl.value.trim() || 'http://127.0.0.1:8787',
+      model: officialVisionModel.value,
+    }
+  }
+
+  /**
+   * 官方 API 联网搜索子代理模型配置：officialSearchModel 非空时返回专用配置，
+   * 空串 = 跟随对话模型（返回 null，子代理解析器走主模型）。
+   * 官方通道未启用时返回 null。
+   */
+  function getOfficialSearchProviderConfig(): ProviderConfig | null {
+    if (!officialApiEnabled.value || !officialSearchModel.value) return null
+    return {
+      type: 'openai-compat',
+      apiKey: useAuthStore().apiKey,
+      baseUrl: officialApiBaseUrl.value.trim() || 'http://127.0.0.1:8787',
+      model: officialSearchModel.value,
+    }
+  }
+
+  /**
    * 获取图片转笔记专用模型配置（OpenAI 兼容格式）。
    * 未启用或未填写 API Key 时返回 null（调用方应引导用户去设置页配置）。
    */
@@ -177,11 +213,15 @@ export const useSettingsStore = defineStore('settings', () => {
     officialApiBaseUrl,
     officialApiEnabled,
     officialModel,
+    officialVisionModel,
+    officialSearchModel,
     saveSettings,
     loadSettings,
     addRecentVault,
     removeRecentVault,
     getProviderConfig,
     getVisionProviderConfig,
+    getOfficialVisionProviderConfig,
+    getOfficialSearchProviderConfig,
   }
 })

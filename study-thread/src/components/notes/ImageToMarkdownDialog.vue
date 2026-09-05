@@ -221,7 +221,8 @@ async function handleImage(file: File) {
 }
 
 async function handleRecognize() {
-  const config = settingsStore.getVisionProviderConfig()
+  // 图转文字模型优先级：官方专用模型（officialVisionModel）> 自定义转笔记模型 > 主模型
+  const config = settingsStore.getOfficialVisionProviderConfig() ?? settingsStore.getVisionProviderConfig()
   if (!config) {
     error.value = '尚未配置图片转笔记模型，请先到设置页配置'
     return

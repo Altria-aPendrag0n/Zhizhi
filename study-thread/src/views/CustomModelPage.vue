@@ -78,7 +78,7 @@
             <span class="toggle__slider"></span>
           </label>
         </div>
-        <p class="form-hint">请求时附带 web_search 工具；模型支持则自动联网搜索，不支持则自动降级为普通请求。DeepSeek 官方 API 将自动走 Anthropic 端点启用联网搜索。Ollama 等本地模型请关闭。</p>
+        <p class="form-hint">请求时附带 web_search 工具；模型支持则自动联网搜索，不支持则自动降级为普通请求（界面会提示未联网）。DeepSeek 官方 API 将自动走 Anthropic 端点启用联网搜索。Ollama 等本地模型请关闭。</p>
       </div>
 
       <!-- 联网搜索子代理 -->
@@ -86,10 +86,11 @@
         <label class="form-label" for="search-agent-mode">联网搜索子代理</label>
         <select id="search-agent-mode" v-model="searchAgentMode" class="form-select">
           <option value="direct">跟随主模型直连（默认）</option>
-          <option value="official">官方联网子代理（走服务端联网渠道）</option>
           <option value="custom">自定义子代理模型</option>
+          <!-- 已在官方页启用子代理时透传显示（不可从本页选中）；保存时跳过以免覆盖官方配置 -->
+          <option v-if="searchAgentMode === 'official'" value="official" disabled>官方联网子代理（在「官方 API」页管理）</option>
         </select>
-        <p class="form-hint">开启子代理后，主模型可通过 web_search 工具把联网检索委托给子代理完成——主模型本身无需支持联网（如 GLM）。官方模式要求服务端配置「用途=web_search」的上游渠道；自定义模式建议填支持联网的模型（如 DeepSeek）。</p>
+        <p class="form-hint">开启子代理后，主模型可通过 web_search 工具把联网检索委托给子代理完成——主模型本身无需支持联网（如 GLM）。自定义模式建议填支持联网的模型（如 DeepSeek）；官方通道的联网子代理模型在「官方 API」页配置。</p>
       </div>
 
       <template v-if="searchAgentMode === 'custom'">
@@ -124,7 +125,7 @@
             class="form-input"
             placeholder="deepseek-chat"
           />
-          <p class="form-hint">该模型需支持联网搜索（web_search 工具），如 DeepSeek 官方模型；留空则跟随主模型。</p>
+          <p class="form-hint">该模型需支持联网搜索（web_search 工具），如 DeepSeek 官方 API 的模型；留空则跟随主模型。</p>
         </div>
       </template>
 
@@ -298,10 +299,13 @@ function handleSave() {
   settingsStore.visionBaseUrl = visionBaseUrl.value
   settingsStore.visionApiKey = visionApiKey.value
   settingsStore.visionModel = visionModel.value
-  settingsStore.searchAgentMode = searchAgentMode.value
-  settingsStore.searchAgentBaseUrl = searchAgentBaseUrl.value
-  settingsStore.searchAgentApiKey = searchAgentApiKey.value
-  settingsStore.searchAgentModel = searchAgentModel.value
+  // 联网搜索子代理为 official 时由「官方 API」页管理，本页保存跳过以免覆盖
+  if (searchAgentMode.value !== 'official') {
+    settingsStore.searchAgentMode = searchAgentMode.value
+    settingsStore.searchAgentBaseUrl = searchAgentBaseUrl.value
+    settingsStore.searchAgentApiKey = searchAgentApiKey.value
+    settingsStore.searchAgentModel = searchAgentModel.value
+  }
   settingsStore.saveSettings()
   saved.value = true
   testResult.value = null
