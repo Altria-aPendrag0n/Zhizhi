@@ -77,7 +77,7 @@ describe('MainChatPage', () => {
     route.query.thread = 'new_test'
     chat.mockReset()
     retrieveKnowledgeContext.mockReset()
-    retrieveKnowledgeContext.mockResolvedValue('')
+    retrieveKnowledgeContext.mockResolvedValue({ context: '', sources: [] })
     saveCurrentSession.mockClear()
     routerReplace.mockClear()
   })
@@ -139,7 +139,7 @@ describe('MainChatPage', () => {
       yield { type: 'text' as const, content: '带知识库的回答' }
       yield { type: 'stop' as const }
     })
-    retrieveKnowledgeContext.mockResolvedValue('### [笔记] 测试笔记\n测试片段内容')
+    retrieveKnowledgeContext.mockResolvedValue({ context: '### [笔记] 测试笔记\n测试片段内容', sources: [] })
 
     await sendMessage(createWrapper())
 

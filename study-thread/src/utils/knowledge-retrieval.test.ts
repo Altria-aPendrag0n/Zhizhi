@@ -316,7 +316,7 @@ describe('knowledge-retrieval', () => {
       { kind: 'reference' as const, path: '/vault/references/ref-1.json', title: '参考B', snippet: '摘要', pageCount: 42 },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('该 PDF 共 42 页')
     expect(text).toContain('offset: 0, limit: 1')
@@ -366,7 +366,7 @@ describe('knowledge-retrieval', () => {
       { kind: 'reference' as const, path: '/vault/references/ref-1.json', title: '参考B', snippet: '摘要', pageCount: 5, sectionTitle: '第二章', pageFrom: 2, pageTo: 3 },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('该内容来自「第二章」第 3-4 页')
     expect(text).toContain('offset: 2, limit: 2')
@@ -400,7 +400,7 @@ describe('knowledge-retrieval', () => {
       { kind: 'reference' as const, path: '/vault/references/ref-1.json', title: '参考B', snippet: '摘要', sectionTitle: '第二章' },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('该内容来自章节「第二章」')
     expect(text).toContain('read_reference({ reference_id: "/vault/references/ref-1.json" })')
@@ -423,20 +423,52 @@ describe('knowledge-retrieval', () => {
     expect(result[0].path).toBe('/vault/notes/ok.md')
   })
 
-  it('buildKnowledgeContext 格式化为 markdown，含 [笔记]/[参考资料] 标注', () => {
+  it('buildKnowledgeContext 格式化为编号 markdown，含 [笔记]/[参考资料] 标注与引用要求', () => {
     const hits = [
       { kind: 'note' as const, path: '/vault/notes/a.md', title: '笔记A', snippet: '笔记A的片段' },
       { kind: 'reference' as const, path: '/vault/references/b.json', title: '参考B', snippet: '参考B的片段' },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('以下是从你的知识库（笔记与参考资料）中检索到的与用户问题相关的内容，已附正文预览')
     expect(text).toContain('请调用 read_reference 工具读取全文')
-    expect(text).toContain('### [笔记] 笔记A')
-    expect(text).toContain('### [参考资料] 参考B')
+    expect(text).toContain('引用要求：回答中引用上述来源内容时，在对应句子或段落末尾标注其编号（如 [1]、[2]）')
+    expect(text).toContain('### [1] [笔记] 笔记A')
+    expect(text).toContain('### [2] [参考资料] 参考B')
     expect(text).toContain('笔记A的片段')
     expect(text).toContain('参考B的片段')
+  })
+
+  it('buildKnowledgeContext 返回与注入顺序一致的来源映射（含 pdf 页码）', () => {
+    const hits = [
+      { kind: 'note' as const, path: '/vault/notes/a.md', title: '笔记A', snippet: '笔记A的片段' },
+      {
+        kind: 'reference' as const,
+        path: '/vault/references/b.json',
+        title: '参考B',
+        snippet: '参考B的片段',
+        sectionTitle: '第二章',
+        pageFrom: 2,
+        pageTo: 3,
+      },
+    ]
+
+    const { sources } = buildKnowledgeContext(hits)
+
+    expect(sources).toHaveLength(2)
+    expect(sources[0]).toMatchObject({ index: 1, kind: 'note', path: '/vault/notes/a.md', title: '笔记A', snippet: '笔记A的片段' })
+    expect(sources[0].pageFrom).toBeUndefined()
+    expect(sources[1]).toMatchObject({
+      index: 2,
+      kind: 'reference',
+      path: '/vault/references/b.json',
+      title: '参考B',
+      snippet: '参考B的片段',
+      sectionTitle: '第二章',
+      pageFrom: 2,
+      pageTo: 3,
+    })
   })
 
   it('buildKnowledgeContext 参考资料条目标注 read_reference 工具指引', () => {
@@ -444,7 +476,7 @@ describe('knowledge-retrieval', () => {
       { kind: 'reference' as const, path: '/vault/references/abc.json', title: '参考B', snippet: '摘要' },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('reference_id: "/vault/references/abc.json"')
   })
@@ -454,7 +486,7 @@ describe('knowledge-retrieval', () => {
       { kind: 'reference' as const, path: '/vault/references/b.json', title: '参考B', snippet: '参考B的摘要', preview: '参考B的正文预览内容' },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('（正文预览）')
     expect(text).toContain('参考B的正文预览内容')
@@ -466,7 +498,7 @@ describe('knowledge-retrieval', () => {
       { kind: 'reference' as const, path: '/vault/references/b.json', title: '参考B', snippet: '参考B的摘要', fullText: '参考B的完整正文内容' },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('参考B的完整正文内容')
     expect(text).not.toContain('参考B的摘要')
@@ -477,13 +509,17 @@ describe('knowledge-retrieval', () => {
       { kind: 'reference' as const, path: '/vault/references/b.json', title: '参考B', snippet: '摘要', fullText: '正文', truncated: true },
     ]
 
-    const text = buildKnowledgeContext(hits)
+    const { context: text } = buildKnowledgeContext(hits)
 
     expect(text).toContain('（注：该内容过长，已截断展示，可能存在信息缺失）')
   })
 
-  it('retrieveKnowledgeContext 无命中时返回空字符串', async () => {
+  it('buildKnowledgeContext 空命中返回空上下文与空来源', () => {
+    expect(buildKnowledgeContext([])).toEqual({ context: '', sources: [] })
+  })
+
+  it('retrieveKnowledgeContext 无命中时返回空结果对象', async () => {
     indexer.getAllEntries.mockReturnValue([])
-    expect(await retrieveKnowledgeContext('测试')).toBe('')
+    expect(await retrieveKnowledgeContext('测试')).toEqual({ context: '', sources: [] })
   })
 })

@@ -55,6 +55,31 @@ export interface KnowledgeHit {
   pageTo?: number
 }
 
+/** 回答引用的来源条目（编号与注入文本中的 [编号] 角标一一对应） */
+export interface CitationSource {
+  /** 来源编号（1 起，与注入顺序一致） */
+  index: number
+  kind: KnowledgeHit['kind']
+  path: string
+  title: string
+  /** 命中摘要片段（浮层展示用，≤300 字） */
+  snippet: string
+  /** 命中章节标题（大 pdf 分块命中时） */
+  sectionTitle?: string
+  /** 命中块覆盖的起始页（0 起；大 pdf 分块命中时） */
+  pageFrom?: number
+  /** 命中块覆盖的结束页（0 起；大 pdf 分块命中时） */
+  pageTo?: number
+}
+
+/** 知识检索注入结果：上下文文本 + 来源映射（供角标渲染与持久化） */
+export interface KnowledgeContext {
+  /** 注入 system prompt 的 markdown 上下文（空串表示无命中） */
+  context: string
+  /** 来源编号映射，index 与 context 中的 [编号] 对应 */
+  sources: CitationSource[]
+}
+
 /** 笔记标题回退：从路径中提取文件名 */
 function extractNoteTitle(path: string, meta: Record<string, unknown>): string {
   if (typeof meta.title === 'string' && meta.title.trim() !== '') {
@@ -218,18 +243,33 @@ function referenceToolHint(hit: KnowledgeHit): string {
 }
 
 /**
- * 将知识检索命中项格式化为 markdown 片段
+ * 将知识检索命中项格式化为编号注入文本 + 来源映射
+ *
+ * 来源条目按注入顺序编号（[1]、[2]…），编号同时写入各节标题，
+ * 供 LLM 在回答中标注引用、前端校验后渲染为可点击角标。
  */
-export function buildKnowledgeContext(hits: KnowledgeHit[]): string {
-  if (hits.length === 0) return ''
+export function buildKnowledgeContext(hits: KnowledgeHit[]): KnowledgeContext {
+  if (hits.length === 0) return { context: '', sources: [] }
 
   const kindLabels: Record<KnowledgeHit['kind'], string> = {
     note: '笔记',
     reference: '参考资料',
   }
 
+  // 来源编号映射：与注入顺序一一对应（1 起）
+  const sources: CitationSource[] = hits.map((hit, i) => ({
+    index: i + 1,
+    kind: hit.kind,
+    path: hit.path,
+    title: hit.title,
+    snippet: hit.snippet,
+    sectionTitle: hit.sectionTitle,
+    pageFrom: hit.pageFrom,
+    pageTo: hit.pageTo,
+  }))
+
   // 内容优先级：完整正文（includeFullText）> 正文预览（默认模式）> 元数据摘要（pdf/png 或预算降级）
-  const sections = hits.map((hit) => {
+  const sections = hits.map((hit, i) => {
     let content = hit.fullText ?? hit.snippet
     if (!hit.fullText && hit.preview) {
       content = `（正文预览）\n${hit.preview}`
@@ -239,36 +279,40 @@ export function buildKnowledgeContext(hits: KnowledgeHit[]): string {
     // 参考资料标注 reference_id：模型需要用完整内容时通过 read_reference 工具读取；
     // 分块命中额外提示章节与页码区间，引导精读对应页
     const toolHint = hit.kind === 'reference' ? referenceToolHint(hit) : ''
-    return `### [${kindLabels[hit.kind]}] ${hit.title}\n${content}${truncatedNote}${toolHint}`
+    return `### [${i + 1}] [${kindLabels[hit.kind]}] ${hit.title}\n${content}${truncatedNote}${toolHint}`
   })
 
-  return [
-    '以下是从你的知识库（笔记与参考资料）中检索到的与用户问题相关的内容，已附正文预览。',
-    '请优先基于这些内容回答；参考资料如需完整内容，',
-    '请调用 read_reference 工具读取全文（reference_id 见各条目标注），不要只依据预览作答。',
-    '',
-    ...sections,
-  ].join('\n')
+  return {
+    context: [
+      '以下是从你的知识库（笔记与参考资料）中检索到的与用户问题相关的内容，已附正文预览。',
+      '请优先基于这些内容回答；参考资料如需完整内容，',
+      '请调用 read_reference 工具读取全文（reference_id 见各条目标注），不要只依据预览作答。',
+      '引用要求：回答中引用上述来源内容时，在对应句子或段落末尾标注其编号（如 [1]、[2]）；未列出的来源不要标注编号，也不要编造来源。',
+      '',
+      ...sections,
+    ].join('\n'),
+    sources,
+  }
 }
 
 /**
- * 检索知识库并返回注入用的 markdown 上下文（摘要模式）
+ * 检索知识库并返回注入用的上下文（摘要模式）
  *
  * 只注入命中条目的摘要，引导 LLM 判断相关性；需要完整内容时
  * 由 LLM 通过 read_reference 工具分页读取参考资料全文。
  *
- * 整体 try/catch 兜底：任何异常返回 ''，保证不阻塞聊天。
+ * 整体 try/catch 兜底：任何异常返回空结果，保证不阻塞聊天。
  *
  * @param query - 用户查询文本
  * @param topK - 返回 Top-K 个结果，默认 4
- * @returns 命中时返回 buildKnowledgeContext 的结果，否则返回 ''
+ * @returns 命中时返回编号注入文本与来源映射，否则返回空结果
  */
-export async function retrieveKnowledgeContext(query: string, topK = 4): Promise<string> {
+export async function retrieveKnowledgeContext(query: string, topK = 4): Promise<KnowledgeContext> {
   try {
     const hits = await retrieveKnowledge(query, topK)
-    if (hits.length === 0) return ''
+    if (hits.length === 0) return { context: '', sources: [] }
     return buildKnowledgeContext(hits)
   } catch {
-    return ''
+    return { context: '', sources: [] }
   }
 }

@@ -377,7 +377,7 @@ async function handleSend(content: string) {
   // 检索知识库内容注入分支追问（失败不影响聊天）
   let knowledgeContext = ''
   try {
-    knowledgeContext = await retrieveKnowledgeContext(content)
+    knowledgeContext = (await retrieveKnowledgeContext(content)).context
   } catch {
     knowledgeContext = ''
   }
