@@ -17,6 +17,7 @@ describe('settings store', () => {
     expect(store.enableWebSearch).toBe(true)
     expect(store.autoGenerateNoteTitle).toBe(true)
     expect(store.autoGenerateNoteTags).toBe(true)
+    expect(store.guideModeDefault).toBe(false)
     expect(store.reviewAlgorithm).toBe('classic')
     expect(store.recentVaults).toEqual([])
     expect(store.visionEnabled).toBe(false)
@@ -68,6 +69,7 @@ describe('settings store', () => {
       enableWebSearch: false,
       autoGenerateNoteTitle: false,
       autoGenerateNoteTags: false,
+      guideModeDefault: true,
       reviewAlgorithm: 'fsrs',
       visionEnabled: true,
       visionBaseUrl: 'https://open.bigmodel.cn/api/paas',
@@ -83,6 +85,7 @@ describe('settings store', () => {
     expect(store.enableWebSearch).toBe(false)
     expect(store.autoGenerateNoteTitle).toBe(false)
     expect(store.autoGenerateNoteTags).toBe(false)
+    expect(store.guideModeDefault).toBe(true)
     expect(store.reviewAlgorithm).toBe('fsrs')
     expect(store.visionEnabled).toBe(true)
     expect(store.visionBaseUrl).toBe('https://open.bigmodel.cn/api/paas')

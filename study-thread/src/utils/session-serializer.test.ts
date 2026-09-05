@@ -755,3 +755,36 @@ describe('citations 来源引用持久化', () => {
     ])
   })
 })
+
+describe('guide 引导模式 frontmatter', () => {
+  const baseSession = {
+    id: 'sess-guide',
+    title: '引导会话',
+    created: '2026-09-04T00:00:00Z',
+    parent_session: null,
+    fork_point: null,
+    tags: [],
+    messages: [{ role: 'user' as const, content: '问题' }],
+  }
+
+  it('guide: true 序列化到 frontmatter 并可解析恢复', () => {
+    const markdown = serializeSession({ ...baseSession, guide: true })
+    expect(markdown).toContain('guide: true')
+    const session = parseSessionFile(markdown, '/vault/sessions/sess-guide.md')
+    expect(session.guide).toBe(true)
+  })
+
+  it('guide: false 显式序列化，与全局默认区分', () => {
+    const markdown = serializeSession({ ...baseSession, guide: false })
+    expect(markdown).toContain('guide: false')
+    const session = parseSessionFile(markdown, '/vault/sessions/sess-guide.md')
+    expect(session.guide).toBe(false)
+  })
+
+  it('未设置 guide 的旧会话解析为 undefined', () => {
+    const markdown = serializeSession({ ...baseSession })
+    expect(markdown).not.toContain('guide:')
+    const session = parseSessionFile(markdown, '/vault/sessions/sess-guide.md')
+    expect(session.guide).toBeUndefined()
+  })
+})

@@ -103,6 +103,10 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
     // 已完成标记：资源库「复习会话」据此区分完成态；「开始复习」跳过已完成会话重新出题
     lines.push('review_completed: true')
   }
+  if (typeof session.guide === 'boolean') {
+    // 引导模式开关（v0.3.1）：显式写入 true/false，与全局默认区分
+    lines.push(`guide: ${session.guide}`)
+  }
   lines.push('---')
   lines.push('')
 
@@ -470,5 +474,6 @@ export function parseSessionFile(content: string, filePath = ''): Session {
       ? meta.review_cluster
       : undefined,
     review_completed: meta.review_completed === true,
+    guide: typeof meta.guide === 'boolean' ? meta.guide : undefined,
   }
 }

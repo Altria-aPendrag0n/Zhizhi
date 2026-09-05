@@ -39,6 +39,8 @@ export interface Session {
   review_cluster?: string[]
   /** 复习会话是否已完成（评级/结束复习后置 true）；已完成会话保留在资源库供回看，不再被「开始复习」复用 */
   review_completed?: boolean
+  /** 引导模式（会话级，Khanmigo 式伴读）：frontmatter 持久化，恢复会话时还原开关状态 */
+  guide?: boolean
 }
 
 /** 回答引用的来源条目（编号与正文 [n] 角标一一对应，随会话消息持久化） */

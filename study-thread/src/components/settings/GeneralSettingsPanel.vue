@@ -27,6 +27,18 @@
         <p class="form-hint">划线摘录笔记时，允许 LLM 根据内容自动生成标签；关闭后统一使用「未分类」标签，跳过 LLM 生成环节。两者都关闭时，摘录笔记将完全不调用 LLM。</p>
       </div>
 
+      <!-- 引导模式全局默认 -->
+      <div class="form-group form-group--toggle">
+        <div class="toggle-row">
+          <label class="form-label" for="guide-mode-default">引导模式默认开启</label>
+          <label class="toggle">
+            <input id="guide-mode-default" v-model="guideModeDefault" type="checkbox" />
+            <span class="toggle__slider"></span>
+          </label>
+        </div>
+        <p class="form-hint">新会话默认开启引导模式：AI 先了解你的基础，小步讲解、设检查点并引导你产出，而不是直接给完整答案。会话内可随时用输入框上方的「引导模式」按钮切换（token 消耗更高）。</p>
+      </div>
+
       <!-- 复习间隔算法 -->
       <div class="form-group">
         <label class="form-label" for="review-algorithm">复习间隔算法</label>
@@ -91,6 +103,7 @@ const settingsStore = useSettingsStore()
 
 const autoGenerateNoteTitle = ref(true)
 const autoGenerateNoteTags = ref(true)
+const guideModeDefault = ref(false)
 const reviewAlgorithm = ref<ReviewAlgorithm>('classic')
 const saved = ref(false)
 // 调试日志（设置页展示，便于排查运行时问题）
@@ -117,6 +130,7 @@ function handleClearLogs() {
 function handleSave() {
   settingsStore.autoGenerateNoteTitle = autoGenerateNoteTitle.value
   settingsStore.autoGenerateNoteTags = autoGenerateNoteTags.value
+  settingsStore.guideModeDefault = guideModeDefault.value
   settingsStore.reviewAlgorithm = reviewAlgorithm.value
   settingsStore.saveSettings()
   saved.value = true
@@ -126,6 +140,7 @@ onMounted(() => {
   // 从 store 恢复设置
   autoGenerateNoteTitle.value = settingsStore.autoGenerateNoteTitle
   autoGenerateNoteTags.value = settingsStore.autoGenerateNoteTags
+  guideModeDefault.value = settingsStore.guideModeDefault
   reviewAlgorithm.value = settingsStore.reviewAlgorithm
   loadLogs()
 })

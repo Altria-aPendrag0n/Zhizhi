@@ -15,6 +15,20 @@
       @navigate-note="handleNavigateNote"
       @navigate-branch="handleNavigateBranch"
     />
+    <div class="guide-bar">
+      <button
+        class="guide-bar__toggle"
+        :class="{ 'is-active': guideMode }"
+        :title="guideMode
+          ? '引导模式已开启：AI 先诊断起点、小步讲解、引导你产出（点击关闭）'
+          : '开启引导模式：AI 先了解你的基础，小步讲解并引导你思考，而不是直接给完整答案'"
+        @click="toggleGuideMode"
+      >
+        <GraduationCap :size="14" />
+        引导模式
+      </button>
+      <span v-if="guideMode" class="guide-bar__hint">多轮引导讲解，token 消耗更高；说「直接告诉我」可跳过引导</span>
+    </div>
     <Composer
       :is-streaming="isStreaming"
       :disabled="isStreaming"
@@ -44,6 +58,7 @@
 <script setup lang="ts">
 import { ref, watch, inject, computed, reactive, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { GraduationCap } from '@lucide/vue'
 import type { Message, Session } from '../types'
 import { useSettingsStore } from '../stores/settings'
 import { useVaultStore } from '../stores/vault'
@@ -62,6 +77,7 @@ import { useToast } from '../composables/useToast'
 import { generateSessionTitle, getSessionFilePath, parseSessionFile, resolveSessionFile } from '../utils/session-serializer'
 import { readFile } from '../utils/vault-fs'
 import { retrieveKnowledgeContext } from '../utils/knowledge-retrieval'
+import { buildSystemPrompt } from '../utils/chat-prompts'
 import { resolveMessageIndex } from '../utils/message-locator'
 import ChatView from '../components/chat/ChatView.vue'
 import Composer from '../components/chat/Composer.vue'
@@ -105,6 +121,13 @@ const loadedNoteRefs = ref<NoteReference[]>([])
 /** 加载会话的种类与计划关联：重存会话时回写，避免侧边栏分组（kind）在续聊后漂移 */
 const loadedSessionKind = ref<Session['kind']>(undefined)
 const loadedSessionPlanId = ref<string | undefined>(undefined)
+/** 引导模式（会话级）：加载会话时从 frontmatter 恢复，新会话取设置页全局默认（v0.3.1） */
+const guideMode = ref(settingsStore.guideModeDefault)
+
+/** 切换引导模式：状态随下次会话落盘写入 frontmatter */
+function toggleGuideMode() {
+  guideMode.value = !guideMode.value
+}
 const messages = computed(() => activeJob.value?.messages ?? loadedMessages.value)
 const isStreaming = computed(() => activeJob.value?.isStreaming ?? false)
 const streamingText = computed(() => activeJob.value?.streamingText ?? '')
@@ -151,10 +174,12 @@ async function loadThreadMessages(threadId: string) {
     loadedMessages.value = session.messages
     loadedSessionKind.value = session.kind
     loadedSessionPlanId.value = session.plan_id
+    guideMode.value = session.guide ?? settingsStore.guideModeDefault
   } catch {
     loadedMessages.value = []
     loadedSessionKind.value = undefined
     loadedSessionPlanId.value = undefined
+    guideMode.value = settingsStore.guideModeDefault
   }
   await refreshNoteRefs(threadId)
 }
@@ -196,21 +221,6 @@ watch(
     if (threadId) void refreshNoteRefs(threadId)
   },
 )
-
-const SYSTEM_PROMPT = `你是知枝，一位学习伴读助手。你的职责是帮助用户深入理解概念、拆解知识点、建立知识关联。
-
-回答要求：
-- 使用中文回复
-- 结构清晰，善用标题、列表、引用
-- 对复杂概念进行白话解释
-- 鼓励用户深入思考和追问
-- 保持友好、耐心的语气
-
-流程图规范：
-- 简单线性流程（顺序步骤、单分支）：用 ASCII 字符画，并用 Markdown 代码块包裹。
-  盒子用 + - |，方向用 > < v ^；中文占 2 字符宽、ASCII 占 1 字符宽，绘制时按此对齐；
-  不要使用 ┌ ─ ┐ │ 等 Unicode 框线字符，以及 ① ② ✓ ← → 等宽度不一致的符号。
-- 复杂流程（多分支、循环、菱形判断、嵌套等）：改用 Mermaid 代码块，用 flowchart 语法表达（系统会渲染为 SVG 流程图）。`
 
 async function handleSend(content: string) {
   error.value = null
@@ -260,7 +270,9 @@ async function handleSend(content: string) {
   } catch {
     knowledgeContext = ''
   }
-  const systemPrompt = knowledgeContext ? `${SYSTEM_PROMPT}\n\n${knowledgeContext}` : SYSTEM_PROMPT
+  const systemPrompt = knowledgeContext
+    ? `${buildSystemPrompt(guideMode.value)}\n\n${knowledgeContext}`
+    : buildSystemPrompt(guideMode.value)
   const chatMessages: Message[] = baseMessages.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
 
   const provider = createProvider(config)
@@ -309,6 +321,8 @@ async function saveCurrentSession(threadId: string, sessionMessages: Message[], 
     // 保留已落盘会话的种类与计划关联（学习会话两者皆空，与旧文件兼容）
     ...(loadedSessionKind.value ? { kind: loadedSessionKind.value } : {}),
     ...(loadedSessionPlanId.value ? { plan_id: loadedSessionPlanId.value } : {}),
+    // 引导模式开关随会话持久化（显式 true/false，与全局默认区分）
+    guide: guideMode.value,
   }
   const filePath = await vaultStore.saveCurrentSession(session, false, refs)
   // 会话落盘后刷新侧边栏列表（新会话首条消息后即出现在会话栏；仓库即真相，无本地缓存）
@@ -527,5 +541,45 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+/* 引导模式开关栏：会话级切换，位于对话区与输入框之间 */
+.guide-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px 0;
+}
+
+.guide-bar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.guide-bar__toggle:hover {
+  color: var(--brand-strong);
+  border-color: var(--brand);
+}
+
+.guide-bar__toggle.is-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-weight: 650;
+}
+
+.guide-bar__hint {
+  color: var(--ink-2);
+  font-size: 11px;
+  opacity: 0.85;
 }
 </style>

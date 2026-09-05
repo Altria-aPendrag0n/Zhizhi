@@ -14,6 +14,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const enableWebSearch = ref(true)
   const autoGenerateNoteTitle = ref(true)
   const autoGenerateNoteTags = ref(true)
+  /** 引导模式全局默认（会话级开关的新会话初始值）：AI 诊断起点、小步讲解、检查点引导（v0.3.1） */
+  const guideModeDefault = ref(false)
   /** 复习间隔算法（P1 增强）：classic 经典间隔序列（默认） / fsrs 个性化遗忘曲线 */
   const reviewAlgorithm = ref<ReviewAlgorithm>('classic')
   /** 图片转笔记专用模型（独立于对话模型，OpenAI 兼容格式） */
@@ -40,6 +42,7 @@ export const useSettingsStore = defineStore('settings', () => {
       enableWebSearch: enableWebSearch.value,
       autoGenerateNoteTitle: autoGenerateNoteTitle.value,
       autoGenerateNoteTags: autoGenerateNoteTags.value,
+      guideModeDefault: guideModeDefault.value,
       reviewAlgorithm: reviewAlgorithm.value,
       visionEnabled: visionEnabled.value,
       visionBaseUrl: visionBaseUrl.value,
@@ -64,6 +67,7 @@ export const useSettingsStore = defineStore('settings', () => {
         enableWebSearch.value = data.enableWebSearch !== false
         autoGenerateNoteTitle.value = data.autoGenerateNoteTitle !== false
         autoGenerateNoteTags.value = data.autoGenerateNoteTags !== false
+        guideModeDefault.value = data.guideModeDefault === true
         reviewAlgorithm.value = data.reviewAlgorithm === 'fsrs' ? 'fsrs' : 'classic'
         visionEnabled.value = data.visionEnabled === true
         visionBaseUrl.value = data.visionBaseUrl || 'https://open.bigmodel.cn/api/paas'
@@ -140,6 +144,7 @@ export const useSettingsStore = defineStore('settings', () => {
     enableWebSearch,
     autoGenerateNoteTitle,
     autoGenerateNoteTags,
+    guideModeDefault,
     reviewAlgorithm,
     visionEnabled,
     visionBaseUrl,
