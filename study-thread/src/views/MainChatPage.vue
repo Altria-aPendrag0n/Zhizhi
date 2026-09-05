@@ -66,7 +66,7 @@ import { useLearnerUpdate } from '../composables/useLearnerUpdate'
 import { createProvider } from '../api/provider-factory'
 import { extractNote } from '../api/skills/extract-note'
 import { chatWithTools } from '../api/chat-loop'
-import { CLIENT_TOOLS } from '../api/tools'
+import { CLIENT_TOOLS, webSearchTool } from '../api/tools'
 import type { NoteReference } from '../utils/session-linker'
 import { extractNoteRefsFromSession, filterExistingNoteRefs } from '../utils/session-linker'
 import { insertHighlightAt, insertHighlightAtEnd, type AddToNoteTarget } from '../utils/note-insert'
@@ -344,11 +344,13 @@ async function handleSend(content: string) {
         provider,
         messages: chatMessages,
         systemPrompt,
-        tools: CLIENT_TOOLS,
+        // 联网搜索子代理开启时追加 web_search 客户端工具：主模型可委托子代理联网，
+        // 主通道不再附带服务端联网（enableWebSearch 交由子代理通道消耗）
+        tools: settingsStore.searchAgentMode !== 'direct' ? [...CLIENT_TOOLS, webSearchTool] : CLIENT_TOOLS,
         toolContext: { vaultPath: vaultStore.vaultPath || '' },
         model: config.model,
         signal,
-        enableWebSearch: config.enableWebSearch,
+        enableWebSearch: settingsStore.searchAgentMode !== 'direct' ? false : config.enableWebSearch,
       })) {
         emit(chunk)
       }

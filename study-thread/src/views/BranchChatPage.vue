@@ -91,6 +91,7 @@ import { useNoteStore } from '../stores/notes'
 import { useChatRunner } from '../stores/chat-runner'
 import { createProvider } from '../api/provider-factory'
 import { branchFollowupStream } from '../api/skills/branch-followup'
+import { CLIENT_TOOLS, webSearchTool } from '../api/tools'
 import { extractNote } from '../api/skills/extract-note'
 import type { Message, Session, ExtractedNote } from '../types'
 import { loadBranchContext, buildForkContextPreview, stripInheritedContext, extractForkContext } from '../utils/branch-context'
@@ -456,6 +457,8 @@ async function handleSend(content: string) {
         guideMode.value,
         { vaultPath: vaultStore.vaultPath || '' },
         signal,
+        // 联网搜索子代理开启时追加 web_search 工具，主通道不附带服务端联网
+        settingsStore.searchAgentMode !== 'direct' ? [...CLIENT_TOOLS, webSearchTool] : CLIENT_TOOLS,
       )) {
         emit(chunk)
       }

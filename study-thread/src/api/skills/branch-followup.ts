@@ -5,7 +5,7 @@
  * 调用 LLM 生成比主对话更深入的回答。
  */
 
-import type { LLMProvider, Message, StreamChunk } from '../llm-provider'
+import type { LLMProvider, Message, StreamChunk, ToolDefinition } from '../llm-provider'
 import type { Note } from '../../types'
 import { parseSkill, buildPrompt } from '../../skills/loader'
 import { chatWithTools } from '../chat-loop'
@@ -65,6 +65,7 @@ function serializeNotes(notes: Note[]): string {
  * @param guideMode - 可选的引导模式开关（v0.3.1：开启时在 SKILL 模板注入引导策略段）
  * @param toolContext - 工具执行上下文（vault 路径），支持 AI 按需读取参考资料全文
  * @param signal - 可选的中止信号（停止按钮/切换会话时后台中止由 chat-runner 管理）
+ * @param tools - 可选的自定义工具列表（联网搜索子代理开启时由调用方传入含 web_search 的列表）
  * @returns 流式响应迭代器
  */
 export async function* branchFollowupStream(
@@ -77,6 +78,7 @@ export async function* branchFollowupStream(
   guideMode?: boolean,
   toolContext?: ToolContext,
   signal?: AbortSignal,
+  tools?: ToolDefinition[],
 ): AsyncIterable<StreamChunk> {
   const skill = getSkill()
   let systemPrompt = buildPrompt(skill, {
@@ -100,7 +102,8 @@ export async function* branchFollowupStream(
       provider,
       messages,
       systemPrompt,
-      tools: CLIENT_TOOLS,
+      // 联网搜索子代理开启时追加 web_search 客户端工具（v0.3.1，与主会话一致）
+      tools: tools ?? CLIENT_TOOLS,
       toolContext: toolContext || { vaultPath: '' },
       temperature: 0.7,
       maxTokens: 4096,

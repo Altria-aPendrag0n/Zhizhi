@@ -99,6 +99,8 @@ vi.mock('../composables/useToast', () => ({
 vi.mock('../stores/settings', () => ({
   useSettingsStore: () => ({
     getVisionProviderConfig: vi.fn().mockReturnValue(null),
+    // 联网搜索子代理模式：NotesPage 链路内的工具组装会读取该字段
+    searchAgentMode: 'direct',
   }),
 }))
 

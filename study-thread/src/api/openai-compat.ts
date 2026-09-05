@@ -128,7 +128,7 @@ export class OpenAICompatProvider implements LLMProvider {
     messages: Message[],
     options?: ChatOptions,
   ): AsyncIterable<StreamChunk> {
-    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch = false, tools = [], disableThinking = false } = options || {}
+    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch = false, tools = [], disableThinking = false, extraHeaders } = options || {}
 
     const apiMessages = toApiMessages(messages, systemPrompt)
     // 服务商已发生过降级（不支持 web_search 工具）时跳过联网尝试，避免每条消息多一轮失败往返
@@ -162,6 +162,7 @@ export class OpenAICompatProvider implements LLMProvider {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
+            ...(extraHeaders ?? {}),
           },
           body: JSON.stringify(body),
           signal,

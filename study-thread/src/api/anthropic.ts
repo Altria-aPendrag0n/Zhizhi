@@ -87,7 +87,7 @@ export class AnthropicProvider implements LLMProvider {
     messages: Message[],
     options?: ChatOptions,
   ): AsyncIterable<StreamChunk> {
-    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch, tools = [], disableThinking = false } = options || {}
+    const { model = this.defaultModel, maxTokens = DEFAULT_MAX_TOKENS, systemPrompt, signal, enableWebSearch, tools = [], disableThinking = false, extraHeaders } = options || {}
 
     // 分离 system 消息和非 system 消息
     const systemMessages = messages
@@ -140,6 +140,7 @@ export class AnthropicProvider implements LLMProvider {
           'x-api-key': this.apiKey,
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
+          ...(extraHeaders ?? {}),
         },
         body: JSON.stringify(body),
         signal,

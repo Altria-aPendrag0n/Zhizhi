@@ -6,6 +6,9 @@ import { useAuthStore } from './auth'
 const STORAGE_KEY = 'study-thread-settings'
 const RECENT_VAULTS_KEY = 'study-thread-recent-vaults'
 
+/** 联网搜索子代理模式：direct 跟随主模型直连 / official 官方联网子代理 / custom 自定义子代理 */
+export type SearchAgentMode = 'direct' | 'official' | 'custom'
+
 export const useSettingsStore = defineStore('settings', () => {
   const activeProvider = ref<ProviderType>('openai-compat')
   const apiKey = ref('')
@@ -23,6 +26,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const visionBaseUrl = ref('https://open.bigmodel.cn/api/paas')
   const visionApiKey = ref('')
   const visionModel = ref('glm-4v-flash')
+  /** 联网搜索子代理（v0.3.1）：主模型调用 web_search 客户端工具时，由子代理完成联网检索 */
+  const searchAgentMode = ref<SearchAgentMode>('direct')
+  const searchAgentBaseUrl = ref('https://api.deepseek.com')
+  const searchAgentApiKey = ref('')
+  const searchAgentModel = ref('deepseek-chat')
   const recentVaults = ref<string[]>([])
   /** 知枝官方服务地址默认值：发布包注入生产域名，开发回环；可用 VITE_OFFICIAL_API_URL 覆盖（如自托管/灰度） */
   const defaultOfficialApiUrl = import.meta.env.PROD ? 'https://api.zhizhi.app' : 'http://127.0.0.1:8787'
@@ -48,6 +56,10 @@ export const useSettingsStore = defineStore('settings', () => {
       visionBaseUrl: visionBaseUrl.value,
       visionApiKey: visionApiKey.value,
       visionModel: visionModel.value,
+      searchAgentMode: searchAgentMode.value,
+      searchAgentBaseUrl: searchAgentBaseUrl.value,
+      searchAgentApiKey: searchAgentApiKey.value,
+      searchAgentModel: searchAgentModel.value,
       officialApiBaseUrl: officialApiBaseUrl.value,
       officialModel: officialModel.value,
       officialApiEnabled: officialApiEnabled.value,
@@ -73,6 +85,13 @@ export const useSettingsStore = defineStore('settings', () => {
         visionBaseUrl.value = data.visionBaseUrl || 'https://open.bigmodel.cn/api/paas'
         visionApiKey.value = data.visionApiKey || ''
         visionModel.value = data.visionModel || 'glm-4v-flash'
+        searchAgentMode.value =
+          data.searchAgentMode === 'official' || data.searchAgentMode === 'custom'
+            ? data.searchAgentMode
+            : 'direct'
+        searchAgentBaseUrl.value = data.searchAgentBaseUrl || 'https://api.deepseek.com'
+        searchAgentApiKey.value = data.searchAgentApiKey || ''
+        searchAgentModel.value = data.searchAgentModel || 'deepseek-chat'
         officialApiBaseUrl.value = data.officialApiBaseUrl || import.meta.env.VITE_OFFICIAL_API_URL || defaultOfficialApiUrl
         officialModel.value = data.officialModel || 'glm-4.7-flash'
         officialApiEnabled.value = data.officialApiEnabled === true
@@ -150,6 +169,10 @@ export const useSettingsStore = defineStore('settings', () => {
     visionBaseUrl,
     visionApiKey,
     visionModel,
+    searchAgentMode,
+    searchAgentBaseUrl,
+    searchAgentApiKey,
+    searchAgentModel,
     recentVaults,
     officialApiBaseUrl,
     officialApiEnabled,

@@ -81,6 +81,53 @@
         <p class="form-hint">请求时附带 web_search 工具；模型支持则自动联网搜索，不支持则自动降级为普通请求。DeepSeek 官方 API 将自动走 Anthropic 端点启用联网搜索。Ollama 等本地模型请关闭。</p>
       </div>
 
+      <!-- 联网搜索子代理 -->
+      <div class="form-group">
+        <label class="form-label" for="search-agent-mode">联网搜索子代理</label>
+        <select id="search-agent-mode" v-model="searchAgentMode" class="form-select">
+          <option value="direct">跟随主模型直连（默认）</option>
+          <option value="official">官方联网子代理（走服务端联网渠道）</option>
+          <option value="custom">自定义子代理模型</option>
+        </select>
+        <p class="form-hint">开启子代理后，主模型可通过 web_search 工具把联网检索委托给子代理完成——主模型本身无需支持联网（如 GLM）。官方模式要求服务端配置「用途=web_search」的上游渠道；自定义模式建议填支持联网的模型（如 DeepSeek）。</p>
+      </div>
+
+      <template v-if="searchAgentMode === 'custom'">
+        <div class="form-group">
+          <label class="form-label" for="search-agent-base-url">子代理 API 地址</label>
+          <input
+            id="search-agent-base-url"
+            v-model="searchAgentBaseUrl"
+            type="text"
+            class="form-input"
+            placeholder="https://api.deepseek.com"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="search-agent-api-key">子代理 API Key</label>
+          <input
+            id="search-agent-api-key"
+            v-model="searchAgentApiKey"
+            type="password"
+            class="form-input"
+            placeholder="留空则使用上方主模型的 API Key"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="search-agent-model">子代理模型名称</label>
+          <input
+            id="search-agent-model"
+            v-model="searchAgentModel"
+            type="text"
+            class="form-input"
+            placeholder="deepseek-chat"
+          />
+          <p class="form-hint">该模型需支持联网搜索（web_search 工具），如 DeepSeek 官方模型；留空则跟随主模型。</p>
+        </div>
+      </template>
+
       <!-- 图片转笔记模型（独立配置，与对话模型解耦） -->
       <div class="form-group form-group--toggle">
         <div class="toggle-row">
@@ -185,7 +232,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from '@lucide/vue'
-import { useSettingsStore } from '../stores/settings'
+import { useSettingsStore, type SearchAgentMode } from '../stores/settings'
 import { PROVIDER_PRESETS } from '../api/openai-compat'
 import { createProvider, createVisionProvider } from '../api/provider-factory'
 
@@ -213,6 +260,11 @@ const visionModel = ref('glm-4v-flash')
 const showVisionKey = ref(false)
 const visionTesting = ref(false)
 const visionTestResult = ref<{ type: 'success' | 'error'; message: string } | null>(null)
+// 联网搜索子代理（v0.3.1）
+const searchAgentMode = ref<SearchAgentMode>('direct')
+const searchAgentBaseUrl = ref('https://api.deepseek.com')
+const searchAgentApiKey = ref('')
+const searchAgentModel = ref('deepseek-chat')
 
 // 服务商预设映射
 const providerPresetKeys: Record<string, { type: 'anthropic' | 'openai-compat'; preset?: string }> = {
@@ -246,6 +298,10 @@ function handleSave() {
   settingsStore.visionBaseUrl = visionBaseUrl.value
   settingsStore.visionApiKey = visionApiKey.value
   settingsStore.visionModel = visionModel.value
+  settingsStore.searchAgentMode = searchAgentMode.value
+  settingsStore.searchAgentBaseUrl = searchAgentBaseUrl.value
+  settingsStore.searchAgentApiKey = searchAgentApiKey.value
+  settingsStore.searchAgentModel = searchAgentModel.value
   settingsStore.saveSettings()
   saved.value = true
   testResult.value = null
@@ -334,6 +390,10 @@ onMounted(() => {
   baseUrl.value = settingsStore.baseUrl
   model.value = settingsStore.model
   enableWebSearch.value = settingsStore.enableWebSearch
+  searchAgentMode.value = settingsStore.searchAgentMode
+  searchAgentBaseUrl.value = settingsStore.searchAgentBaseUrl
+  searchAgentApiKey.value = settingsStore.searchAgentApiKey
+  searchAgentModel.value = settingsStore.searchAgentModel
   visionEnabled.value = settingsStore.visionEnabled
   visionBaseUrl.value = settingsStore.visionBaseUrl
   visionApiKey.value = settingsStore.visionApiKey

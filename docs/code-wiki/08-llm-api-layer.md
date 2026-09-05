@@ -144,13 +144,29 @@ export async function executeClientTool(name, args, context): Promise<string>
 - 注入文本头部追加「引用要求」段：引用来源内容时在句末标注 `[n]`，未列出的来源不得标注或编造编号；前端 `applyCitationMarkers`（[02 号文档 3.8](./02-chat-module.md)）只渲染编号合法的角标——提示词约定 + 前端校验双保险，最坏表现为「该标没标」，不会「错误指向」。
 - 消费方：MainChatPage / BranchChatPage 取 `.context` 拼 systemPrompt、`.sources` 挂到 AI 消息 `citations`；`CitationSourceViewer` 用 `executeReadReference` 按页展示原文。
 
+### 6.4 联网搜索子代理（v0.3.1）
+
+主模型通过调用 **web_search 客户端工具**（`src/api/tools/web-search.ts`）把联网检索委托给独立子代理——主模型本身无需支持联网（GLM 等）：
+
+- **三种模式**（settings `searchAgentMode`，CustomModelPage 配置）：
+  - `direct`（默认）：不注册工具，维持服务端联网直连（`enableWebSearch` 走主通道，行为与旧版一致）；
+  - `official`：子代理走官方通道，请求带 `X-Zhizhi-Purpose: web_search` 头，网关（服务端）优先路由到「用途=web_search」的上游渠道（该渠道上游需支持 web_search 服务端工具，如 DeepSeek）；
+  - `custom`：自定义子代理 baseUrl/Key/model（留空回退主模型配置），经 `createProvider` 复用 DeepSeek Anthropic 端点特判。
+- **接线**：子代理开启时 MainChatPage / BranchChatPage 的工具列表追加 `webSearchTool`（不进 `CLIENT_TOOLS` 常驻列表），且主通道 `enableWebSearch` 置 false（避免双重联网尝试）；`branchFollowupStream` 新增可选 `tools` 参数透传。
+- **执行**：`executeWebSearch` 以 `SEARCH_AGENT_SYSTEM_PROMPT` 调子代理（`enableWebSearch: true`，maxTokens 2048），输出要点 + 来源作为工具结果回传主模型；error chunk / 空输出 / 未配置均有兜底文案。
+- **服务端配套**：`channels.purpose` 值域扩展 `web_search`；网关读 `X-Zhizhi-Purpose` 头优先解析 web_search 渠道候选（无则回退子 Key 用途匹配）；`channelMatchesPurpose` 对 web_search 只匹配显式声明（'*' 通用渠道不参与）。
+
+### 6.5 常见 API 错误友好化（v0.3.1）
+
+openai-compat 对常见失败状态输出中文指引（状态码保留便于排查）：402 / `quota_exhausted` → 额度用完与充值路径；401 → Key 无效或重新登录；429 → 限流稍候重试；其余未知错误保留原始信息。
+
 ## 7. 协作链路
 
 ```
 页面（MainChatPage / BranchChatPage / SettingsPage / Skill 执行器）
   ├─ settingsStore.getProviderConfig() → createProvider()
-  ├─ chatWithTools({...CLIENT_TOOLS}) / provider.chat()
-  ├─ executeClientTool → readReferenceTool → utils/reference-serializer + vault-fs
+  ├─ chatWithTools({...CLIENT_TOOLS / +webSearchTool}) / provider.chat()
+  ├─ executeClientTool → readReferenceTool / web_search 子代理（X-Zhizhi-Purpose 头 → 官方联网渠道）
   └─ knowledge-retrieval 检索结果中的 reference_id 由模型传给 read_reference [10]
 ```
 

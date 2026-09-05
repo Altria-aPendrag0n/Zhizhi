@@ -63,6 +63,11 @@ export interface ChatOptions {
   /** 客户端执行的工具列表：随请求体发送，模型可发起调用 */
   tools?: ToolDefinition[]
   /**
+   * 额外请求头（如官方网关的 X-Zhizhi-Purpose 用途路由头）：
+   * 仅附加到本次请求，不影响 Provider 的默认头
+   */
+  extraHeaders?: Record<string, string>
+  /**
    * 显式禁用模型思考模式（thinking/reasoning）：
    * 用于出题、摘录等需要稳定 JSON 输出的场景——思考模式（如 DeepSeek V4-Flash 默认开启）
    * 会与正文共用 maxTokens 预算，思考过长时正文被截断为空，导致结构化输出解析失败。
