@@ -41,11 +41,30 @@ export interface Session {
   review_completed?: boolean
 }
 
+/** 回答引用的来源条目（编号与正文 [n] 角标一一对应，随会话消息持久化） */
+export interface CitationSource {
+  /** 来源编号（1 起，与检索注入顺序一致） */
+  index: number
+  kind: 'note' | 'reference'
+  path: string
+  title: string
+  /** 命中摘要片段（浮层展示用，≤300 字） */
+  snippet: string
+  /** 命中章节标题（大 pdf 分块命中时） */
+  sectionTitle?: string
+  /** 命中块覆盖的起始页（0 起；大 pdf 分块命中时） */
+  pageFrom?: number
+  /** 命中块覆盖的结束页（0 起；大 pdf 分块命中时） */
+  pageTo?: number
+}
+
 export interface Message {
   role: 'system' | 'user' | 'assistant'
   content: string
   /** AI 回答前的思考过程（独立存储，界面以浅色可折叠块展示） */
   thinking?: string
+  /** 回答引用的来源列表（来源锚定：与正文 [n] 角标对应，持久化于 <!-- citations --> 区块） */
+  citations?: CitationSource[]
   timestamp?: string
 }
 

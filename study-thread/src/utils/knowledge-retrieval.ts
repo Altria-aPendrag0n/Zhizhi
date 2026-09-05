@@ -56,21 +56,8 @@ export interface KnowledgeHit {
 }
 
 /** 回答引用的来源条目（编号与注入文本中的 [编号] 角标一一对应） */
-export interface CitationSource {
-  /** 来源编号（1 起，与注入顺序一致） */
-  index: number
-  kind: KnowledgeHit['kind']
-  path: string
-  title: string
-  /** 命中摘要片段（浮层展示用，≤300 字） */
-  snippet: string
-  /** 命中章节标题（大 pdf 分块命中时） */
-  sectionTitle?: string
-  /** 命中块覆盖的起始页（0 起；大 pdf 分块命中时） */
-  pageFrom?: number
-  /** 命中块覆盖的结束页（0 起；大 pdf 分块命中时） */
-  pageTo?: number
-}
+export type { CitationSource } from '../types'
+import type { CitationSource } from '../types'
 
 /** 知识检索注入结果：上下文文本 + 来源映射（供角标渲染与持久化） */
 export interface KnowledgeContext {

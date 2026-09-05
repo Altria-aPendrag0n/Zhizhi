@@ -8,6 +8,9 @@ import {
   sessionIdFromReference,
   resolveSessionFile,
   serializeSession,
+  serializeCitationsBlock,
+  CITATIONS_START,
+  CITATIONS_END,
   parseSessionMeta,
   parseSessionMessages,
   parseSessionFile,
@@ -639,5 +642,116 @@ describe('会话 kind（计划会话）序列化与解析', () => {
     ].join('\n')
     expect(parseSessionFile(content).kind).toBeUndefined()
     expect(parseSessionMeta(content, '/vault/sessions/sess_2.md').kind).toBeUndefined()
+  })
+})
+
+describe('citations 来源引用持久化', () => {
+  const citations = [
+    {
+      index: 1,
+      kind: 'note' as const,
+      path: '/vault/notes/a.md',
+      title: '笔记A',
+      snippet: '笔记A的片段',
+    },
+    {
+      index: 2,
+      kind: 'reference' as const,
+      path: '/vault/references/b.json',
+      title: '参考B',
+      snippet: '参考B的片段',
+      sectionTitle: '第二章',
+      pageFrom: 2,
+      pageTo: 3,
+    },
+  ]
+
+  const sessionWithCitations: Session = {
+    id: 'sess-cit',
+    title: '引用会话',
+    created: '2026-09-04T00:00:00Z',
+    parent_session: null,
+    fork_point: null,
+    tags: [],
+    messages: [
+      { role: 'user', content: '什么是间隔重复？' },
+      {
+        role: 'assistant',
+        content: '间隔重复是一种记忆调度方法 [1][2]。',
+        thinking: '思考过程',
+        citations,
+      },
+    ],
+  }
+
+  it('serializeSession 为带引用的 assistant 消息写入 citations 区块', () => {
+    const markdown = serializeSession(sessionWithCitations)
+    expect(markdown).toContain(CITATIONS_START)
+    expect(markdown).toContain(CITATIONS_END)
+    expect(markdown).toContain('"title":"笔记A"')
+    expect(markdown).toContain('"sectionTitle":"第二章"')
+  })
+
+  it('无引用/用户消息不写 citations 区块', () => {
+    const plain: Session = { ...sessionWithCitations, messages: [{ role: 'user', content: '问题' }] }
+    expect(serializeCitationsBlock([])).toBe('')
+    expect(serializeSession(plain)).not.toContain(CITATIONS_START)
+  })
+
+  it('serialize → parse 往返恢复 citations（thinking 共存）', () => {
+    const markdown = serializeSession(sessionWithCitations)
+    const session = parseSessionFile(markdown, '/vault/sessions/sess-cit.md')
+    const ai = session.messages[1]
+    expect(ai.thinking).toBe('思考过程')
+    expect(ai.citations).toEqual(citations)
+    // 区块内容不混入正文
+    expect(ai.content).toBe('间隔重复是一种记忆调度方法 [1][2]。')
+  })
+
+  it('旧文件无 citations 区块时解析为 undefined', () => {
+    const legacy = [
+      '---',
+      'session_id: sess-old',
+      'title: 旧会话',
+      'created: 2026-01-01T00:00:00Z',
+      '---',
+      '',
+      '## 知枝',
+      '',
+      '旧回答内容',
+    ].join('\n')
+    const messages = parseSessionMessages(legacy)
+    expect(messages[0].citations).toBeUndefined()
+  })
+
+  it('citations JSON 损坏时忽略区块不崩溃', () => {
+    const broken = [
+      '## 知枝',
+      '',
+      CITATIONS_START,
+      '{ 这不是合法 JSON',
+      CITATIONS_END,
+      '',
+      '回答正文',
+    ].join('\n')
+    const messages = parseSessionMessages(broken)
+    expect(messages[0].citations).toBeUndefined()
+    expect(messages[0].content).toBe('回答正文')
+  })
+
+  it('citations 条目结构不合法时逐条跳过', () => {
+    const bad = [
+      '## 知枝',
+      '',
+      CITATIONS_START,
+      JSON.stringify([{ index: 'not-number', path: '/x', title: 't' }, 'junk', { index: 2, kind: 'note', path: '/ok.md', title: '有效' }]),
+      CITATIONS_END,
+      '',
+      '正文',
+    ].join('\n')
+    const messages = parseSessionMessages(bad)
+    expect(messages[0].citations).toEqual([
+      { index: 2, kind: 'note', path: '/ok.md', title: '有效', snippet: '' },
+    ])
   })
 })

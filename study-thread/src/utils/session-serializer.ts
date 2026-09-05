@@ -3,7 +3,7 @@
  * 将会话数据序列化为 Markdown 文件，支持写入 vault sessions/ 目录
  */
 
-import type { Session, Message } from '../types'
+import type { Session, Message, CitationSource } from '../types'
 import type { NoteReference } from './session-linker'
 import { writeFile, createDir, listDir } from './vault-fs'
 import type { DirEntry } from './vault-fs'
@@ -123,6 +123,11 @@ export function serializeSession(session: Session, noteRefs: NoteReference[] = [
       lines.push(serializeThinkingBlock(msg.thinking))
       lines.push('')
     }
+    // 来源锚定：引用来源列表以区块持久化，历史消息角标可恢复（来源锚定 v0.3.1）
+    if (msg.role === 'assistant' && msg.citations && msg.citations.length > 0) {
+      lines.push(serializeCitationsBlock(msg.citations))
+      lines.push('')
+    }
     lines.push(msg.content)
     for (const noteRef of noteRefs.filter((ref) => ref.messageIndex === messageIndex)) {
       const kindLabel = noteRef.kind === 'branch' ? '已生成分支' : '已生成笔记'
@@ -146,6 +151,45 @@ export function serializeThinkingBlock(text: string): string {
   if (!text) return ''
   const escaped = text.split('-->').join('--&gt;')
   return `${THINKING_START}\n${escaped}\n${THINKING_END}`
+}
+
+/** 来源引用区块标记（assistant 消息，来源锚定持久化，JSON 单行存放） */
+export const CITATIONS_START = '<!-- citations -->'
+export const CITATIONS_END = '<!-- /citations -->'
+
+/**
+ * 序列化回答引用来源为区块文本（JSON 单行，`-->` 转义防提前闭合）。
+ * 空列表返回空串（不写区块）。
+ */
+export function serializeCitationsBlock(citations: CitationSource[]): string {
+  if (!citations || citations.length === 0) return ''
+  const escaped = JSON.stringify(citations).split('-->').join('--&gt;')
+  return `${CITATIONS_START}\n${escaped}\n${CITATIONS_END}`
+}
+
+/**
+ * 宽松校验 citations JSON：结构不符的条目跳过，全部无效返回 undefined
+ * （手改文件不应导致崩溃，与 plan-parser 容错哲学一致）。
+ */
+function toCitations(value: unknown): CitationSource[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const list: CitationSource[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) continue
+    const o = item as Record<string, unknown>
+    if (typeof o.index !== 'number' || typeof o.path !== 'string' || typeof o.title !== 'string') continue
+    list.push({
+      index: o.index,
+      kind: o.kind === 'reference' ? 'reference' : 'note',
+      path: o.path,
+      title: o.title,
+      snippet: typeof o.snippet === 'string' ? o.snippet : '',
+      sectionTitle: typeof o.sectionTitle === 'string' ? o.sectionTitle : undefined,
+      pageFrom: typeof o.pageFrom === 'number' ? o.pageFrom : undefined,
+      pageTo: typeof o.pageTo === 'number' ? o.pageTo : undefined,
+    })
+  }
+  return list.length > 0 ? list : undefined
 }
 
 /**
@@ -316,8 +360,15 @@ export function parseSessionMeta(content: string, filePath: string): SessionMeta
 export function parseSessionMessages(body: string): Message[] {
   const messages: Message[] = []
   const lines = removeForkContextBlock(body).split('\n')
-  let current: { role: Message['role']; timestamp?: string; content: string[]; thinking?: string[] } | null = null
+  let current: {
+    role: Message['role']
+    timestamp?: string
+    content: string[]
+    thinking?: string[]
+    citationsRaw?: string[]
+  } | null = null
   let inThinking = false
+  let inCitations = false
 
   const flush = () => {
     if (!current || current.content.length === 0) return
@@ -326,6 +377,17 @@ export function parseSessionMessages(body: string): Message[] {
     // 思考过程区块反序列化（`--&gt;` 还原为 `-->`）
     if (current.thinking && current.thinking.length > 0) {
       message.thinking = current.thinking.join('\n').trim().split('--&gt;').join('-->')
+    }
+    // 来源引用区块反序列化：JSON 损坏时忽略（旧文件/手改容错）
+    if (current.citationsRaw && current.citationsRaw.length > 0) {
+      try {
+        const parsed = toCitations(
+          JSON.parse(current.citationsRaw.join('\n').split('--&gt;').join('-->')),
+        )
+        if (parsed) message.citations = parsed
+      } catch {
+        // 忽略损坏的 citations 区块
+      }
     }
     messages.push(message)
   }
@@ -337,6 +399,7 @@ export function parseSessionMessages(body: string): Message[] {
       const role = match[1] === '用户' ? 'user' : match[1] === '知枝' ? 'assistant' : 'system'
       current = { role, timestamp: match[2]?.trim() || undefined, content: [] }
       inThinking = false
+      inCitations = false
       continue
     }
     if (!current) continue
@@ -350,6 +413,19 @@ export function parseSessionMessages(body: string): Message[] {
         inThinking = false
       } else {
         current.thinking!.push(line)
+      }
+      continue
+    }
+    if (line.startsWith(CITATIONS_START)) {
+      inCitations = true
+      current.citationsRaw = current.citationsRaw ?? []
+      continue
+    }
+    if (inCitations) {
+      if (line.startsWith(CITATIONS_END)) {
+        inCitations = false
+      } else {
+        current.citationsRaw!.push(line)
       }
       continue
     }
